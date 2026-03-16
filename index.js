@@ -67,18 +67,42 @@ function buscarUsuarioPorDni(dni) {
 // ---------------------------------------------------------------
 // 5. CATÁLOGO DE TRÁMITES DISPONIBLES
 // ---------------------------------------------------------------
-// Objeto que mapea el número que el usuario elige (como string)
-// al nombre real del trámite. Usamos string como clave ("1", "2", "3")
-// porque msg.text siempre llega como string desde Telegram.
-const TRAMITES = {
-  '1': 'Licencia de conducir',
-  '2': 'Tribunal de Faltas',
-  '3': 'Rentas',
-};
+// Array con los nombres de los trámites disponibles. Usamos un array porque
+// ahora los trámites se eligen con botones Inline Keyboard: el índice numérico
+// (0, 1, 2) se incluye en el callback_data de cada botón (ej: "tramite_0")
+// y luego se usa para recuperar el nombre con TRAMITES[indice].
+const TRAMITES = ['Licencia de conducir', 'Tribunal de Faltas', 'Rentas'];
 
-// Fecha simulada fija para asignar a los nuevos turnos.
-// En una aplicación real esto vendría de un calendario de disponibilidad.
-const FECHA_TURNO_SIMULADA = '20 de marzo a las 10:00 hs';
+// Horarios disponibles para sacar turno.
+const HORARIOS_DISPONIBLES = ['09:00', '10:00', '11:00'];
+
+// Devuelve un array con los próximos N días hábiles (lunes a viernes) a partir de hoy.
+function proximosDiasHabiles(cantidad) {
+  const dias = [];
+  const fecha = new Date();
+  while (dias.length < cantidad) {
+    fecha.setDate(fecha.getDate() + 1);
+    const diaSemana = fecha.getDay(); // 0 = Domingo, 6 = Sábado
+    if (diaSemana !== 0 && diaSemana !== 6) {
+      dias.push(new Date(fecha));
+    }
+  }
+  return dias;
+}
+
+// Formatea un objeto Date como texto legible en español (ej: "martes 17 de marzo").
+function formatearFechaTexto(fecha) {
+  return fecha.toLocaleDateString('es-AR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
+// Formatea un objeto Date como string compacto para usar en callback_data (ej: "2026-03-17").
+function formatearFechaClave(fecha) {
+  return fecha.toISOString().split('T')[0];
+}
 
 // ---------------------------------------------------------------
 // 6. VALIDAR Y OBTENER EL TOKEN
@@ -103,10 +127,15 @@ console.log('✅ Bot iniciado correctamente. Esperando mensajes...');
 // Objeto que guarda el estado actual de cada usuario en la conversación.
 //
 // Estados posibles:
-//   - 'INICIAL'           → El usuario no inició ningún flujo aún.
-//   - 'ESPERANDO_DNI'     → Le pedimos el DNI, aguardamos su respuesta.
-//   - 'ESPERANDO_NOMBRE'  → El DNI no existe; le pedimos nombre y apellido.
-//   - 'ESPERANDO_TRAMITE' → Ya tenemos nombre; le pedimos elegir trámite.
+//   - 'INICIAL'               → El usuario no inició ningún flujo aún.
+//   - 'ESPERANDO_DNI'         → Le pedimos el DNI, aguardamos su respuesta.
+//   - 'ESPERANDO_NOMBRE'      → El DNI no existe; le pedimos nombre y apellido.
+//   - 'MENU_GESTION'          → El DNI existe; mostramos el menú de gestión con botones.
+//   - 'ESPERANDO_TRAMITE'     → Ya tenemos nombre; le pedimos elegir trámite.
+//   - 'ESPERANDO_FECHA'       → Trámite elegido; mostramos fechas por Inline Keyboard.
+//   - 'ESPERANDO_HORARIO'     → Fecha elegida; mostramos horarios por Inline Keyboard.
+//   - 'ESPERANDO_CANCELACION'  → Mostramos los turnos activos para que elija cuál borrar.
+//   - 'ESPERANDO_MODIFICACION' → Mostramos los turnos activos para que elija cuál modificar.
 //
 // Ejemplo: { 123456789: 'ESPERANDO_DNI', 987654321: 'ESPERANDO_NOMBRE' }
 const estadosUsuarios = {};
@@ -145,15 +174,27 @@ function mensajeBienvenida() {
   );
 }
 
-// Devuelve el menú de trámites formateado como texto.
-function mensajeMenuTramites(nombre) {
-  return (
-    `Gracias, ${nombre}. ¿Qué trámite deseás realizar?\n` +
-    'Respondé con el número de la opción:\n\n' +
-    '1. Licencia de conducir\n' +
-    '2. Tribunal de Faltas\n' +
-    '3. Rentas'
-  );
+// Construye el array de filas de botones para el menú de trámites.
+// Acepta un parámetro opcional "indicesPermitidos": un array de números
+// que indica cuáles índices de TRAMITES deben mostrarse como botones.
+// Si no se pasa el parámetro, se muestran TODOS los trámites (comportamiento
+// original, usado cuando el usuario es nuevo y nunca sacó ningún turno).
+// IMPORTANTE: preservar los índices originales de TRAMITES es clave porque
+// el callback_data los usa para recuperar el nombre en CALLBACK A.
+function teclasMenuTramites(indicesPermitidos) {
+  // Si no se recibió el parámetro, construimos un array con todos los índices
+  // posibles usando map() sobre el propio array TRAMITES.
+  const indices = indicesPermitidos !== undefined
+    ? indicesPermitidos
+    : TRAMITES.map((_, i) => i);
+
+  // Por cada índice permitido armamos una fila con un único botón.
+  // El texto visible es el nombre del trámite; el callback_data lleva el índice
+  // original para que CALLBACK A pueda identificarlo correctamente.
+  return indices.map((i) => ([{
+    text: TRAMITES[i],
+    callback_data: `tramite_${i}`,
+  }]));
 }
 
 // ---------------------------------------------------------------
@@ -202,25 +243,55 @@ bot.on('message', (msg) => {
     const dniIngresado = texto.trim();
     const usuarioEncontrado = buscarUsuarioPorDni(dniIngresado);
 
-    // B2a: El usuario existe y tiene turno → mostramos el turno y reiniciamos
-    if (usuarioEncontrado && usuarioEncontrado.tieneTurno) {
-      const { nombre, turno } = usuarioEncontrado;
-      bot.sendMessage(
-        chatId,
-        `✅ Hola ${nombre}, tenés un turno asignado para el ${turno.fecha} ` +
-        `para el trámite de ${turno.tramite}.`
-      );
-      estadosUsuarios[chatId] = 'INICIAL';
-      return;
-    }
+    // B2: El usuario YA EXISTE en la base de datos → mostramos el menú de gestión.
+    // Este bloque unifica el tratamiento de usuarios con y sin turnos activos.
+    if (usuarioEncontrado) {
+      const { nombre } = usuarioEncontrado;
 
-    // B2b: El usuario existe pero no tiene turno → mismo mensaje informativo
-    if (usuarioEncontrado && !usuarioEncontrado.tieneTurno) {
-      bot.sendMessage(
-        chatId,
-        `📋 Hola ${usuarioEncontrado.nombre}, actualmente no registrás turnos pendientes.`
-      );
-      estadosUsuarios[chatId] = 'INICIAL';
+      // Leemos directamente el array turnos[] del usuario.
+      // Todos los registros usan este formato; si el usuario no tiene turnos aún,
+      // el array existe vacío porque así lo creamos al registrarlo por primera vez.
+      const listaTurnos = usuarioEncontrado.turnos || [];
+
+      // Armamos el cuerpo del mensaje. Si tiene turnos los listamos; si no, informamos.
+      let textoBienvenida;
+      if (listaTurnos.length > 0) {
+        // map() convierte cada turno en un renglón de texto numerado y formateado.
+        // Todos los registros tienen los campos tramite, fecha y horario garantizados.
+        const renglonesTurnos = listaTurnos.map((t, i) => {
+          return `  *${i + 1}.* ${t.tramite} — ${t.fecha} a las ${t.horario} hs`;
+        });
+        // join() une todos los renglones con salto de línea para armar el bloque.
+        textoBienvenida =
+          `👋 Hola *${nombre}*, estos son tus turnos activos:\n\n` +
+          renglonesTurnos.join('\n') +
+          '\n\n¿Qué querés hacer?';
+      } else {
+        textoBienvenida =
+          `👋 Hola *${nombre}*, actualmente no tenés turnos activos.\n\n¿Qué querés hacer?`;
+      }
+
+      // Guardamos DNI y nombre en memoria temporal anticipadamente.
+      // Si el usuario elige "Nuevo Trámite", ya tenemos sus datos sin tener
+      // que volver a pedirlos; el flujo salta directo a la selección de trámite.
+      registrosEnProceso[chatId] = { dni: dniIngresado, nombre: nombre };
+
+      // Cambiamos el estado a MENU_GESTION para identificar que los próximos
+      // callbacks de este usuario provienen de los botones del menú.
+      estadosUsuarios[chatId] = 'MENU_GESTION';
+
+      // Construimos el Inline Keyboard con las 3 acciones disponibles.
+      // Cada botón ocupa su propia fila para mayor claridad visual.
+      const tecladoGestion = [
+        [{ text: '➕ Nuevo Trámite',   callback_data: 'nuevo_tramite'   }],
+        [{ text: '✏️ Modificar Turno', callback_data: 'modificar_turno' }],
+        [{ text: '❌ Cancelar Turno',  callback_data: 'cancelar_turno'  }],
+      ];
+
+      bot.sendMessage(chatId, textoBienvenida, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: tecladoGestion },
+      });
       return;
     }
 
@@ -250,64 +321,20 @@ bot.on('message', (msg) => {
     // Pasamos al siguiente estado: elegir el trámite
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
-    bot.sendMessage(chatId, mensajeMenuTramites(nombreIngresado));
-    return;
-  }
-
-  // ==============================================================
-  // RAMA D: El bot espera que el usuario elija un trámite (1, 2 o 3)
-  // ==============================================================
-  if (estadoActual === 'ESPERANDO_TRAMITE') {
-
-    const opcionElegida = texto.trim();
-
-    // D1: Validamos que la opción sea 1, 2 o 3.
-    // TRAMITES[opcionElegida] será undefined si la clave no existe en el objeto.
-    if (!TRAMITES[opcionElegida]) {
-      bot.sendMessage(
-        chatId,
-        '⚠️ Opción no válida. Por favor respondé solo con 1, 2 o 3.'
-      );
-      return; // Mantenemos el estado ESPERANDO_TRAMITE para reintento
-    }
-
-    // D2: Recuperamos los datos guardados durante el proceso de registro
-    const { dni, nombre } = registrosEnProceso[chatId];
-    const tramiteElegido = TRAMITES[opcionElegida];
-
-    // D3: Construimos el objeto del nuevo usuario siguiendo la misma
-    // estructura que tienen los usuarios ya existentes en el JSON.
-    const nuevoUsuario = {
-      dni: dni,
-      nombre: nombre,
-      tieneTurno: true,
-      turno: {
-        fecha: FECHA_TURNO_SIMULADA,
-        tramite: tramiteElegido,
-      },
-    };
-
-    // D4: Leemos el array actual de usuarios, agregamos el nuevo y guardamos
-    const usuariosActuales = leerUsuarios();
-    usuariosActuales.push(nuevoUsuario); // push() agrega el elemento al final del array
-    guardarUsuarios(usuariosActuales);   // Sobreescribe el archivo JSON en disco
-
-    console.log(`💾 Nuevo usuario registrado: ${nombre} (DNI: ${dni}) → Trámite: ${tramiteElegido}`);
-
-    // D5: Confirmación final al usuario
+    // Enviamos el mensaje con el Inline Keyboard de trámites.
+    // teclasMenuTramites() devuelve el array de filas listo para usar en reply_markup.
     bot.sendMessage(
       chatId,
-      `¡Listo! Tu turno para ${tramiteElegido} quedó registrado para el ${FECHA_TURNO_SIMULADA}.`
+      `Gracias, ${nombreIngresado}. ¿Qué trámite deseás realizar?`,
+      { reply_markup: { inline_keyboard: teclasMenuTramites() } }
     );
-
-    // D6: Limpiamos la memoria temporal y reiniciamos el estado
-    delete registrosEnProceso[chatId]; // delete elimina la clave del objeto
-    estadosUsuarios[chatId] = 'INICIAL';
     return;
   }
 
   // ==============================================================
-  // RAMA E: Mensaje fuera de contexto (estado INICIAL, sin saludo)
+  // RAMA D: Mensaje fuera de contexto (estado INICIAL, sin saludo)
+  // Nota: la selección de trámite se realiza ahora mediante botones
+  // (Inline Keyboard) y se procesa en el manejador callback_query.
   // ==============================================================
   bot.sendMessage(
     chatId,
@@ -316,7 +343,682 @@ bot.on('message', (msg) => {
 });
 
 // ---------------------------------------------------------------
-// 12. MANEJO DE ERRORES DE POLLING
+// 12. MANEJADOR DE CALLBACKS (botones Inline Keyboard)
+// ---------------------------------------------------------------
+// El evento 'callback_query' se dispara cada vez que el usuario
+// hace clic en un botón de un Inline Keyboard.
+bot.on('callback_query', (query) => {
+  const chatId = query.message.chat.id;
+  const data = query.data; // El valor de callback_data del botón presionado
+
+  // Siempre respondemos al callback para que Telegram quite el "reloj" del botón.
+  bot.answerCallbackQuery(query.id);
+
+  const estadoActual = estadosUsuarios[chatId];
+
+  // ==============================================================
+  // CALLBACK A: El usuario eligió un TRÁMITE desde el Inline Keyboard
+  // ==============================================================
+  if (estadoActual === 'ESPERANDO_TRAMITE' && data.startsWith('tramite_')) {
+
+    // Extraemos el índice del callback_data (ej: "tramite_1" → "1").
+    // parseInt() convierte ese string a número entero; el segundo argumento
+    // (10) indica base decimal para evitar interpretaciones incorrectas.
+    const indice = parseInt(data.replace('tramite_', ''), 10);
+
+    // Verificamos que el índice sea un número válido y que exista en el array.
+    // isNaN() devuelve true si parseInt() no pudo convertir el string a número.
+    if (isNaN(indice) || !TRAMITES[indice]) {
+      bot.sendMessage(chatId, '⚠️ Ocurrió un error al procesar tu selección. Por favor, intentá de nuevo.');
+      return;
+    }
+
+    // Guardamos el nombre del trámite (no el índice) en el registro temporal.
+    // El resto del flujo siempre trabaja con el texto legible, no con números.
+    registrosEnProceso[chatId].tramite = TRAMITES[indice];
+    estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
+
+    // Construimos el Inline Keyboard con los próximos 3 días hábiles.
+    // Cada botón lleva como callback_data la clave "fecha_YYYY-MM-DD".
+    const diasHabilesT = proximosDiasHabiles(3);
+    const botonesFechasT = diasHabilesT.map((dia) => ([{
+      text: formatearFechaTexto(dia),
+      callback_data: `fecha_${formatearFechaClave(dia)}`,
+    }]));
+
+    bot.sendMessage(
+      chatId,
+      `📋 Trámite elegido: *${TRAMITES[indice]}*\n\n📅 Ahora elegí una fecha:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: botonesFechasT },
+      }
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK B: El usuario eligió una FECHA
+  // ==============================================================
+  if (estadoActual === 'ESPERANDO_FECHA' && data.startsWith('fecha_')) {
+
+    // Extraemos la clave de fecha del callback_data (ej: "fecha_2026-03-17" → "2026-03-17")
+    const fechaClave = data.replace('fecha_', '');
+
+    // Convertimos la clave a texto legible usando el mismo formato con el que
+    // guardamos los turnos en el JSON, para que la comparación posterior sea exacta.
+    const fechaObj = new Date(`${fechaClave}T12:00:00`); // Mediodía evita desfases de zona horaria
+    const fechaTexto = formatearFechaTexto(fechaObj);
+
+    // Recuperamos el trámite y el DNI del usuario actual desde la memoria temporal.
+    // El trámite lo usamos para la condición global; el DNI para la condición personal.
+    const tramiteElegido = registrosEnProceso[chatId].tramite;
+    const dniActual      = registrosEnProceso[chatId].dni;
+
+    // --- LÓGICA ANTI-SUPERPOSICIÓN DE TURNOS ---
+
+    // Leemos todos los usuarios actuales del archivo JSON en disco.
+    const todosLosUsuarios = leerUsuarios();
+
+    // Construimos el Set de horarios bloqueados aplicando una doble regla.
+    // Usamos un Set para evitar duplicados y tener búsquedas rápidas con has().
+    const horariosOcupados = new Set();
+
+    todosLosUsuarios.forEach((u) => {
+      // Iteramos cada turno del usuario evaluado.
+      // El || [] protege ante registros sin el campo turnos.
+      (u.turnos || []).forEach((t) => {
+
+        // Primero verificamos que la fecha del turno coincida con la elegida.
+        // Si no coincide, ninguna de las dos condiciones puede cumplirse,
+        // así que descartamos este turno con un return temprano.
+        if (t.fecha !== fechaTexto) return;
+
+        // CONDICIÓN GLOBAL: el cupo del sector está lleno.
+        // Se cumple cuando el trámite del turno iterado es el mismo que el
+        // trámite que el usuario actual quiere reservar. No importa quién
+        // sea el dueño del turno: si ese sector ya tiene ese horario tomado,
+        // nadie más puede reservarlo.
+        const cupoSectorAgotado = (t.tramite === tramiteElegido);
+
+        // CONDICIÓN PERSONAL: el usuario actual ya tiene un compromiso esa hora.
+        // Se cumple cuando el DNI del usuario iterado coincide con el DNI del
+        // usuario actual. Bloquea la franja sin importar de qué trámite se trate,
+        // porque una persona no puede estar en dos lugares a la vez.
+        const usuarioYaTieneEsaFranja = (u.dni === dniActual);
+
+        // Si se cumple alguna de las dos condiciones, el horario queda bloqueado.
+        // El operador || (OR) expresa exactamente esta disyunción.
+        if (cupoSectorAgotado || usuarioYaTieneEsaFranja) {
+          horariosOcupados.add(t.horario);
+        }
+      });
+    });
+
+    // filter() sobre el array completo de horarios elimina los que ya están ocupados.
+    // has() devuelve true si el horario está en el Set → el "!" lo invierte para quedarnos
+    // solo con los que NO están ocupados.
+    const horariosLibres = HORARIOS_DISPONIBLES.filter((h) => !horariosOcupados.has(h));
+
+    // Si el array quedó vacío, ningún horario está disponible para esa fecha y trámite.
+    if (horariosLibres.length === 0) {
+
+      // Recalculamos las fechas hábiles para volver a mostrar el teclado de selección.
+      const diasHabiles = proximosDiasHabiles(3);
+      const botonesFechas = diasHabiles.map((dia) => ([{
+        text: formatearFechaTexto(dia),
+        callback_data: `fecha_${formatearFechaClave(dia)}`,
+      }]));
+
+      // Mantenemos el estado en ESPERANDO_FECHA para que el usuario pueda
+      // elegir otra fecha sin tener que reiniciar todo el flujo.
+      estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
+
+      bot.sendMessage(
+        chatId,
+        `⚠️ No hay horarios disponibles para *${fechaTexto}* ` +
+        `en el trámite de *${tramiteElegido}*.\n\n` +
+        `Por favor, elegí otra fecha:`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: botonesFechas },
+        }
+      );
+      return;
+    }
+
+    // Si llegamos acá, hay al menos un horario libre.
+    // Guardamos la fecha en el registro temporal y avanzamos de estado.
+    registrosEnProceso[chatId].fecha = fechaClave;
+    estadosUsuarios[chatId] = 'ESPERANDO_HORARIO';
+
+    // Construimos el Inline Keyboard con los horarios libres y el botón de retroceso.
+    // El array de filas tiene dos elementos:
+    //   - Fila 1: un botón por cada horario disponible, todos en la misma fila horizontal.
+    //   - Fila 2: botón de retroceso en su propia fila para que sea bien visible.
+    const botonesHorarios = [
+      // Fila 1: horarios disponibles en horizontal.
+      horariosLibres.map((horario) => ({
+        text: `🕐 ${horario}`,
+        callback_data: `horario_${horario}`,
+      })),
+      // Fila 2: botón para volver a la selección de fecha sin reiniciar el flujo.
+      [{ text: '⬅️ Volver a elegir fecha', callback_data: 'volver_fechas' }],
+    ];
+
+    bot.sendMessage(
+      chatId,
+      `📅 Fecha elegida: *${fechaTexto}*\n\n🕐 Ahora elegí un horario:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: botonesHorarios },
+      }
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK C: El usuario eligió un HORARIO → guardamos todo
+  // ==============================================================
+  if (estadoActual === 'ESPERANDO_HORARIO' && data.startsWith('horario_')) {
+
+    const horarioElegido = data.replace('horario_', ''); // ej: "10:00"
+    const { dni, nombre, tramite, fecha } = registrosEnProceso[chatId];
+
+    // Formateamos la fecha para el mensaje de confirmación y para el JSON
+    const fechaObj = new Date(`${fecha}T12:00:00`);
+    const fechaTexto = formatearFechaTexto(fechaObj);
+
+    // Construimos el objeto del nuevo turno (solo los datos del turno en sí,
+    // no del usuario completo). Este objeto se reutiliza en ambas ramas abajo.
+    const nuevoTurno = {
+      tramite: tramite,
+      fecha: fechaTexto,
+      horario: horarioElegido,
+    };
+
+    // Leemos el array completo de usuarios del disco.
+    const usuariosActuales = leerUsuarios();
+
+    // findIndex() devuelve la posición del usuario con este DNI dentro del array,
+    // o -1 si no existe. Necesitamos el índice (no el objeto) para poder
+    // modificar el registro directamente dentro del array original.
+    const indiceUsuario = usuariosActuales.findIndex((u) => u.dni === dni);
+
+    if (indiceUsuario !== -1) {
+      // El usuario YA EXISTE: le agregamos el nuevo turno al final de su array turnos[].
+      // Accedemos directamente por índice para modificar el objeto dentro del array
+      // original; de otro modo los cambios no se reflejarían al llamar guardarUsuarios().
+      usuariosActuales[indiceUsuario].turnos.push(nuevoTurno);
+
+    } else {
+      // El usuario es NUEVO: creamos su registro con el formato actualizado.
+      // turnos es un array con su primer turno como único elemento inicial.
+      usuariosActuales.push({
+        dni: dni,
+        nombre: nombre,
+        turnos: [nuevoTurno],
+      });
+    }
+
+    guardarUsuarios(usuariosActuales);
+
+    console.log(`💾 Turno registrado: ${nombre} (DNI: ${dni}) → ${tramite} | ${fechaTexto} ${horarioElegido}`);
+
+    // Leemos la bandera antes de limpiar la memoria temporal.
+    // Si esModificacion es true, el flujo llegó desde "editar_N"; si no existe
+    // o es false, llegó desde el camino normal de nuevo trámite.
+    const esModificacion = registrosEnProceso[chatId].esModificacion === true;
+
+    // Elegimos el encabezado del mensaje según el origen del flujo.
+    // El operador ternario devuelve uno u otro string sin repetir el resto del mensaje.
+    const encabezadoConfirmacion = esModificacion
+      ? '✏️ *¡Tu turno fue modificado correctamente!*'
+      : '✅ *¡Tu turno quedó confirmado!*';
+
+    bot.sendMessage(
+      chatId,
+      `${encabezadoConfirmacion}\n\n` +
+      `👤 *Nombre:* ${nombre}\n` +
+      `🪪 *DNI:* ${dni}\n` +
+      `📋 *Trámite:* ${tramite}\n` +
+      `📅 *Fecha:* ${fechaTexto}\n` +
+      `🕐 *Horario:* ${horarioElegido} hs\n\n` +
+      `Te esperamos. ¡Hasta pronto!`,
+      { parse_mode: 'Markdown' }
+    );
+
+    // Limpiamos memoria temporal (incluida la bandera) y reiniciamos estado.
+    delete registrosEnProceso[chatId];
+    estadosUsuarios[chatId] = 'INICIAL';
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK D: El usuario quiere volver a elegir la FECHA
+  // ==============================================================
+  if (estadoActual === 'ESPERANDO_HORARIO' && data === 'volver_fechas') {
+
+    // Eliminamos la fecha guardada provisionalmente en el registro temporal.
+    // Si no la borramos y el usuario elige una fecha diferente, el dato viejo
+    // podría quedar huérfano y causar inconsistencias en pasos posteriores.
+    delete registrosEnProceso[chatId].fecha;
+
+    // Retrocedemos al estado anterior en el flujo de conversación.
+    // El trámite y el nombre ya están guardados; solo se resetea la fecha.
+    estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
+
+    // Reconstruimos el teclado de fechas hábiles, igual que en CALLBACK A.
+    const diasHabilesV = proximosDiasHabiles(3);
+    const botonesFechasV = diasHabilesV.map((dia) => ([{
+      text: formatearFechaTexto(dia),
+      callback_data: `fecha_${formatearFechaClave(dia)}`,
+    }]));
+
+    bot.sendMessage(
+      chatId,
+      '📅 Elegí una fecha para tu turno:',
+      { reply_markup: { inline_keyboard: botonesFechasV } }
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK E: El usuario eligió "Nuevo Trámite" desde el menú de gestión
+  // ==============================================================
+  if (estadoActual === 'MENU_GESTION' && data === 'nuevo_tramite') {
+
+    // Leemos el registro actualizado del usuario desde el disco para conocer
+    // exactamente qué trámites ya tiene reservados en este momento.
+    const usuariosActualesE = leerUsuarios();
+
+    // Recuperamos el DNI del usuario desde la memoria temporal.
+    // Fue guardado cuando el menú de gestión se mostró en la Rama B.
+    const dniEnProceso = registrosEnProceso[chatId].dni;
+
+    // Buscamos el objeto del usuario en el array para leer sus turnos.
+    const usuarioEnDB = usuariosActualesE.find((u) => u.dni === dniEnProceso);
+
+    // Construimos un Set con los nombres de los trámites que el usuario ya tiene activos.
+    // Usamos Set porque has() es más eficiente que includes() para búsquedas repetidas.
+    const tramitesActivos = new Set();
+
+    if (usuarioEnDB) {
+      // Leemos directamente el array turnos[] del usuario para saber qué trámites
+      // ya tiene reservados. El || [] protege ante el caso (improbable) de que
+      // el campo no exista en algún registro recién creado.
+      (usuarioEnDB.turnos || []).forEach((t) => tramitesActivos.add(t.tramite));
+    }
+
+    // Filtramos los índices de TRAMITES conservando solo los que el usuario
+    // todavía NO tiene activos. El proceso tiene tres pasos encadenados:
+    //   1. map()    → asociamos cada trámite con su índice original { nombre, i }
+    //   2. filter() → descartamos los trámites cuyo nombre esté en tramitesActivos
+    //   3. map()    → nos quedamos únicamente con el número de índice
+    // Preservar el índice original es obligatorio porque callback_data lo usa.
+    const indicesDisponibles = TRAMITES
+      .map((nombre, i) => ({ nombre, i }))
+      .filter(({ nombre }) => !tramitesActivos.has(nombre))
+      .map(({ i }) => i);
+
+    // Si el array quedó vacío, el usuario ya cubrió todos los trámites disponibles.
+    // NO cambiamos el estado ni mostramos botones: solo enviamos el aviso informativo
+    // y lo dejamos en MENU_GESTION para que pueda elegir otra acción.
+    if (indicesDisponibles.length === 0) {
+      bot.sendMessage(
+        chatId,
+        '⚠️ Ya tenés turnos activos para todos los trámites disponibles.'
+      );
+      return;
+    }
+
+    // Hay al menos un trámite libre: avanzamos el estado a ESPERANDO_TRAMITE
+    // y le mostramos solo los botones de los trámites que todavía puede reservar.
+    estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
+
+    // Pasamos los índices filtrados a teclasMenuTramites() para que construya
+    // únicamente los botones correspondientes a los trámites disponibles.
+    bot.sendMessage(
+      chatId,
+      '📋 ¿Qué trámite querés agregar?',
+      { reply_markup: { inline_keyboard: teclasMenuTramites(indicesDisponibles) } }
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK F: El usuario eligió "Modificar Turno" desde el menú de gestión
+  // ==============================================================
+  if (estadoActual === 'MENU_GESTION' && data === 'modificar_turno') {
+
+    // Cambiamos el estado para identificar que los próximos callbacks de este
+    // usuario corresponden a la selección de qué turno quiere modificar.
+    estadosUsuarios[chatId] = 'ESPERANDO_MODIFICACION';
+
+    // Leemos el DNI guardado en memoria temporal cuando se mostró el menú.
+    const dniModificacion = registrosEnProceso[chatId].dni;
+
+    // Leemos la base de datos fresca para que la lista refleje el estado real.
+    const usuariosModificacion = leerUsuarios();
+    const usuarioModificacion  = usuariosModificacion.find((u) => u.dni === dniModificacion);
+
+    // Si el usuario no tiene turnos activos, no hay nada que modificar.
+    // Revertimos el estado a MENU_GESTION para que pueda elegir otra acción.
+    const turnosModificacion = usuarioModificacion ? (usuarioModificacion.turnos || []) : [];
+    if (turnosModificacion.length === 0) {
+      estadosUsuarios[chatId] = 'MENU_GESTION';
+      bot.sendMessage(chatId, '⚠️ No tenés turnos activos para modificar.');
+      return;
+    }
+
+    // Construimos el Inline Keyboard dinámico: una fila por cada turno activo.
+    // map() genera un botón con la descripción del turno y el índice en callback_data.
+    // El índice "i" se incluye en "editar_i" para identificar cuál turno reeditar.
+    const botonesEditar = turnosModificacion.map((t, i) => ([{
+      text: `✏️ ${t.tramite} — ${t.fecha} ${t.horario} hs`,
+      callback_data: `editar_${i}`,
+    }]));
+
+    // Agregamos al final el botón de retroceso en su propia fila.
+    botonesEditar.push([{ text: '⬅️ Volver al menú', callback_data: 'volver_menu_gestion' }]);
+
+    bot.sendMessage(
+      chatId,
+      '¿Qué turno necesitás modificar?',
+      { reply_markup: { inline_keyboard: botonesEditar } }
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK F2: El usuario eligió qué turno editar (botón "editar_N")
+  // ==============================================================
+  if (estadoActual === 'ESPERANDO_MODIFICACION' && data.startsWith('editar_')) {
+
+    // Extraemos el índice numérico del callback_data (ej: "editar_1" → 1).
+    const indiceEditar = parseInt(data.replace('editar_', ''), 10);
+
+    // Validamos que el índice sea un entero válido antes de operar.
+    if (isNaN(indiceEditar)) {
+      bot.sendMessage(chatId, '⚠️ Ocurrió un error al procesar la selección. Intentá de nuevo.');
+      return;
+    }
+
+    // Leemos el DNI y buscamos al usuario en la base de datos fresca.
+    const dniEditar      = registrosEnProceso[chatId].dni;
+    const usuariosEditar = leerUsuarios();
+
+    // findIndex() nos da la posición en el array principal para poder mutar
+    // el objeto directamente; necesitamos el índice y no solo el objeto.
+    const indiceUsuarioEditar = usuariosEditar.findIndex((u) => u.dni === dniEditar);
+
+    // Verificación defensiva: el usuario debe existir en la base de datos.
+    if (indiceUsuarioEditar === -1) {
+      bot.sendMessage(chatId, '⚠️ No se encontró tu registro. Escribí tu DNI para volver a ingresar.');
+      delete registrosEnProceso[chatId];
+      estadosUsuarios[chatId] = 'INICIAL';
+      return;
+    }
+
+    const usuarioAEditar = usuariosEditar[indiceUsuarioEditar];
+
+    // Verificación defensiva: el índice del turno debe existir en el array.
+    // Protege contra clics en botones de mensajes viejos o desactualizados.
+    if (indiceEditar < 0 || indiceEditar >= usuarioAEditar.turnos.length) {
+      bot.sendMessage(chatId, '⚠️ Ese turno ya no existe. Escribí tu DNI para volver a ingresar.');
+      delete registrosEnProceso[chatId];
+      estadosUsuarios[chatId] = 'INICIAL';
+      return;
+    }
+
+    // PASO CLAVE: guardamos el nombre del trámite del turno que se va a reemplazar.
+    // Lo necesitamos en registrosEnProceso para que el flujo de fecha/horario
+    // sepa qué trámite está en proceso, igual que cuando se saca un turno nuevo.
+    const tramiteAEditar = usuarioAEditar.turnos[indiceEditar].tramite;
+    registrosEnProceso[chatId].tramite = tramiteAEditar;
+
+    // Bandera que le indica al CALLBACK C (confirmación de horario) que este flujo
+    // es una modificación y no un turno nuevo. Con ella diferenciamos el mensaje final
+    // sin necesidad de crear un callback de confirmación separado.
+    registrosEnProceso[chatId].esModificacion = true;
+
+    // LIBERACIÓN DEL CUPO: eliminamos el turno viejo ANTES de pedir la nueva fecha.
+    // Esto es fundamental: si no lo borramos primero, el cupo que este usuario
+    // ocupa aparecería como "tomado" en la lógica anti-superposición al elegir
+    // la nueva fecha, impidiéndole reservar el mismo horario si lo desea.
+    // splice(indiceEditar, 1) elimina exactamente ese elemento y cierra el hueco.
+    usuarioAEditar.turnos.splice(indiceEditar, 1);
+
+    // REGLA DE LIMPIEZA: si el array turnos quedó vacío tras el splice,
+    // eliminamos al usuario del array principal para mantener el JSON limpio.
+    // No es un problema borrarlo: al final del flujo se volverá a crear con el
+    // nuevo turno, igual que si fuera un usuario que se registra por primera vez.
+    if (usuarioAEditar.turnos.length === 0) {
+      // splice sobre el array raíz elimina el objeto del usuario por completo.
+      usuariosEditar.splice(indiceUsuarioEditar, 1);
+    }
+
+    // Persistimos la base de datos con el turno viejo ya eliminado.
+    // El cupo queda liberado desde este momento.
+    guardarUsuarios(usuariosEditar);
+
+    console.log(`✏️  Turno a modificar liberado: DNI ${dniEditar} → índice ${indiceEditar} (${tramiteAEditar})`);
+
+    // Avanzamos el estado: el flujo de fecha y horario es exactamente el mismo
+    // que cuando se saca un turno nuevo; no hace falta duplicar esa lógica.
+    estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
+
+    // Construimos el Inline Keyboard con los próximos 3 días hábiles,
+    // idéntico al que se genera en CALLBACK A cuando el usuario elige un trámite.
+    const diasHabilesE = proximosDiasHabiles(3);
+    const botonesFechasE = diasHabilesE.map((dia) => ([{
+      text: formatearFechaTexto(dia),
+      callback_data: `fecha_${formatearFechaClave(dia)}`,
+    }]));
+
+    bot.sendMessage(
+      chatId,
+      `Turno anterior liberado. 📅 Elegí la nueva fecha para tu trámite de *${tramiteAEditar}*:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: botonesFechasE },
+      }
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK F3: El usuario se arrepintió desde la pantalla de modificación
+  // ==============================================================
+  if (data === 'volver_menu_gestion') {
+
+    // Limpiamos la memoria temporal y devolvemos al estado INICIAL.
+    // Al ingresar el DNI de nuevo el bot muestra el menú actualizado.
+    delete registrosEnProceso[chatId];
+    estadosUsuarios[chatId] = 'INICIAL';
+
+    bot.sendMessage(
+      chatId,
+      'Operación cancelada. Ingresá tu DNI para volver al menú principal.'
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK G: El usuario eligió "Cancelar Turno" desde el menú de gestión
+  // ==============================================================
+  if (estadoActual === 'MENU_GESTION' && data === 'cancelar_turno') {
+
+    // Cambiamos el estado para que los próximos callbacks de este usuario
+    // sean interpretados como una selección dentro del flujo de cancelación.
+    estadosUsuarios[chatId] = 'ESPERANDO_CANCELACION';
+
+    // Leemos el DNI que guardamos en memoria temporal al mostrar el menú.
+    const dniCancelacion = registrosEnProceso[chatId].dni;
+
+    // Buscamos el registro actualizado del usuario en el disco.
+    // Usamos leerUsuarios() en lugar de la copia en memoria para garantizar
+    // que los turnos mostrados reflejen el estado real de la base de datos.
+    const usuariosCancelacion = leerUsuarios();
+    const usuarioCancelacion  = usuariosCancelacion.find((u) => u.dni === dniCancelacion);
+
+    // Si el usuario no tiene turnos (o no se encontró), avisamos y no avanzamos.
+    // Volvemos el estado a MENU_GESTION para que pueda intentar otra acción.
+    const turnosCancelacion = usuarioCancelacion ? (usuarioCancelacion.turnos || []) : [];
+    if (turnosCancelacion.length === 0) {
+      estadosUsuarios[chatId] = 'MENU_GESTION';
+      bot.sendMessage(chatId, '⚠️ No tenés turnos activos para cancelar.');
+      return;
+    }
+
+    // Construimos el Inline Keyboard dinámico: un botón por cada turno activo.
+    // map() recorre el array y por cada elemento (t) genera una fila con un botón.
+    // El texto del botón resume el turno en formato corto; el callback_data
+    // incluye el índice "i" para identificar cuál turno borrar al recibirlo.
+    const botonesTurnos = turnosCancelacion.map((t, i) => {
+      // Formateamos la fecha al estilo DD/MM para que el botón sea compacto.
+      // split('-') separa "2026-03-18" en ["2026", "03", "18"]; tomamos día y mes.
+      const partesFecha = t.fecha.split(' ');
+      // La fecha en el JSON es texto legible (ej: "martes 18 de marzo"),
+      // así que la mostramos tal cual pero recortamos solo día y mes para brevedad.
+      return [{
+        text: `❌ ${t.tramite} — ${t.fecha} ${t.horario} hs`,
+        callback_data: `borrar_${i}`,
+      }];
+    });
+
+    // Agregamos al final una fila con el botón de retroceso para que el usuario
+    // pueda salir del flujo de cancelación sin eliminar ningún turno.
+    botonesTurnos.push([{ text: '⬅️ Volver al menú', callback_data: 'volver_menu' }]);
+
+    bot.sendMessage(
+      chatId,
+      'Seleccioná el turno que deseás cancelar:',
+      { reply_markup: { inline_keyboard: botonesTurnos } }
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK H: El usuario confirmó qué turno borrar (botón "borrar_N")
+  // ==============================================================
+  if (estadoActual === 'ESPERANDO_CANCELACION' && data.startsWith('borrar_')) {
+
+    // Extraemos el índice numérico del callback_data (ej: "borrar_2" → 2).
+    // parseInt con base 10 convierte el string al entero que usaremos con splice().
+    const indiceTurno = parseInt(data.replace('borrar_', ''), 10);
+
+    // Validamos que el índice sea un número entero válido.
+    // isNaN() devuelve true si parseInt no pudo convertir el valor correctamente.
+    if (isNaN(indiceTurno)) {
+      bot.sendMessage(chatId, '⚠️ Ocurrió un error al procesar la selección. Intentá de nuevo.');
+      return;
+    }
+
+    // Recuperamos el DNI y leemos la base de datos fresca del disco.
+    const dniBorrar   = registrosEnProceso[chatId].dni;
+    const usuariosBorrar = leerUsuarios();
+
+    // findIndex() devuelve la posición del usuario en el array principal,
+    // o -1 si no se encontró. Necesitamos el índice (no el objeto) para poder
+    // modificar el registro directamente dentro del array y luego guardarlo.
+    const indiceUsuarioBorrar = usuariosBorrar.findIndex((u) => u.dni === dniBorrar);
+
+    // Verificación defensiva: si el usuario no existe en la DB, abortamos.
+    if (indiceUsuarioBorrar === -1) {
+      bot.sendMessage(chatId, '⚠️ No se encontró tu registro. Escribí tu DNI para volver a ingresar.');
+      delete registrosEnProceso[chatId];
+      estadosUsuarios[chatId] = 'INICIAL';
+      return;
+    }
+
+    const usuarioAModificar = usuariosBorrar[indiceUsuarioBorrar];
+
+    // Verificación defensiva: el índice del turno debe existir dentro del array.
+    // Esto evita crashear si el usuario hizo clic en un botón desactualizado.
+    if (indiceTurno < 0 || indiceTurno >= usuarioAModificar.turnos.length) {
+      bot.sendMessage(chatId, '⚠️ Ese turno ya no existe. Escribí tu DNI para volver a ingresar.');
+      delete registrosEnProceso[chatId];
+      estadosUsuarios[chatId] = 'INICIAL';
+      return;
+    }
+
+    // Capturamos los datos del turno ANTES de eliminarlo con splice.
+    // Una vez que splice lo borra del array, esos datos ya no son accesibles,
+    // así que los guardamos en una variable para armar el mensaje de confirmación.
+    const turnoCancelado = usuarioAModificar.turnos[indiceTurno];
+
+    // splice(inicio, cantidad) modifica el array EN SU LUGAR (muta el original).
+    // Con inicio = indiceTurno y cantidad = 1, elimina exactamente ese un elemento.
+    // Los elementos siguientes se desplazan automáticamente para cerrar el hueco.
+    usuarioAModificar.turnos.splice(indiceTurno, 1);
+
+    // REGLA DE ORO: si después del splice el array turnos quedó vacío,
+    // no tiene sentido mantener el registro del usuario en la base de datos.
+    // Usamos otro splice sobre el array PRINCIPAL para eliminar al usuario completo.
+    // Esto mantiene el JSON limpio y evita acumular entradas sin información útil.
+    if (usuarioAModificar.turnos.length === 0) {
+      // splice(indiceUsuarioBorrar, 1) elimina el objeto del usuario del array raíz.
+      usuariosBorrar.splice(indiceUsuarioBorrar, 1);
+    }
+
+    // Persistimos los cambios en el archivo JSON del disco.
+    guardarUsuarios(usuariosBorrar);
+
+    console.log(`🗑️  Turno cancelado: DNI ${dniBorrar} → ${turnoCancelado.tramite} | ${turnoCancelado.fecha} ${turnoCancelado.horario}`);
+
+    // Armamos la primera parte del mensaje con los datos del turno cancelado.
+    // Usamos los datos que guardamos en turnoCancelado antes del splice.
+    let mensajeCancelacion =
+      `❌ Cancelaste exitosamente el turno de *${turnoCancelado.tramite}* ` +
+      `del *${turnoCancelado.fecha}* a las *${turnoCancelado.horario}* hs.`;
+
+    // Si al usuario le quedan turnos activos, los listamos debajo del mensaje principal.
+    // Verificamos la longitud DESPUÉS del splice; si es 0, no agregamos nada.
+    // map() convierte cada turno restante en un renglón numerado para facilitar la lectura.
+    if (usuarioAModificar.turnos.length > 0) {
+      const renglonesRestantes = usuarioAModificar.turnos.map((t, i) =>
+        `  *${i + 1}.* ${t.tramite} — ${t.fecha} a las ${t.horario} hs`
+      );
+      // join() une todos los renglones con salto de línea para armar el bloque de texto.
+      mensajeCancelacion +=
+        '\n\nTus turnos activos son:\n' + renglonesRestantes.join('\n');
+    }
+
+    // Agregamos la instrucción para volver al menú como párrafo final.
+    mensajeCancelacion += '\n\nPor favor, ingresá tu número de DNI para volver al menú principal.';
+
+    // Limpiamos la memoria temporal y cambiamos el estado a ESPERANDO_DNI.
+    // Usamos ESPERANDO_DNI (no INICIAL) para que el bot esté listo para recibir
+    // el DNI inmediatamente sin que el usuario tenga que escribir "hola" primero.
+    delete registrosEnProceso[chatId];
+    estadosUsuarios[chatId] = 'ESPERANDO_DNI';
+
+    bot.sendMessage(chatId, mensajeCancelacion, { parse_mode: 'Markdown' });
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK I: El usuario tocó "Volver al menú" desde la pantalla de cancelación
+  // ==============================================================
+  if (data === 'volver_menu') {
+
+    // Limpiamos la memoria temporal y devolvemos al usuario al estado INICIAL.
+    // Al pedir el DNI de nuevo el bot muestra el menú con los datos actualizados,
+    // lo que garantiza que la vista sea siempre consistente con la base de datos.
+    delete registrosEnProceso[chatId];
+    estadosUsuarios[chatId] = 'INICIAL';
+
+    bot.sendMessage(
+      chatId,
+      'Operación cancelada. Ingresá tu DNI para volver al menú principal.'
+    );
+    return;
+  }
+});
+
+// ---------------------------------------------------------------
+// 13. MANEJO DE ERRORES DE POLLING
 // ---------------------------------------------------------------
 bot.on('polling_error', (error) => {
   console.error('❌ Error de conexión con Telegram:', error.message);
