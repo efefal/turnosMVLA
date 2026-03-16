@@ -1,0 +1,5 @@
+# Ignorar la carpeta de dependencias (se regenera con "npm install")
+node_modules/
+
+# Ignorar el archivo .env porque contiene información sensible (el token del bot)
+.env

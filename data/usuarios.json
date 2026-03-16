@@ -1,0 +1,62 @@
+[
+  {
+    "dni": "28456789",
+    "nombre": "Carlos Romero",
+    "tieneTurno": true,
+    "turno": {
+      "fecha": "20 de marzo de 2026 a las 10:30 hs",
+      "tramite": "Renovación de DNI"
+    }
+  },
+  {
+    "dni": "3567890",
+    "nombre": "Ana García",
+    "tieneTurno": true,
+    "turno": {
+      "fecha": "25 de marzo de 2026 a las 14:00 hs",
+      "tramite": "Inscripción escolar"
+    }
+  },
+  {
+    "dni": "41234567",
+    "nombre": "Lucía Fernández",
+    "tieneTurno": false,
+    "turno": null
+  },
+  {
+    "dni": "39882236",
+    "nombre": "Fermin Fal",
+    "tieneTurno": true,
+    "turno": {
+      "fecha": "20 de marzo a las 10:00 hs",
+      "tramite": "Licencia de conducir"
+    }
+  },
+  {
+    "dni": "40057123",
+    "nombre": "Candela Zitterkopf",
+    "tieneTurno": true,
+    "turno": {
+      "fecha": "20 de marzo a las 10:00 hs",
+      "tramite": "Licencia de conducir"
+    }
+  },
+  {
+    "dni": "16271428",
+    "nombre": "Fernando fal",
+    "tieneTurno": true,
+    "turno": {
+      "fecha": "20 de marzo a las 10:00 hs",
+      "tramite": "Licencia de conducir"
+    }
+  },
+  {
+    "dni": "23771660",
+    "nombre": "Mario calo",
+    "tieneTurno": true,
+    "turno": {
+      "fecha": "20 de marzo a las 10:00 hs",
+      "tramite": "Licencia de conducir"
+    }
+  }
+]
