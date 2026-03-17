@@ -41,19 +41,38 @@ const RUTA_DB = path.join(__dirname, 'data', 'usuarios.json');
 // require() porque require() guarda el resultado en caché (memoria)
 // y no reflejaría los cambios que hacemos al guardar nuevos usuarios.
 function leerUsuarios() {
-  const contenido = fs.readFileSync(RUTA_DB, 'utf-8');
-  // JSON.parse() convierte el texto JSON en un objeto JavaScript utilizable.
-  return JSON.parse(contenido);
+  // El try/catch previene que el bot se apague ante fallos de I/O:
+  // si el archivo no existe, está corrupto o es ilegible, el error
+  // queda contenido aquí y la función devuelve un array vacío como
+  // red de seguridad, en lugar de propagar una excepción no controlada.
+  try {
+    if (!fs.existsSync(RUTA_DB)) {
+      return [];
+    }
+    const contenido = fs.readFileSync(RUTA_DB, 'utf-8');
+    // JSON.parse() convierte el texto JSON en un objeto JavaScript utilizable.
+    return JSON.parse(contenido);
+  } catch (error) {
+    console.error('Error al leer el archivo de usuarios:', error);
+    return [];
+  }
 }
 
 // guardarUsuarios(): Recibe el array completo de usuarios y lo
 // sobreescribe en el archivo JSON del disco, haciendo los cambios permanentes.
 function guardarUsuarios(arrayUsuarios) {
-  // JSON.stringify() convierte el array JavaScript de vuelta a texto JSON.
-  // El tercer argumento (2) agrega sangría de 2 espacios para que el archivo
-  // sea legible si lo abrimos con un editor de texto.
-  const contenidoJson = JSON.stringify(arrayUsuarios, null, 2);
-  fs.writeFileSync(RUTA_DB, contenidoJson, 'utf-8');
+  // El try/catch previene que el bot se apague ante fallos de I/O:
+  // si el disco está lleno, los permisos fallan o hay un error de escritura,
+  // el error queda contenido aquí en lugar de tumbar el proceso completo.
+  try {
+    // JSON.stringify() convierte el array JavaScript de vuelta a texto JSON.
+    // El tercer argumento (2) agrega sangría de 2 espacios para que el archivo
+    // sea legible si lo abrimos con un editor de texto.
+    const contenidoJson = JSON.stringify(arrayUsuarios, null, 2);
+    fs.writeFileSync(RUTA_DB, contenidoJson, 'utf-8');
+  } catch (error) {
+    console.error('Error al guardar en el archivo de usuarios:', error);
+  }
 }
 
 // buscarUsuarioPorDni(): Lee los usuarios frescos del disco y busca
@@ -151,6 +170,16 @@ const estadosUsuarios = {};
 const registrosEnProceso = {};
 
 // ---------------------------------------------------------------
+// 9b. TEMPORIZADORES DE SESIÓN POR INACTIVIDAD
+// ---------------------------------------------------------------
+// Cada clave es un chatId; el valor es el ID del setTimeout activo
+// para ese usuario. Permite cancelar y renovar el temporizador en
+// cada interacción, reiniciando el contador de 10 minutos.
+//
+// Ejemplo: { 123456789: <Timeout>, 987654321: <Timeout> }
+let timeoutsSesion = {};
+
+// ---------------------------------------------------------------
 // 10. FUNCIONES AUXILIARES DE LÓGICA
 // ---------------------------------------------------------------
 
@@ -198,6 +227,55 @@ function teclasMenuTramites(indicesPermitidos) {
 }
 
 // ---------------------------------------------------------------
+// 10b. GESTIÓN DE TIMEOUT POR INACTIVIDAD
+// ---------------------------------------------------------------
+// gestionarTimeout(): Se llama al inicio de cada interacción del usuario
+// (mensaje de texto o pulsación de botón). Su trabajo es reiniciar el
+// contador de inactividad de 10 minutos para ese chatId.
+//
+// El try/catch en el bloque interno previene que un fallo al enviar el
+// mensaje de expiración apague el bot.
+function gestionarTimeout(chatId) {
+  // Si ya hay un temporizador activo para este usuario, lo cancelamos.
+  // Esto "reinicia el reloj" con cada nueva interacción.
+  if (timeoutsSesion[chatId]) {
+    clearTimeout(timeoutsSesion[chatId]);
+    delete timeoutsSesion[chatId];
+  }
+
+  // Si el usuario está en estado INICIAL no hay ningún trámite en curso,
+  // por lo que no tiene sentido crear un temporizador de vencimiento.
+  if ((estadosUsuarios[chatId] || 'INICIAL') === 'INICIAL') {
+    return;
+  }
+
+  // Creamos un nuevo temporizador de 10 minutos (600 000 ms).
+  // Si el usuario no interactúa antes de que se cumpla, lo devolvemos
+  // al estado INICIAL y limpiamos cualquier dato parcial en memoria.
+  timeoutsSesion[chatId] = setTimeout(async () => {
+    // Limpiamos el registro en proceso (datos parciales del trámite).
+    delete registrosEnProceso[chatId];
+
+    // Volvemos al estado neutro para que el usuario deba empezar de cero.
+    estadosUsuarios[chatId] = 'INICIAL';
+
+    // Eliminamos la referencia al temporizador ya ejecutado.
+    delete timeoutsSesion[chatId];
+
+    // Notificamos al usuario que su sesión expiró.
+    try {
+      await bot.sendMessage(
+        chatId,
+        '⏳ Tu sesión ha expirado por inactividad. ' +
+        'Por favor, escribí tu DNI o el comando /start para volver al menú principal.'
+      );
+    } catch (error) {
+      console.error(`Error al enviar mensaje de timeout al usuario ${chatId}:`, error);
+    }
+  }, 600000);
+}
+
+// ---------------------------------------------------------------
 // 11. MANEJADOR PRINCIPAL DE MENSAJES
 // ---------------------------------------------------------------
 // Toda la lógica conversacional vive en este único bloque.
@@ -208,6 +286,11 @@ bot.on('message', (msg) => {
 
   // Ignoramos mensajes sin texto (fotos, stickers, archivos, etc.)
   if (!texto) return;
+
+  // Reiniciamos (o cancelamos) el temporizador de inactividad con cada mensaje.
+  // Si el usuario está en INICIAL no se crea timeout; en cualquier otro estado
+  // el reloj se reinicia desde cero para darle 10 minutos más de sesión activa.
+  gestionarTimeout(chatId);
 
   // Obtenemos el estado actual del usuario (INICIAL si es la primera vez)
   const estadoActual = estadosUsuarios[chatId] || 'INICIAL';
@@ -350,6 +433,10 @@ bot.on('message', (msg) => {
 bot.on('callback_query', (query) => {
   const chatId = query.message.chat.id;
   const data = query.data; // El valor de callback_data del botón presionado
+
+  // Reiniciamos el temporizador de inactividad con cada pulsación de botón,
+  // igual que hacemos en el manejador de mensajes de texto.
+  gestionarTimeout(chatId);
 
   // Siempre respondemos al callback para que Telegram quite el "reloj" del botón.
   bot.answerCallbackQuery(query.id);
