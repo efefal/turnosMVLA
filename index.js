@@ -23,6 +23,13 @@ const fs = require('fs');
 // (Windows usa "\", Linux/Mac usan "/").
 const path = require('path');
 
+// "ea" es el módulo de integración con Easy!Appointments.
+// Centraliza todas las llamadas a la API del motor de reservas:
+// obtener servicios, consultar disponibilidad, crear y cancelar citas.
+// Al importarlo acá, index.js puede usar esas funciones sin conocer
+// los detalles de cómo se comunica con la API.
+const ea = require('./ea');
+
 // ---------------------------------------------------------------
 // 3. RUTA AL ARCHIVO DE LA BASE DE DATOS
 // ---------------------------------------------------------------
@@ -86,14 +93,37 @@ function buscarUsuarioPorDni(dni) {
 // ---------------------------------------------------------------
 // 5. CATÁLOGO DE TRÁMITES DISPONIBLES
 // ---------------------------------------------------------------
-// Array con los nombres de los trámites disponibles. Usamos un array porque
-// ahora los trámites se eligen con botones Inline Keyboard: el índice numérico
-// (0, 1, 2) se incluye en el callback_data de cada botón (ej: "tramite_0")
-// y luego se usa para recuperar el nombre con TRAMITES[indice].
-const TRAMITES = ['Licencia de conducir', 'Tribunal de Faltas', 'Rentas'];
+// TRAMITES: array de strings con los nombres visibles de cada trámite.
+// Se carga dinámicamente desde Easy!Appointments al iniciar el bot.
+// Sigue siendo un array de strings para que toda la lógica de índices
+// y callbacks del bot no necesite cambios: TRAMITES[0], TRAMITES[1], etc.
+let TRAMITES = [];
 
-// Horarios disponibles para sacar turno.
-const HORARIOS_DISPONIBLES = ['09:00', '10:00', '11:00'];
+// TRAMITES_COMPLETOS: array de objetos con todos los datos del servicio
+// tal como los devuelve Easy!Appointments: { id, name, duration, ... }.
+// Necesitamos los IDs numéricos para consultar disponibilidad y crear citas.
+// Siempre se carga junto con TRAMITES y tienen el mismo orden.
+let TRAMITES_COMPLETOS = [];
+
+// cargarTramites(): consulta la API de Easy!Appointments y llena las dos
+// variables de arriba. Se llama al iniciar el bot.
+// Si la API no responde, TRAMITES queda vacío y el error aparece en el log.
+// El bot sigue funcionando y avisará al usuario si intenta sacar un turno
+// mientras los trámites no están disponibles.
+async function cargarTramites() {
+  try {
+    const servicios = await ea.obtenerServicios();
+    if (!servicios || servicios.length === 0) {
+      console.warn('⚠️  No se encontraron trámites en Easy!Appointments.');
+      return;
+    }
+    TRAMITES_COMPLETOS = servicios;
+    TRAMITES = servicios.map((s) => s.name);
+    console.log(`✅ Trámites cargados: ${TRAMITES.join(', ')}`);
+  } catch (error) {
+    console.error('❌ Error al cargar trámites desde Easy!Appointments:', error.message);
+  }
+}
 
 // Devuelve un array con los próximos N días hábiles (lunes a viernes) a partir de hoy.
 function proximosDiasHabiles(cantidad) {
@@ -122,7 +152,6 @@ function formatearFechaTexto(fecha) {
 function formatearFechaClave(fecha) {
   return fecha.toISOString().split('T')[0];
 }
-
 // ---------------------------------------------------------------
 // 6. VALIDAR Y OBTENER EL TOKEN
 // ---------------------------------------------------------------
@@ -139,6 +168,7 @@ if (!token) {
 const bot = new TelegramBot(token, { polling: true });
 
 console.log('✅ Bot iniciado correctamente. Esperando mensajes...');
+cargarTramites();
 
 // ---------------------------------------------------------------
 // 8. MEMORIA DE ESTADO DE LAS CONVERSACIONES
