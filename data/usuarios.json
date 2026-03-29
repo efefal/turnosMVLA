@@ -4,14 +4,24 @@
     "nombre": "Fermin Fal",
     "turnos": [
       {
-        "tramite": "Licencia de conducir",
-        "fecha": "miércoles, 18 de marzo",
-        "horario": "10:00"
-      },
-      {
         "tramite": "Tribunal de Faltas",
         "fecha": "miércoles, 18 de marzo",
         "horario": "11:00"
+      },
+      {
+        "tramite": "Licencia de conducir",
+        "fecha": "martes, 17 de marzo",
+        "horario": "09:00"
+      },
+      {
+        "tramite": "Nueva Licencia",
+        "fecha": "lunes, 30 de marzo",
+        "horario": "10:00"
+      },
+      {
+        "tramite": "Pago Multas",
+        "fecha": "martes, 31 de marzo",
+        "horario": "08:15"
       }
     ]
   },
@@ -28,6 +38,11 @@
         "tramite": "Tribunal de Faltas",
         "fecha": "martes, 17 de marzo",
         "horario": "09:00"
+      },
+      {
+        "tramite": "Pago Multas",
+        "fecha": "lunes, 30 de marzo",
+        "horario": "12:15"
       }
     ]
   },
@@ -43,6 +58,22 @@
       {
         "tramite": "Rentas",
         "fecha": "miércoles, 18 de marzo",
+        "horario": "11:00"
+      }
+    ]
+  },
+  {
+    "dni": "16271428",
+    "nombre": "Fernando Fal",
+    "turnos": [
+      {
+        "tramite": "Tribunal de Faltas",
+        "fecha": "martes, 17 de marzo",
+        "horario": "10:00"
+      },
+      {
+        "tramite": "Licencia de conducir",
+        "fecha": "jueves, 19 de marzo",
         "horario": "11:00"
       }
     ]

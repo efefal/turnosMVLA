@@ -460,7 +460,7 @@ bot.on('message', (msg) => {
 // ---------------------------------------------------------------
 // El evento 'callback_query' se dispara cada vez que el usuario
 // hace clic en un botón de un Inline Keyboard.
-bot.on('callback_query', (query) => {
+bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data; // El valor de callback_data del botón presionado
 
@@ -532,50 +532,40 @@ bot.on('callback_query', (query) => {
     const tramiteElegido = registrosEnProceso[chatId].tramite;
     const dniActual      = registrosEnProceso[chatId].dni;
 
-    // --- LÓGICA ANTI-SUPERPOSICIÓN DE TURNOS ---
+ // --- CONSULTA DE DISPONIBILIDAD EN EASY!APPOINTMENTS ---
 
-    // Leemos todos los usuarios actuales del archivo JSON en disco.
-    const todosLosUsuarios = leerUsuarios();
+    // Buscamos el objeto completo del trámite en TRAMITES_COMPLETOS
+    // para obtener su ID numérico, que es lo que necesita la API.
+    const servicioElegido = TRAMITES_COMPLETOS.find((s) => s.name === tramiteElegido);
 
-    // Construimos el Set de horarios bloqueados aplicando una doble regla.
-    // Usamos un Set para evitar duplicados y tener búsquedas rápidas con has().
-    const horariosOcupados = new Set();
+    // Si no encontramos el servicio, algo falló al cargar los trámites.
+    // Recargamos y pedimos al usuario que intente de nuevo.
+    if (!servicioElegido) {
+      await cargarTramites();
+      bot.sendMessage(
+        chatId,
+        '⚠️ Hubo un problema al identificar el trámite. Por favor, escribí /start para intentar de nuevo.'
+      );
+      estadosUsuarios[chatId] = 'INICIAL';
+      delete registrosEnProceso[chatId];
+      return;
+    }
 
-    todosLosUsuarios.forEach((u) => {
-      // Iteramos cada turno del usuario evaluado.
-      // El || [] protege ante registros sin el campo turnos.
-      (u.turnos || []).forEach((t) => {
+    // Consultamos a Easy!Appointments qué horarios libres hay para este
+    // servicio en la fecha elegida, considerando todos los operadores.
+    // La función devuelve: { horariosLibres: [...], mapaHorarioOperador: {...} }
+    const disponibilidad = await ea.obtenerDisponibilidadServicio(
+      servicioElegido.id,
+      fechaClave
+    );
 
-        // Primero verificamos que la fecha del turno coincida con la elegida.
-        // Si no coincide, ninguna de las dos condiciones puede cumplirse,
-        // así que descartamos este turno con un return temprano.
-        if (t.fecha !== fechaTexto) return;
+    const horariosLibres      = disponibilidad.horariosLibres;
+    const mapaHorarioOperador = disponibilidad.mapaHorarioOperador;
 
-        // CONDICIÓN GLOBAL: el cupo del sector está lleno.
-        // Se cumple cuando el trámite del turno iterado es el mismo que el
-        // trámite que el usuario actual quiere reservar. No importa quién
-        // sea el dueño del turno: si ese sector ya tiene ese horario tomado,
-        // nadie más puede reservarlo.
-        const cupoSectorAgotado = (t.tramite === tramiteElegido);
-
-        // CONDICIÓN PERSONAL: el usuario actual ya tiene un compromiso esa hora.
-        // Se cumple cuando el DNI del usuario iterado coincide con el DNI del
-        // usuario actual. Bloquea la franja sin importar de qué trámite se trate,
-        // porque una persona no puede estar en dos lugares a la vez.
-        const usuarioYaTieneEsaFranja = (u.dni === dniActual);
-
-        // Si se cumple alguna de las dos condiciones, el horario queda bloqueado.
-        // El operador || (OR) expresa exactamente esta disyunción.
-        if (cupoSectorAgotado || usuarioYaTieneEsaFranja) {
-          horariosOcupados.add(t.horario);
-        }
-      });
-    });
-
-    // filter() sobre el array completo de horarios elimina los que ya están ocupados.
-    // has() devuelve true si el horario está en el Set → el "!" lo invierte para quedarnos
-    // solo con los que NO están ocupados.
-    const horariosLibres = HORARIOS_DISPONIBLES.filter((h) => !horariosOcupados.has(h));
+    // Guardamos el mapa en memoria temporal para usarlo en CALLBACK C
+    // al momento de confirmar la reserva con el operador correcto.
+    registrosEnProceso[chatId].mapaHorarioOperador = mapaHorarioOperador;
+    registrosEnProceso[chatId].serviceId           = servicioElegido.id;
 
     // Si el array quedó vacío, ningún horario está disponible para esa fecha y trámite.
     if (horariosLibres.length === 0) {
@@ -613,13 +603,19 @@ bot.on('callback_query', (query) => {
     // El array de filas tiene dos elementos:
     //   - Fila 1: un botón por cada horario disponible, todos en la misma fila horizontal.
     //   - Fila 2: botón de retroceso en su propia fila para que sea bien visible.
+    // Agrupamos los horarios de a pares para mostrarlos en filas de 2 columnas.
+    // Así son más compactos visualmente sin perder legibilidad.
+    const filasHorarios = [];
+    for (let i = 0; i < horariosLibres.length; i += 2) {
+      const fila = [{ text: `🕐 ${horariosLibres[i]}`, callback_data: `horario_${horariosLibres[i]}` }];
+      if (horariosLibres[i + 1]) {
+        fila.push({ text: `🕐 ${horariosLibres[i + 1]}`, callback_data: `horario_${horariosLibres[i + 1]}` });
+      }
+      filasHorarios.push(fila);
+    }
+
     const botonesHorarios = [
-      // Fila 1: horarios disponibles en horizontal.
-      horariosLibres.map((horario) => ({
-        text: `🕐 ${horario}`,
-        callback_data: `horario_${horario}`,
-      })),
-      // Fila 2: botón para volver a la selección de fecha sin reiniciar el flujo.
+      ...filasHorarios,
       [{ text: '⬅️ Volver a elegir fecha', callback_data: 'volver_fechas' }],
     ];
 
