@@ -354,40 +354,64 @@ bot.on('message', (msg) => {
     }
 
     const dniIngresado = texto.trim();
-    const usuarioEncontrado = buscarUsuarioPorDni(dniIngresado);
 
-    // B2: El usuario YA EXISTE en la base de datos → mostramos el menú de gestión.
-    // Este bloque unifica el tratamiento de usuarios con y sin turnos activos.
-    if (usuarioEncontrado) {
-      const { nombre } = usuarioEncontrado;
+    // Consultamos Easy!Appointments buscando por el email ficticio que usamos
+    // al crear citas: "dni_NUMERODNI@municipio.local". Si hay citas, el vecino
+    // ya está registrado; si no hay ninguna, lo tratamos como nuevo usuario.
+    const emailVecino = `dni_${dniIngresado}@municipio.local`;
+    let citasActivas;
+    try {
+      citasActivas = await ea.obtenerCitasDelCliente(emailVecino);
+    } catch (error) {
+      console.error(`❌ Error al consultar citas para DNI ${dniIngresado}:`, error.message);
+      bot.sendMessage(
+        chatId,
+        '⚠️ No pudimos consultar tu información en este momento. Por favor, intentá de nuevo.'
+      );
+      // Mantenemos el estado ESPERANDO_DNI para que el vecino pueda reintentar.
+      return;
+    }
 
-      // Leemos directamente el array turnos[] del usuario.
-      // Todos los registros usan este formato; si el usuario no tiene turnos aún,
-      // el array existe vacío porque así lo creamos al registrarlo por primera vez.
-      const listaTurnos = usuarioEncontrado.turnos || [];
+    // B2: El vecino YA TIENE CITAS en Easy!Appointments → mostramos el menú de gestión.
+    if (citasActivas && citasActivas.length > 0) {
 
-      // Armamos el cuerpo del mensaje. Si tiene turnos los listamos; si no, informamos.
-      let textoBienvenida;
-      if (listaTurnos.length > 0) {
-        // map() convierte cada turno en un renglón de texto numerado y formateado.
-        // Todos los registros tienen los campos tramite, fecha y horario garantizados.
-        const renglonesTurnos = listaTurnos.map((t, i) => {
-          return `  *${i + 1}.* ${t.tramite} — ${t.fecha} a las ${t.horario} hs`;
-        });
-        // join() une todos los renglones con salto de línea para armar el bloque.
-        textoBienvenida =
-          `👋 Hola *${nombre}*, estos son tus turnos activos:\n\n` +
-          renglonesTurnos.join('\n') +
-          '\n\n¿Qué querés hacer?';
-      } else {
-        textoBienvenida =
-          `👋 Hola *${nombre}*, actualmente no tenés turnos activos.\n\n¿Qué querés hacer?`;
-      }
+      // El nombre lo sacamos del primer turno. Al crear citas guardamos el nombre
+      // completo en customer.firstName (con lastName vacío), así que lo recuperamos de ahí.
+      const nombre = citasActivas[0].customer.firstName;
+
+      // Convertimos cada cita del formato de EA al formato {tramite, fecha, horario}
+      // que usa la vista. EA devuelve objetos con serviceId y start ("YYYY-MM-DD HH:MM:SS").
+      const listaTurnos = citasActivas.map((cita) => {
+        // Buscamos el nombre legible del servicio usando el ID numérico que trae la cita.
+        const servicio = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+        const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
+
+        // La fecha viene como "YYYY-MM-DD HH:MM:SS"; con substring(0,10) tomamos
+        // solo la parte de fecha y la pasamos por formatearFechaTexto() para
+        // obtener el texto legible que mostramos al vecino.
+        const fechaISO  = cita.start.substring(0, 10); // "YYYY-MM-DD"
+        const fechaObj  = new Date(`${fechaISO}T12:00:00`);
+        const fechaTexto = formatearFechaTexto(fechaObj);
+
+        // El horario es la parte "HH:MM" del campo start; substring(11,16) lo extrae.
+        const horario = cita.start.substring(11, 16);
+
+        return { tramite: tramiteNombre, fecha: fechaTexto, horario };
+      });
+
+      // Armamos el renglón de cada turno y los unimos en un bloque de texto.
+      const renglonesTurnos = listaTurnos.map((t, i) => {
+        return `  *${i + 1}.* ${t.tramite} — ${t.fecha} a las ${t.horario} hs`;
+      });
+      const textoBienvenida =
+        `👋 Hola *${nombre}*, estos son tus turnos activos:\n\n` +
+        renglonesTurnos.join('\n') +
+        '\n\n¿Qué querés hacer?';
 
       // Guardamos DNI y nombre en memoria temporal anticipadamente.
       // Si el usuario elige "Nuevo Trámite", ya tenemos sus datos sin tener
       // que volver a pedirlos; el flujo salta directo a la selección de trámite.
-      registrosEnProceso[chatId] = { dni: dniIngresado, nombre: nombre };
+      registrosEnProceso[chatId] = { dni: dniIngresado, nombre };
 
       // Cambiamos el estado a MENU_GESTION para identificar que los próximos
       // callbacks de este usuario provienen de los botones del menú.
@@ -408,8 +432,8 @@ bot.on('message', (msg) => {
       return;
     }
 
-    // B2c: El DNI NO existe en la base de datos → iniciamos el registro
-    // Guardamos el DNI en memoria temporal para usarlo al final del registro
+    // B2c: No hay citas en EA para este DNI → el vecino es nuevo, iniciamos el registro.
+    // Guardamos el DNI en memoria temporal para usarlo al final del flujo de registro.
     registrosEnProceso[chatId] = { dni: dniIngresado };
     estadosUsuarios[chatId] = 'ESPERANDO_NOMBRE';
 

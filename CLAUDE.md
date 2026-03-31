@@ -159,7 +159,7 @@ Esto permite buscar los turnos de un vecino con `obtenerCitasDelCliente(email)`.
       a `gestionarTimeout(chatId)` en CALLBACK C luego de setear el estado a INICIAL.
       Esto cancela el timeout que se había creado al inicio del callback y no genera uno nuevo.
 - [x] Migrar CALLBACK C: reemplazar `guardarUsuarios()` por `crearCita()`
-- [ ] Migrar RAMA B: reemplazar `buscarUsuarioPorDni()` por `obtenerCitasDelCliente()`
+- [x] Migrar RAMA B: reemplazar `buscarUsuarioPorDni()` por `obtenerCitasDelCliente()`
 - [ ] Migrar CALLBACK H: reemplazar `splice + guardarUsuarios()` por `cancelarCita()`
 - [ ] Migrar CALLBACK F2: liberar cupo con `cancelarCita()` antes de pedir nueva fecha
 - [ ] Integrar API de feriados nacionales (api.argentinadatos.com)
