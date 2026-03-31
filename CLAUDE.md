@@ -161,7 +161,7 @@ Esto permite buscar los turnos de un vecino con `obtenerCitasDelCliente(email)`.
 - [x] Migrar CALLBACK C: reemplazar `guardarUsuarios()` por `crearCita()`
 - [x] Migrar RAMA B: reemplazar `buscarUsuarioPorDni()` por `obtenerCitasDelCliente()`
 - [x] Migrar CALLBACK H: reemplazar `splice + guardarUsuarios()` por `cancelarCita()`
-- [ ] Migrar CALLBACK F2: liberar cupo con `cancelarCita()` antes de pedir nueva fecha
+- [x] Migrar CALLBACK F2: liberar cupo con `cancelarCita()` antes de pedir nueva fecha
 - [ ] Integrar API de feriados nacionales (api.argentinadatos.com)
 - [ ] Configurar WhatsApp Business API para producción
 

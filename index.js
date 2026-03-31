@@ -861,29 +861,44 @@ bot.on('callback_query', async (query) => {
     // usuario corresponden a la selección de qué turno quiere modificar.
     estadosUsuarios[chatId] = 'ESPERANDO_MODIFICACION';
 
-    // Leemos el DNI guardado en memoria temporal cuando se mostró el menú.
     const dniModificacion = registrosEnProceso[chatId].dni;
 
-    // Leemos la base de datos fresca para que la lista refleje el estado real.
-    const usuariosModificacion = leerUsuarios();
-    const usuarioModificacion  = usuariosModificacion.find((u) => u.dni === dniModificacion);
+    // Consultamos EA para obtener las citas actuales del vecino.
+    let citasModificacion;
+    try {
+      citasModificacion = await ea.obtenerCitasDelCliente(`dni_${dniModificacion}@municipio.local`);
+    } catch (error) {
+      console.error(`❌ Error al obtener citas para modificar (DNI ${dniModificacion}):`, error.message);
+      estadosUsuarios[chatId] = 'MENU_GESTION';
+      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      return;
+    }
 
-    // Si el usuario no tiene turnos activos, no hay nada que modificar.
-    // Revertimos el estado a MENU_GESTION para que pueda elegir otra acción.
-    const turnosModificacion = usuarioModificacion ? (usuarioModificacion.turnos || []) : [];
-    if (turnosModificacion.length === 0) {
+    // Si no hay citas activas, no hay nada que modificar.
+    if (!citasModificacion || citasModificacion.length === 0) {
       estadosUsuarios[chatId] = 'MENU_GESTION';
       bot.sendMessage(chatId, '⚠️ No tenés turnos activos para modificar.');
       return;
     }
 
-    // Construimos el Inline Keyboard dinámico: una fila por cada turno activo.
-    // map() genera un botón con la descripción del turno y el índice en callback_data.
-    // El índice "i" se incluye en "editar_i" para identificar cuál turno reeditar.
-    const botonesEditar = turnosModificacion.map((t, i) => ([{
-      text: `✏️ ${t.tramite} — ${t.fecha} ${t.horario} hs`,
-      callback_data: `editar_${i}`,
-    }]));
+    // Guardamos la lista de citas en memoria temporal para que CALLBACK F2
+    // pueda identificar la cita elegida por su ID sin re-consultar EA.
+    registrosEnProceso[chatId].citasModificacion = citasModificacion;
+
+    // Construimos el Inline Keyboard: una fila por cada cita activa.
+    // IMPORTANTE: usamos cita.id (ID real de EA) en el callback_data, no el índice
+    // del array. Al confirmar, necesitamos ese ID para llamar a cancelarCita().
+    const botonesEditar = citasModificacion.map((cita) => {
+      const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+      const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
+      const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
+      const horario       = cita.start.substring(11, 16);
+
+      return [{
+        text: `✏️ ${tramiteNombre} — ${fechaTexto} ${horario} hs`,
+        callback_data: `editar_${cita.id}`,
+      }];
+    });
 
     // Agregamos al final el botón de retroceso en su propia fila.
     botonesEditar.push([{ text: '⬅️ Volver al menú', callback_data: 'volver_menu_gestion' }]);
@@ -901,74 +916,56 @@ bot.on('callback_query', async (query) => {
   // ==============================================================
   if (estadoActual === 'ESPERANDO_MODIFICACION' && data.startsWith('editar_')) {
 
-    // Extraemos el índice numérico del callback_data (ej: "editar_1" → 1).
-    const indiceEditar = parseInt(data.replace('editar_', ''), 10);
+    // Extraemos el ID de la cita en EA desde el callback_data (ej: "editar_47" → 47).
+    // Este ID fue puesto por CALLBACK F al armar los botones; no es un índice de array
+    // sino el identificador real que necesita cancelarCita() para liberar el cupo.
+    const appointmentId = parseInt(data.replace('editar_', ''), 10);
 
-    // Validamos que el índice sea un entero válido antes de operar.
-    if (isNaN(indiceEditar)) {
+    if (isNaN(appointmentId)) {
       bot.sendMessage(chatId, '⚠️ Ocurrió un error al procesar la selección. Intentá de nuevo.');
       return;
     }
 
-    // Leemos el DNI y buscamos al usuario en la base de datos fresca.
-    const dniEditar      = registrosEnProceso[chatId].dni;
-    const usuariosEditar = leerUsuarios();
+    // Buscamos la cita en la lista que CALLBACK F guardó en memoria temporal.
+    const citasModificacion = registrosEnProceso[chatId].citasModificacion || [];
+    const citaAEditar       = citasModificacion.find((c) => c.id === appointmentId);
 
-    // findIndex() nos da la posición en el array principal para poder mutar
-    // el objeto directamente; necesitamos el índice y no solo el objeto.
-    const indiceUsuarioEditar = usuariosEditar.findIndex((u) => u.dni === dniEditar);
-
-    // Verificación defensiva: el usuario debe existir en la base de datos.
-    if (indiceUsuarioEditar === -1) {
-      bot.sendMessage(chatId, '⚠️ No se encontró tu registro. Escribí tu DNI para volver a ingresar.');
+    // Si no se encuentra (botón desactualizado, sesión renovada, etc.), abortamos.
+    if (!citaAEditar) {
+      bot.sendMessage(chatId, '⚠️ Ese turno ya no existe o la sesión expiró. Ingresá tu DNI para volver al menú.');
       delete registrosEnProceso[chatId];
       estadosUsuarios[chatId] = 'INICIAL';
       return;
     }
 
-    const usuarioAEditar = usuariosEditar[indiceUsuarioEditar];
-
-    // Verificación defensiva: el índice del turno debe existir en el array.
-    // Protege contra clics en botones de mensajes viejos o desactualizados.
-    if (indiceEditar < 0 || indiceEditar >= usuarioAEditar.turnos.length) {
-      bot.sendMessage(chatId, '⚠️ Ese turno ya no existe. Escribí tu DNI para volver a ingresar.');
-      delete registrosEnProceso[chatId];
-      estadosUsuarios[chatId] = 'INICIAL';
-      return;
-    }
-
-    // PASO CLAVE: guardamos el nombre del trámite del turno que se va a reemplazar.
-    // Lo necesitamos en registrosEnProceso para que el flujo de fecha/horario
-    // sepa qué trámite está en proceso, igual que cuando se saca un turno nuevo.
-    const tramiteAEditar = usuarioAEditar.turnos[indiceEditar].tramite;
+    // Obtenemos el nombre del trámite a partir del serviceId de la cita.
+    // Lo guardamos en registrosEnProceso para que el flujo de fecha/horario
+    // sepa qué servicio está en proceso, igual que en el flujo de turno nuevo.
+    const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === citaAEditar.serviceId);
+    const tramiteAEditar = servicio ? servicio.name : `Servicio ${citaAEditar.serviceId}`;
     registrosEnProceso[chatId].tramite = tramiteAEditar;
 
-    // Bandera que le indica al CALLBACK C (confirmación de horario) que este flujo
-    // es una modificación y no un turno nuevo. Con ella diferenciamos el mensaje final
-    // sin necesidad de crear un callback de confirmación separado.
+    // Bandera que le indica a CALLBACK C que este flujo es una modificación
+    // y no un turno nuevo; diferencia el mensaje de confirmación final.
     registrosEnProceso[chatId].esModificacion = true;
 
-    // LIBERACIÓN DEL CUPO: eliminamos el turno viejo ANTES de pedir la nueva fecha.
-    // Esto es fundamental: si no lo borramos primero, el cupo que este usuario
-    // ocupa aparecería como "tomado" en la lógica anti-superposición al elegir
-    // la nueva fecha, impidiéndole reservar el mismo horario si lo desea.
-    // splice(indiceEditar, 1) elimina exactamente ese elemento y cierra el hueco.
-    usuarioAEditar.turnos.splice(indiceEditar, 1);
+    const dniEditar = registrosEnProceso[chatId].dni;
 
-    // REGLA DE LIMPIEZA: si el array turnos quedó vacío tras el splice,
-    // eliminamos al usuario del array principal para mantener el JSON limpio.
-    // No es un problema borrarlo: al final del flujo se volverá a crear con el
-    // nuevo turno, igual que si fuera un usuario que se registra por primera vez.
-    if (usuarioAEditar.turnos.length === 0) {
-      // splice sobre el array raíz elimina el objeto del usuario por completo.
-      usuariosEditar.splice(indiceUsuarioEditar, 1);
+    // LIBERACIÓN DEL CUPO: cancelamos la cita vieja en EA ANTES de pedir la nueva fecha.
+    // Si no lo hacemos primero, el cupo que ocupa esta cita aparecería como "tomado"
+    // al consultar disponibilidad, impidiéndole al vecino reservar el mismo horario.
+    try {
+      await ea.cancelarCita(appointmentId);
+    } catch (error) {
+      console.error(`❌ Error al liberar cita ${appointmentId} para modificar (DNI ${dniEditar}):`, error.message);
+      bot.sendMessage(
+        chatId,
+        '⚠️ No pudimos liberar tu turno anterior. Por favor, intentá de nuevo.'
+      );
+      return;
     }
 
-    // Persistimos la base de datos con el turno viejo ya eliminado.
-    // El cupo queda liberado desde este momento.
-    guardarUsuarios(usuariosEditar);
-
-    console.log(`✏️  Turno a modificar liberado: DNI ${dniEditar} → índice ${indiceEditar} (${tramiteAEditar})`);
+    console.log(`✏️  Turno a modificar liberado en EA: DNI ${dniEditar} → cita ${appointmentId} (${tramiteAEditar})`);
 
     // Avanzamos el estado: el flujo de fecha y horario es exactamente el mismo
     // que cuando se saca un turno nuevo; no hace falta duplicar esa lógica.
