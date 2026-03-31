@@ -794,27 +794,28 @@ bot.on('callback_query', async (query) => {
   // ==============================================================
   if (estadoActual === 'MENU_GESTION' && data === 'nuevo_tramite') {
 
-    // Leemos el registro actualizado del usuario desde el disco para conocer
-    // exactamente qué trámites ya tiene reservados en este momento.
-    const usuariosActualesE = leerUsuarios();
-
-    // Recuperamos el DNI del usuario desde la memoria temporal.
-    // Fue guardado cuando el menú de gestión se mostró en la Rama B.
     const dniEnProceso = registrosEnProceso[chatId].dni;
 
-    // Buscamos el objeto del usuario en el array para leer sus turnos.
-    const usuarioEnDB = usuariosActualesE.find((u) => u.dni === dniEnProceso);
-
-    // Construimos un Set con los nombres de los trámites que el usuario ya tiene activos.
-    // Usamos Set porque has() es más eficiente que includes() para búsquedas repetidas.
-    const tramitesActivos = new Set();
-
-    if (usuarioEnDB) {
-      // Leemos directamente el array turnos[] del usuario para saber qué trámites
-      // ya tiene reservados. El || [] protege ante el caso (improbable) de que
-      // el campo no exista en algún registro recién creado.
-      (usuarioEnDB.turnos || []).forEach((t) => tramitesActivos.add(t.tramite));
+    // Consultamos EA para saber qué trámites ya tiene reservados este vecino.
+    // No podemos confiar en el JSON porque las citas ahora viven en EA.
+    let citasActivasE;
+    try {
+      citasActivasE = await ea.obtenerCitasDelCliente(`dni_${dniEnProceso}@municipio.local`);
+    } catch (error) {
+      console.error(`❌ Error al obtener citas para nuevo trámite (DNI ${dniEnProceso}):`, error.message);
+      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      return;
     }
+
+    // Construimos un Set con los nombres de los trámites que el vecino ya tiene activos.
+    // Usamos Set porque has() es más eficiente que includes() para búsquedas repetidas.
+    // Convertimos serviceId → nombre usando TRAMITES_COMPLETOS para poder comparar
+    // contra el array TRAMITES[], que trabaja con nombres (no con IDs numéricos).
+    const tramitesActivos = new Set();
+    (citasActivasE || []).forEach((cita) => {
+      const servicio = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+      if (servicio) tramitesActivos.add(servicio.name);
+    });
 
     // Filtramos los índices de TRAMITES conservando solo los que el usuario
     // todavía NO tiene activos. El proceso tiene tres pasos encadenados:

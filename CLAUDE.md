@@ -137,15 +137,19 @@ registrosEnProceso[chatId] = {
 
 ## Estado actual de la migración a Easy!Appointments
 
-### ✅ Ya migrado
-- Carga dinámica de trámites al iniciar (`cargarTramites()` usa `obtenerServicios()`)
-- Consulta de disponibilidad por fecha y servicio (CALLBACK B usa `obtenerDisponibilidadServicio()`)
+### ✅ Migración completa — toda la lógica usa Easy!Appointments
+- Carga dinámica de trámites al iniciar (`cargarTramites()`)
+- Consulta de disponibilidad por fecha y servicio (CALLBACK B)
+- Lectura de turnos del vecino al ingresar DNI (RAMA B)
+- Creación de turno (CALLBACK C → `crearCita()`)
+- Cancelación de turno (CALLBACK G+H → `cancelarCita()`)
+- Modificación de turno (CALLBACK F+F2 → `cancelarCita()` + `crearCita()`)
+- Filtrado de trámites ya reservados al pedir nuevo trámite (CALLBACK E)
 
-### 🔄 Pendiente de migrar (todavía usa data/usuarios.json)
-- **RAMA B**: Lectura de turnos activos del vecino al ingresar su DNI
-- **CALLBACK C**: Creación del nuevo turno (debe usar `crearCita()`)
-- **CALLBACK H**: Cancelación de turno (debe usar `cancelarCita()`)
-- **CALLBACK F2**: Modificación de turno (debe combinar `cancelarCita()` + `crearCita()`)
+### ⚠️ Funciones legacy en index.js (sin usos activos)
+`leerUsuarios()`, `guardarUsuarios()` y `buscarUsuarioPorDni()` ya no son
+llamadas por ningún callback. Se pueden eliminar en una limpieza futura,
+junto con `data/usuarios.json`.
 
 ### Lógica de identificación del vecino en Easy!Appointments
 Como EA no tiene campo DNI nativo, se usa email ficticio: `dni_NUMERODNI@municipio.local`
