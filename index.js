@@ -636,52 +636,71 @@ bot.on('callback_query', async (query) => {
   if (estadoActual === 'ESPERANDO_HORARIO' && data.startsWith('horario_')) {
 
     const horarioElegido = data.replace('horario_', ''); // ej: "10:00"
-    const { dni, nombre, tramite, fecha } = registrosEnProceso[chatId];
 
-    // Formateamos la fecha para el mensaje de confirmación y para el JSON
+    // Ahora tomamos también serviceId y mapaHorarioOperador, que CALLBACK B
+    // guardó en registrosEnProceso cuando consultó la disponibilidad.
+    const { dni, nombre, tramite, fecha, serviceId, mapaHorarioOperador } = registrosEnProceso[chatId];
+
+    // Formateamos la fecha para el mensaje de confirmación al vecino.
     const fechaObj = new Date(`${fecha}T12:00:00`);
     const fechaTexto = formatearFechaTexto(fechaObj);
 
-    // Construimos el objeto del nuevo turno (solo los datos del turno en sí,
-    // no del usuario completo). Este objeto se reutiliza en ambas ramas abajo.
-    const nuevoTurno = {
-      tramite: tramite,
-      fecha: fechaTexto,
-      horario: horarioElegido,
-    };
+    // El mapa horario→operador nos dice a quién asignar este turno sin
+    // que el vecino haya tenido que elegir operador explícitamente.
+    const providerId = mapaHorarioOperador[horarioElegido];
 
-    // Leemos el array completo de usuarios del disco.
-    const usuariosActuales = leerUsuarios();
+    // Buscamos la duración del servicio en TRAMITES_COMPLETOS para calcular
+    // la hora de fin. EA lo recalcula internamente, pero su API lo requiere
+    // en el cuerpo del POST. Si por alguna razón no encontramos el servicio,
+    // usamos 30 minutos como valor de respaldo.
+    const servicioActual = TRAMITES_COMPLETOS.find((s) => s.id === serviceId);
+    const duracion = servicioActual ? servicioActual.duration : 30;
 
-    // findIndex() devuelve la posición del usuario con este DNI dentro del array,
-    // o -1 si no existe. Necesitamos el índice (no el objeto) para poder
-    // modificar el registro directamente dentro del array original.
-    const indiceUsuario = usuariosActuales.findIndex((u) => u.dni === dni);
+    // Armamos los strings de inicio y fin en el formato que espera EA: "YYYY-MM-DD HH:MM:SS"
+    // Dividimos horarioElegido en hora y minuto para poder sumar la duración correctamente.
+    const [hora, minuto] = horarioElegido.split(':').map(Number);
+    const minutosFinales = minuto + duracion;
+    const horaFin   = hora + Math.floor(minutosFinales / 60); // sube una hora si los minutos pasan de 59
+    const minutoFin = minutosFinales % 60;
+    const pad = (n) => String(n).padStart(2, '0'); // convierte 9 → "09"
+    const fechaHora    = `${fecha} ${pad(hora)}:${pad(minuto)}:00`;
+    const fechaHoraFin = `${fecha} ${pad(horaFin)}:${pad(minutoFin)}:00`;
 
-    if (indiceUsuario !== -1) {
-      // El usuario YA EXISTE: le agregamos el nuevo turno al final de su array turnos[].
-      // Accedemos directamente por índice para modificar el objeto dentro del array
-      // original; de otro modo los cambios no se reflejarían al llamar guardarUsuarios().
-      usuariosActuales[indiceUsuario].turnos.push(nuevoTurno);
+    // Leemos la bandera ANTES del try/catch porque la necesitamos para el
+    // mensaje de confirmación y no queremos acceder a registrosEnProceso
+    // después de haberlo limpiado en el bloque finally implícito.
+    const esModificacion = registrosEnProceso[chatId].esModificacion === true;
 
-    } else {
-      // El usuario es NUEVO: creamos su registro con el formato actualizado.
-      // turnos es un array con su primer turno como único elemento inicial.
-      usuariosActuales.push({
-        dni: dni,
-        nombre: nombre,
-        turnos: [nuevoTurno],
+    // Creamos la cita en Easy!Appointments.
+    // El email ficticio con el DNI es la clave que luego usamos para buscar
+    // los turnos del vecino con obtenerCitasDelCliente().
+    try {
+      await ea.crearCita({
+        serviceId,
+        providerId,
+        nombre,
+        apellido:    '',        // el vecino ingresa nombre completo en un solo campo
+        dni,
+        email:       `dni_${dni}@municipio.local`,
+        fechaHora,
+        fechaHoraFin,
+        notas:       `DNI: ${dni} | Trámite: ${tramite}`,
       });
+    } catch (error) {
+      // Si EA rechaza la cita (API caída, cupo tomado en el mientras, etc.),
+      // avisamos al vecino y reseteamos el estado para que empiece de nuevo.
+      console.error(`❌ Error al crear cita en EA para DNI ${dni}:`, error.message);
+      bot.sendMessage(
+        chatId,
+        '⚠️ Hubo un problema al confirmar tu turno. Por favor, escribí /start e intentá de nuevo.'
+      );
+      delete registrosEnProceso[chatId];
+      estadosUsuarios[chatId] = 'INICIAL';
+      gestionarTimeout(chatId);
+      return;
     }
 
-    guardarUsuarios(usuariosActuales);
-
-    console.log(`💾 Turno registrado: ${nombre} (DNI: ${dni}) → ${tramite} | ${fechaTexto} ${horarioElegido}`);
-
-    // Leemos la bandera antes de limpiar la memoria temporal.
-    // Si esModificacion es true, el flujo llegó desde "editar_N"; si no existe
-    // o es false, llegó desde el camino normal de nuevo trámite.
-    const esModificacion = registrosEnProceso[chatId].esModificacion === true;
+    console.log(`💾 Turno registrado en EA: ${nombre} (DNI: ${dni}) → ${tramite} | ${fechaTexto} ${horarioElegido}`);
 
     // Elegimos el encabezado del mensaje según el origen del flujo.
     // El operador ternario devuelve uno u otro string sin repetir el resto del mensaje.

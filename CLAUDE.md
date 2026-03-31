@@ -158,7 +158,7 @@ Esto permite buscar los turnos de un vecino con `obtenerCitasDelCliente(email)`.
 - [x] **BUG RESUELTO — Timeout se dispara después de confirmar un turno:** Se agregó llamada
       a `gestionarTimeout(chatId)` en CALLBACK C luego de setear el estado a INICIAL.
       Esto cancela el timeout que se había creado al inicio del callback y no genera uno nuevo.
-- [ ] Migrar CALLBACK C: reemplazar `guardarUsuarios()` por `crearCita()`
+- [x] Migrar CALLBACK C: reemplazar `guardarUsuarios()` por `crearCita()`
 - [ ] Migrar RAMA B: reemplazar `buscarUsuarioPorDni()` por `obtenerCitasDelCliente()`
 - [ ] Migrar CALLBACK H: reemplazar `splice + guardarUsuarios()` por `cancelarCita()`
 - [ ] Migrar CALLBACK F2: liberar cupo con `cancelarCita()` antes de pedir nueva fecha
@@ -195,8 +195,9 @@ Repositorio: https://github.com/efefal/turnosMVLA
 
 1. Leer este archivo antes de empezar cualquier tarea.
 2. Trabajar de a UNA tarea por vez — no avanzar a la siguiente sin terminar la actual.
-3. Después de completar cada tarea y verificar que funciona, hacer un commit de Git
-   con un mensaje descriptivo antes de continuar.
+3. Después de completar cada tarea y verificar que funciona, hacer un commit
+   de Git con un mensaje descriptivo y luego ejecutar `git push` para subir
+   los cambios a GitHub antes de continuar.
 4. Si hay que interrumpir una tarea a mitad, revertir los cambios parciales antes de parar.
 5. Al terminar la sesión, actualizar la sección "Próximos pasos" marcando lo completado
    y ajustando el siguiente paso si corresponde.
