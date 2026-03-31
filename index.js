@@ -1019,42 +1019,49 @@ bot.on('callback_query', async (query) => {
     // sean interpretados como una selección dentro del flujo de cancelación.
     estadosUsuarios[chatId] = 'ESPERANDO_CANCELACION';
 
-    // Leemos el DNI que guardamos en memoria temporal al mostrar el menú.
     const dniCancelacion = registrosEnProceso[chatId].dni;
 
-    // Buscamos el registro actualizado del usuario en el disco.
-    // Usamos leerUsuarios() en lugar de la copia en memoria para garantizar
-    // que los turnos mostrados reflejen el estado real de la base de datos.
-    const usuariosCancelacion = leerUsuarios();
-    const usuarioCancelacion  = usuariosCancelacion.find((u) => u.dni === dniCancelacion);
+    // Consultamos EA para obtener las citas actuales del vecino.
+    let citasCancelacion;
+    try {
+      citasCancelacion = await ea.obtenerCitasDelCliente(`dni_${dniCancelacion}@municipio.local`);
+    } catch (error) {
+      console.error(`❌ Error al obtener citas para cancelar (DNI ${dniCancelacion}):`, error.message);
+      estadosUsuarios[chatId] = 'MENU_GESTION';
+      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      return;
+    }
 
-    // Si el usuario no tiene turnos (o no se encontró), avisamos y no avanzamos.
-    // Volvemos el estado a MENU_GESTION para que pueda intentar otra acción.
-    const turnosCancelacion = usuarioCancelacion ? (usuarioCancelacion.turnos || []) : [];
-    if (turnosCancelacion.length === 0) {
+    // Si no hay citas activas, no hay nada para cancelar.
+    if (!citasCancelacion || citasCancelacion.length === 0) {
       estadosUsuarios[chatId] = 'MENU_GESTION';
       bot.sendMessage(chatId, '⚠️ No tenés turnos activos para cancelar.');
       return;
     }
 
-    // Construimos el Inline Keyboard dinámico: un botón por cada turno activo.
-    // map() recorre el array y por cada elemento (t) genera una fila con un botón.
-    // El texto del botón resume el turno en formato corto; el callback_data
-    // incluye el índice "i" para identificar cuál turno borrar al recibirlo.
-    const botonesTurnos = turnosCancelacion.map((t, i) => {
-      // Formateamos la fecha al estilo DD/MM para que el botón sea compacto.
-      // split('-') separa "2026-03-18" en ["2026", "03", "18"]; tomamos día y mes.
-      const partesFecha = t.fecha.split(' ');
-      // La fecha en el JSON es texto legible (ej: "martes 18 de marzo"),
-      // así que la mostramos tal cual pero recortamos solo día y mes para brevedad.
+    // Guardamos la lista de citas en memoria temporal para que CALLBACK H
+    // pueda leer los datos del turno (tramite, fecha, horario) sin re-consultar EA.
+    // La clave es el ID de la cita en EA, que también viaja en el callback_data del botón.
+    registrosEnProceso[chatId].citasCancelacion = citasCancelacion;
+
+    // Construimos el Inline Keyboard dinámico: una fila por cada cita activa.
+    // IMPORTANTE: el callback_data usa el ID real de EA (cita.id), NO el índice
+    // del array. Esto es necesario porque cancelarCita() requiere el ID de EA,
+    // no una posición relativa que puede cambiar entre consultas.
+    const botonesTurnos = citasCancelacion.map((cita) => {
+      // Convertimos el formato de EA al texto legible para el botón.
+      const servicio     = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+      const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
+      const fechaTexto   = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
+      const horario      = cita.start.substring(11, 16);
+
       return [{
-        text: `❌ ${t.tramite} — ${t.fecha} ${t.horario} hs`,
-        callback_data: `borrar_${i}`,
+        text: `❌ ${tramiteNombre} — ${fechaTexto} ${horario} hs`,
+        callback_data: `borrar_${cita.id}`,
       }];
     });
 
-    // Agregamos al final una fila con el botón de retroceso para que el usuario
-    // pueda salir del flujo de cancelación sin eliminar ningún turno.
+    // Agregamos al final una fila con el botón de retroceso.
     botonesTurnos.push([{ text: '⬅️ Volver al menú', callback_data: 'volver_menu' }]);
 
     bot.sendMessage(
@@ -1070,93 +1077,63 @@ bot.on('callback_query', async (query) => {
   // ==============================================================
   if (estadoActual === 'ESPERANDO_CANCELACION' && data.startsWith('borrar_')) {
 
-    // Extraemos el índice numérico del callback_data (ej: "borrar_2" → 2).
-    // parseInt con base 10 convierte el string al entero que usaremos con splice().
-    const indiceTurno = parseInt(data.replace('borrar_', ''), 10);
+    // Extraemos el ID de la cita en EA desde el callback_data (ej: "borrar_47" → 47).
+    // Este ID fue puesto por CALLBACK G al armar los botones; no es un índice de array
+    // sino el identificador real que usa Easy!Appointments para esa cita.
+    const appointmentId = parseInt(data.replace('borrar_', ''), 10);
 
-    // Validamos que el índice sea un número entero válido.
-    // isNaN() devuelve true si parseInt no pudo convertir el valor correctamente.
-    if (isNaN(indiceTurno)) {
+    if (isNaN(appointmentId)) {
       bot.sendMessage(chatId, '⚠️ Ocurrió un error al procesar la selección. Intentá de nuevo.');
       return;
     }
 
-    // Recuperamos el DNI y leemos la base de datos fresca del disco.
-    const dniBorrar   = registrosEnProceso[chatId].dni;
-    const usuariosBorrar = leerUsuarios();
+    // Recuperamos la lista de citas que CALLBACK G guardó en memoria temporal.
+    // La usamos para mostrar los datos del turno en el mensaje de confirmación
+    // sin necesidad de hacer una segunda consulta a EA.
+    const citasCancelacion = registrosEnProceso[chatId].citasCancelacion || [];
+    const citaACancelar    = citasCancelacion.find((c) => c.id === appointmentId);
 
-    // findIndex() devuelve la posición del usuario en el array principal,
-    // o -1 si no se encontró. Necesitamos el índice (no el objeto) para poder
-    // modificar el registro directamente dentro del array y luego guardarlo.
-    const indiceUsuarioBorrar = usuariosBorrar.findIndex((u) => u.dni === dniBorrar);
-
-    // Verificación defensiva: si el usuario no existe en la DB, abortamos.
-    if (indiceUsuarioBorrar === -1) {
-      bot.sendMessage(chatId, '⚠️ No se encontró tu registro. Escribí tu DNI para volver a ingresar.');
+    // Si no encontramos la cita (botón desactualizado, sesión renovada, etc.), abortamos.
+    if (!citaACancelar) {
+      bot.sendMessage(chatId, '⚠️ Ese turno ya no existe o la sesión expiró. Ingresá tu DNI para volver al menú.');
       delete registrosEnProceso[chatId];
       estadosUsuarios[chatId] = 'INICIAL';
       return;
     }
 
-    const usuarioAModificar = usuariosBorrar[indiceUsuarioBorrar];
+    // Extraemos los datos del turno para el mensaje de confirmación.
+    // Lo hacemos ANTES de llamar a cancelarCita() por si la API falla:
+    // así podemos informar exactamente qué turno no pudo cancelarse.
+    const servicio         = TRAMITES_COMPLETOS.find((s) => s.id === citaACancelar.serviceId);
+    const tramiteCancelado = servicio ? servicio.name : `Servicio ${citaACancelar.serviceId}`;
+    const fechaCancelada   = formatearFechaTexto(new Date(`${citaACancelar.start.substring(0, 10)}T12:00:00`));
+    const horarioCancelado = citaACancelar.start.substring(11, 16);
 
-    // Verificación defensiva: el índice del turno debe existir dentro del array.
-    // Esto evita crashear si el usuario hizo clic en un botón desactualizado.
-    if (indiceTurno < 0 || indiceTurno >= usuarioAModificar.turnos.length) {
-      bot.sendMessage(chatId, '⚠️ Ese turno ya no existe. Escribí tu DNI para volver a ingresar.');
-      delete registrosEnProceso[chatId];
-      estadosUsuarios[chatId] = 'INICIAL';
-      return;
-    }
+    const dniBorrar = registrosEnProceso[chatId].dni;
 
-    // Capturamos los datos del turno ANTES de eliminarlo con splice.
-    // Una vez que splice lo borra del array, esos datos ya no son accesibles,
-    // así que los guardamos en una variable para armar el mensaje de confirmación.
-    const turnoCancelado = usuarioAModificar.turnos[indiceTurno];
-
-    // splice(inicio, cantidad) modifica el array EN SU LUGAR (muta el original).
-    // Con inicio = indiceTurno y cantidad = 1, elimina exactamente ese un elemento.
-    // Los elementos siguientes se desplazan automáticamente para cerrar el hueco.
-    usuarioAModificar.turnos.splice(indiceTurno, 1);
-
-    // REGLA DE ORO: si después del splice el array turnos quedó vacío,
-    // no tiene sentido mantener el registro del usuario en la base de datos.
-    // Usamos otro splice sobre el array PRINCIPAL para eliminar al usuario completo.
-    // Esto mantiene el JSON limpio y evita acumular entradas sin información útil.
-    if (usuarioAModificar.turnos.length === 0) {
-      // splice(indiceUsuarioBorrar, 1) elimina el objeto del usuario del array raíz.
-      usuariosBorrar.splice(indiceUsuarioBorrar, 1);
-    }
-
-    // Persistimos los cambios en el archivo JSON del disco.
-    guardarUsuarios(usuariosBorrar);
-
-    console.log(`🗑️  Turno cancelado: DNI ${dniBorrar} → ${turnoCancelado.tramite} | ${turnoCancelado.fecha} ${turnoCancelado.horario}`);
-
-    // Armamos la primera parte del mensaje con los datos del turno cancelado.
-    // Usamos los datos que guardamos en turnoCancelado antes del splice.
-    let mensajeCancelacion =
-      `❌ Cancelaste exitosamente el turno de *${turnoCancelado.tramite}* ` +
-      `del *${turnoCancelado.fecha}* a las *${turnoCancelado.horario}* hs.`;
-
-    // Si al usuario le quedan turnos activos, los listamos debajo del mensaje principal.
-    // Verificamos la longitud DESPUÉS del splice; si es 0, no agregamos nada.
-    // map() convierte cada turno restante en un renglón numerado para facilitar la lectura.
-    if (usuarioAModificar.turnos.length > 0) {
-      const renglonesRestantes = usuarioAModificar.turnos.map((t, i) =>
-        `  *${i + 1}.* ${t.tramite} — ${t.fecha} a las ${t.horario} hs`
+    // Llamamos a EA para eliminar la cita. El cupo queda libre inmediatamente.
+    try {
+      await ea.cancelarCita(appointmentId);
+    } catch (error) {
+      console.error(`❌ Error al cancelar cita ${appointmentId} para DNI ${dniBorrar}:`, error.message);
+      bot.sendMessage(
+        chatId,
+        '⚠️ No pudimos cancelar el turno en este momento. Por favor, intentá de nuevo.'
       );
-      // join() une todos los renglones con salto de línea para armar el bloque de texto.
-      mensajeCancelacion +=
-        '\n\nTus turnos activos son:\n' + renglonesRestantes.join('\n');
+      return;
     }
 
-    // Agregamos la instrucción para volver al menú como párrafo final.
-    mensajeCancelacion += '\n\nPor favor, ingresá tu número de DNI para volver al menú principal.';
+    console.log(`🗑️  Turno cancelado en EA: DNI ${dniBorrar} → ${tramiteCancelado} | ${fechaCancelada} ${horarioCancelado}`);
+
+    const mensajeCancelacion =
+      `❌ Cancelaste exitosamente el turno de *${tramiteCancelado}* ` +
+      `del *${fechaCancelada}* a las *${horarioCancelado}* hs.\n\n` +
+      `Por favor, ingresá tu número de DNI para volver al menú principal.`;
 
     // Limpiamos la memoria temporal y cambiamos el estado a ESPERANDO_DNI.
     // Usamos ESPERANDO_DNI (no INICIAL) para que el bot esté listo para recibir
     // el DNI inmediatamente sin que el usuario tenga que escribir "hola" primero.
+    // Al re-ingresar el DNI, RAMA B consultará EA y mostrará la lista actualizada.
     delete registrosEnProceso[chatId];
     estadosUsuarios[chatId] = 'ESPERANDO_DNI';
 
