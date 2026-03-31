@@ -704,6 +704,16 @@ bot.on('callback_query', async (query) => {
     // Limpiamos memoria temporal (incluida la bandera) y reiniciamos estado.
     delete registrosEnProceso[chatId];
     estadosUsuarios[chatId] = 'INICIAL';
+
+    // Cancelamos el timeout que se creó al inicio de este callback.
+    // gestionarTimeout() fue llamado antes de que el estado cambiara a INICIAL,
+    // así que en ese momento creó un temporizador de 10 minutos. Si no lo
+    // cancelamos ahora, se dispararía igual y le llegaría al vecino el aviso
+    // de "sesión caducada" cuando en realidad el trámite ya fue completado.
+    // Al llamarla de nuevo con el estado ya en INICIAL, la función cancela el
+    // timeout activo (clearTimeout) y no crea uno nuevo.
+    gestionarTimeout(chatId);
+
     return;
   }
 
