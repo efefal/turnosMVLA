@@ -174,7 +174,51 @@ async function obtenerDisponibilidadServicio(serviceId, fecha) {
 }
 
 // ---------------------------------------------------------------
-// FUNCIÓN 5: crearCita(datos)
+// FUNCIÓN 5: crearOObtenerCliente(datos)
+// ---------------------------------------------------------------
+// EA requiere que el cliente exista antes de crear la cita.
+// Esta función primero busca si ya existe un cliente con ese email.
+// Si existe, devuelve su ID. Si no existe, lo crea y devuelve el ID nuevo.
+async function crearOObtenerCliente(datos) {
+  const emailCliente = datos.email || `dni_${datos.dni}@municipio.local`;
+
+  console.log('🔍 Buscando cliente con email:', emailCliente);
+
+  const clientesExistentes = await llamadaAPI(
+    'GET',
+    `/index.php/api/v1/customers?email=${encodeURIComponent(emailCliente)}`
+  );
+
+  console.log('🔍 Búsqueda por email:', JSON.stringify(clientesExistentes));
+
+  // EA no filtra por email en la query, devuelve todos los clientes.
+  // Filtramos manualmente en Node.js buscando el email exacto del vecino.
+  if (clientesExistentes && clientesExistentes.length > 0) {
+    const clienteExistente = clientesExistentes.find(
+      (c) => c.email === emailCliente
+    );
+    if (clienteExistente) {
+      console.log('🔍 Cliente encontrado con ID:', clienteExistente.id);
+      return clienteExistente.id;
+    }
+  }
+
+  // No existe el cliente, lo creamos
+  const clienteNuevo = await llamadaAPI('POST', '/index.php/api/v1/customers', {
+  firstName:   datos.nombre,
+  lastName:    datos.apellido || '-',
+  email:       emailCliente,
+  phone:       datos.telefono || '0000000000',
+  notes:       `DNI: ${datos.dni}`,
+});
+
+  console.log('🔍 Respuesta creación cliente:', JSON.stringify(clienteNuevo));
+
+  return clienteNuevo.id;
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN 6: crearCita(datos)
 // ---------------------------------------------------------------
 // Crea una nueva cita en Easy!Appointments.
 //
@@ -190,30 +234,25 @@ async function obtenerDisponibilidadServicio(serviceId, fecha) {
 //
 // Devuelve el objeto de la cita creada con su ID asignado por EA.
 async function crearCita(datos) {
+  // Paso 1: obtener o crear el cliente en EA para tener su ID
+  const customerId = await crearOObtenerCliente(datos);
+
+  // Paso 2: crear la cita con el ID del cliente ya resuelto
   const cuerpo = {
-    start:    datos.fechaHora,
-    // Easy!Appointments calcula el end sumando la duración del servicio.
-    // Igualmente lo incluimos para cumplir con el schema de la API.
-    end:      datos.fechaHoraFin,
-    location: '',
-    notes:    datos.notas || '',
-    customerId: null, // EA puede crear el customer inline con el objeto abajo
+    start:      datos.fechaHora,
+    end:        datos.fechaHoraFin,
+    location:   '',
+    notes:      datos.notas || '',
+    customerId: customerId,
     providerId: datos.providerId,
     serviceId:  datos.serviceId,
-    customer: {
-      firstName: datos.nombre,
-      lastName:  datos.apellido || '',
-      email:     datos.email || `dni_${datos.dni}@municipio.local`,
-      phone:     datos.telefono || '',
-      notes:     `DNI: ${datos.dni}`,
-    },
   };
 
   return llamadaAPI('POST', '/index.php/api/v1/appointments', cuerpo);
 }
 
 // ---------------------------------------------------------------
-// FUNCIÓN 6: cancelarCita(appointmentId)
+// FUNCIÓN 7: cancelarCita(appointmentId)
 // ---------------------------------------------------------------
 // Elimina una cita existente por su ID numérico.
 // Easy!Appointments libera el cupo inmediatamente.
@@ -222,14 +261,26 @@ async function cancelarCita(appointmentId) {
 }
 
 // ---------------------------------------------------------------
-// FUNCIÓN 7: obtenerCitasDelCliente(email)
+// FUNCIÓN 8: obtenerCitasDelCliente(email)
 // ---------------------------------------------------------------
 // Devuelve las citas activas de un cliente buscando por email.
 // Como usamos emails ficticios con el DNI, la búsqueda es:
 //   obtenerCitasDelCliente('dni_30123456@municipio.local')
 async function obtenerCitasDelCliente(email) {
-  const ruta = `/index.php/api/v1/appointments?q=${encodeURIComponent(email)}`;
-  return llamadaAPI('GET', ruta);
+  const todasLasCitas = await llamadaAPI('GET', '/index.php/api/v1/appointments');
+  if (!todasLasCitas || todasLasCitas.length === 0) return { citas: [], nombreCliente: null };
+
+  const todosLosClientes = await llamadaAPI('GET', '/index.php/api/v1/customers');
+  if (!todosLosClientes || todosLosClientes.length === 0) return { citas: [], nombreCliente: null };
+
+  const cliente = todosLosClientes.find((c) => c.email === email);
+  if (!cliente) return { citas: [], nombreCliente: null };
+
+  const citas = todasLasCitas.filter((cita) => cita.customerId === cliente.id);
+
+  // Devolvemos tanto las citas como el nombre del cliente para que
+  // index.js pueda usarlo sin hacer una segunda consulta a la API.
+  return { citas, nombreCliente: cliente.firstName };
 }
 
 // ---------------------------------------------------------------

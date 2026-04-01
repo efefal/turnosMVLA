@@ -310,7 +310,7 @@ function gestionarTimeout(chatId) {
 // ---------------------------------------------------------------
 // Toda la lógica conversacional vive en este único bloque.
 // El evento 'message' se dispara con cada mensaje que llega al bot.
-bot.on('message', (msg) => {
+bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const texto = msg.text;
 
@@ -373,15 +373,15 @@ bot.on('message', (msg) => {
     }
 
     // B2: El vecino YA TIENE CITAS en Easy!Appointments → mostramos el menú de gestión.
-    if (citasActivas && citasActivas.length > 0) {
+    if (citasActivas && citasActivas.citas && citasActivas.citas.length > 0) {
 
       // El nombre lo sacamos del primer turno. Al crear citas guardamos el nombre
       // completo en customer.firstName (con lastName vacío), así que lo recuperamos de ahí.
-      const nombre = citasActivas[0].customer.firstName;
+      const nombre = citasActivas.nombreCliente;
 
       // Convertimos cada cita del formato de EA al formato {tramite, fecha, horario}
       // que usa la vista. EA devuelve objetos con serviceId y start ("YYYY-MM-DD HH:MM:SS").
-      const listaTurnos = citasActivas.map((cita) => {
+      const listaTurnos = citasActivas.citas.map((cita) => {
         // Buscamos el nombre legible del servicio usando el ID numérico que trae la cita.
         const servicio = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
         const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
@@ -695,11 +695,17 @@ bot.on('callback_query', async (query) => {
     // después de haberlo limpiado en el bloque finally implícito.
     const esModificacion = registrosEnProceso[chatId].esModificacion === true;
 
+    // 👇 LÍNEA NUEVA — muestra qué datos se le envían a EA
+    console.log('📤 Datos enviados a EA:', JSON.stringify({
+  serviceId, providerId, nombre, dni,
+  email: `dni_${dni}@municipio.local`,
+  fechaHora, fechaHoraFin,
+    }));
     // Creamos la cita en Easy!Appointments.
     // El email ficticio con el DNI es la clave que luego usamos para buscar
     // los turnos del vecino con obtenerCitasDelCliente().
     try {
-      await ea.crearCita({
+      const citaCreada = await ea.crearCita({
         serviceId,
         providerId,
         nombre,
@@ -710,6 +716,8 @@ bot.on('callback_query', async (query) => {
         fechaHoraFin,
         notas:       `DNI: ${dni} | Trámite: ${tramite}`,
       });
+      // 👇 LÍNEA NUEVA — muestra qué respondió EA
+      console.log('📥 Respuesta de EA:', JSON.stringify(citaCreada));
     } catch (error) {
       // Si EA rechaza la cita (API caída, cupo tomado en el mientras, etc.),
       // avisamos al vecino y reseteamos el estado para que empiece de nuevo.
@@ -812,7 +820,7 @@ bot.on('callback_query', async (query) => {
     // Convertimos serviceId → nombre usando TRAMITES_COMPLETOS para poder comparar
     // contra el array TRAMITES[], que trabaja con nombres (no con IDs numéricos).
     const tramitesActivos = new Set();
-    (citasActivasE || []).forEach((cita) => {
+    (citasActivasE.citas || []).forEach((cita) => {
       const servicio = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       if (servicio) tramitesActivos.add(servicio.name);
     });
@@ -876,7 +884,8 @@ bot.on('callback_query', async (query) => {
     }
 
     // Si no hay citas activas, no hay nada que modificar.
-    if (!citasModificacion || citasModificacion.length === 0) {
+    if (!citasModificacion || citasModificacion.citas.length === 0) {
+
       estadosUsuarios[chatId] = 'MENU_GESTION';
       bot.sendMessage(chatId, '⚠️ No tenés turnos activos para modificar.');
       return;
@@ -884,12 +893,14 @@ bot.on('callback_query', async (query) => {
 
     // Guardamos la lista de citas en memoria temporal para que CALLBACK F2
     // pueda identificar la cita elegida por su ID sin re-consultar EA.
-    registrosEnProceso[chatId].citasModificacion = citasModificacion;
+    registrosEnProceso[chatId].citasModificacion = citasModificacion.citas;
+
 
     // Construimos el Inline Keyboard: una fila por cada cita activa.
     // IMPORTANTE: usamos cita.id (ID real de EA) en el callback_data, no el índice
     // del array. Al confirmar, necesitamos ese ID para llamar a cancelarCita().
-    const botonesEditar = citasModificacion.map((cita) => {
+    const botonesEditar = citasModificacion.citas.map((cita) => {
+
       const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
       const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
@@ -1031,7 +1042,7 @@ bot.on('callback_query', async (query) => {
     }
 
     // Si no hay citas activas, no hay nada para cancelar.
-    if (!citasCancelacion || citasCancelacion.length === 0) {
+    if (!citasCancelacion || citasCancelacion.citas.length === 0) {
       estadosUsuarios[chatId] = 'MENU_GESTION';
       bot.sendMessage(chatId, '⚠️ No tenés turnos activos para cancelar.');
       return;
@@ -1040,13 +1051,13 @@ bot.on('callback_query', async (query) => {
     // Guardamos la lista de citas en memoria temporal para que CALLBACK H
     // pueda leer los datos del turno (tramite, fecha, horario) sin re-consultar EA.
     // La clave es el ID de la cita en EA, que también viaja en el callback_data del botón.
-    registrosEnProceso[chatId].citasCancelacion = citasCancelacion;
+    registrosEnProceso[chatId].citasCancelacion = citasCancelacion.citas;
 
     // Construimos el Inline Keyboard dinámico: una fila por cada cita activa.
     // IMPORTANTE: el callback_data usa el ID real de EA (cita.id), NO el índice
     // del array. Esto es necesario porque cancelarCita() requiere el ID de EA,
     // no una posición relativa que puede cambiar entre consultas.
-    const botonesTurnos = citasCancelacion.map((cita) => {
+    const botonesTurnos = citasCancelacion.citas.map((cita) => {
       // Convertimos el formato de EA al texto legible para el botón.
       const servicio     = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
