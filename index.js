@@ -152,6 +152,78 @@ function formatearFechaTexto(fecha) {
 function formatearFechaClave(fecha) {
   return fecha.toISOString().split('T')[0];
 }
+
+// Construye el texto legible de una semana hábil dado su primer y último día.
+// Si los dos días caen en el mismo mes: "Semana del 7 al 11 de abril".
+// Si cruzan mes: "Semana del 28 de abril al 2 de mayo".
+function construirLabelSemana(primero, ultimo) {
+  const dia1 = primero.getDate();
+  const dia2 = ultimo.getDate();
+  const mes1 = primero.toLocaleDateString('es-AR', { month: 'long' });
+  const mes2 = ultimo.toLocaleDateString('es-AR', { month: 'long' });
+  return mes1 === mes2
+    ? `Semana del ${dia1} al ${dia2} de ${mes1}`
+    : `Semana del ${dia1} de ${mes1} al ${dia2} de ${mes2}`;
+}
+
+// Devuelve un array de objetos semana { label, fechaInicio, fechaFin } con los
+// días hábiles disponibles dentro de los próximos cantidadDias días corridos,
+// agrupados por semana calendario (lunes–viernes).
+function proximasSemanas(cantidadDias) {
+  const hoy = new Date();
+  const semanasMap = new Map(); // clave: fecha del lunes de esa semana → [Date, ...]
+
+  for (let i = 1; i <= cantidadDias; i++) {
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + i);
+    const dow = fecha.getDay(); // 0 = domingo, 6 = sábado
+    if (dow === 0 || dow === 6) continue;
+
+    // Calculamos el lunes de la semana para usarlo como clave de agrupación.
+    const lunes = new Date(fecha);
+    lunes.setDate(fecha.getDate() - (dow - 1));
+    const clave = formatearFechaClave(lunes);
+
+    if (!semanasMap.has(clave)) semanasMap.set(clave, []);
+    semanasMap.get(clave).push(new Date(fecha));
+  }
+
+  return [...semanasMap.values()].map((dias) => {
+    const primero = dias[0];
+    const ultimo  = dias[dias.length - 1];
+    return {
+      label:       construirLabelSemana(primero, ultimo),
+      fechaInicio: formatearFechaClave(primero),
+      fechaFin:    formatearFechaClave(ultimo),
+    };
+  });
+}
+
+// Convierte el array de semanas en filas del Inline Keyboard.
+// callback_data: "semana_YYYY-MM-DD_YYYY-MM-DD" (fechaInicio_fechaFin).
+function construirBotonesSemanas(semanas) {
+  return semanas.map((s) => ([{
+    text: s.label,
+    callback_data: `semana_${s.fechaInicio}_${s.fechaFin}`,
+  }]));
+}
+
+// ---------------------------------------------------------------
+// 5b. TECLADO DE GESTIÓN DINÁMICO
+// ---------------------------------------------------------------
+// Devuelve el Inline Keyboard del menú principal adaptado a si el vecino
+// tiene turnos activos o no. Sin turnos, Modificar y Cancelar no aplican.
+function construirTecladoGestion(tieneTurnos) {
+  const filas = [
+    [{ text: '➕ Nuevo Trámite', callback_data: 'nuevo_tramite' }],
+  ];
+  if (tieneTurnos) {
+    filas.push([{ text: '✏️ Modificar Turno', callback_data: 'modificar_turno' }]);
+    filas.push([{ text: '❌ Cancelar Turno',  callback_data: 'cancelar_turno'  }]);
+  }
+  return filas;
+}
+
 // ---------------------------------------------------------------
 // 6. VALIDAR Y OBTENER EL TOKEN
 // ---------------------------------------------------------------
@@ -181,7 +253,8 @@ cargarTramites();
 //   - 'ESPERANDO_NOMBRE'      → El DNI no existe; le pedimos nombre y apellido.
 //   - 'MENU_GESTION'          → El DNI existe; mostramos el menú de gestión con botones.
 //   - 'ESPERANDO_TRAMITE'     → Ya tenemos nombre; le pedimos elegir trámite.
-//   - 'ESPERANDO_FECHA'       → Trámite elegido; mostramos fechas por Inline Keyboard.
+//   - 'ESPERANDO_DIA'         → Trámite elegido; mostramos selector de semanas.
+//   - 'ESPERANDO_FECHA'       → Semana elegida; mostramos días hábiles de esa semana.
 //   - 'ESPERANDO_HORARIO'     → Fecha elegida; mostramos horarios por Inline Keyboard.
 //   - 'ESPERANDO_CANCELACION'  → Mostramos los turnos activos para que elija cuál borrar.
 //   - 'ESPERANDO_MODIFICACION' → Mostramos los turnos activos para que elija cuál modificar.
@@ -372,75 +445,62 @@ bot.on('message', async (msg) => {
       return;
     }
 
-    // B2: El vecino YA TIENE CITAS en Easy!Appointments → mostramos el menú de gestión.
-    if (citasActivas && citasActivas.citas && citasActivas.citas.length > 0) {
+    const nombre      = citasActivas.nombreCliente;
+    const citasCargadas = citasActivas.citas ?? [];
 
-      // El nombre lo sacamos del primer turno. Al crear citas guardamos el nombre
-      // completo en customer.firstName (con lastName vacío), así que lo recuperamos de ahí.
-      const nombre = citasActivas.nombreCliente;
+    // B2c: nombreCliente es null → el vecino no existe en EA, iniciamos el registro.
+    if (!nombre) {
+      registrosEnProceso[chatId] = { dni: dniIngresado };
+      estadosUsuarios[chatId] = 'ESPERANDO_NOMBRE';
 
-      // Convertimos cada cita del formato de EA al formato {tramite, fecha, horario}
-      // que usa la vista. EA devuelve objetos con serviceId y start ("YYYY-MM-DD HH:MM:SS").
-      const listaTurnos = citasActivas.citas.map((cita) => {
-        // Buscamos el nombre legible del servicio usando el ID numérico que trae la cita.
-        const servicio = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+      bot.sendMessage(
+        chatId,
+        'No encontramos registros para tu DNI. Vamos a registrarte.\n' +
+        'Por favor, ingresá tu Nombre y Apellido:'
+      );
+      return;
+    }
+
+    // El vecino existe en EA (nombreCliente no es null). Guardamos DNI y nombre
+    // anticipadamente para que cualquier acción del menú ya tenga sus datos.
+    registrosEnProceso[chatId] = { dni: dniIngresado, nombre };
+    estadosUsuarios[chatId] = 'MENU_GESTION';
+
+    // B2a: El vecino existe Y tiene turnos activos → mostramos la lista y el menú completo.
+    if (citasCargadas.length > 0) {
+
+      const listaTurnos = citasCargadas.map((cita) => {
+        const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
         const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
-
-        // La fecha viene como "YYYY-MM-DD HH:MM:SS"; con substring(0,10) tomamos
-        // solo la parte de fecha y la pasamos por formatearFechaTexto() para
-        // obtener el texto legible que mostramos al vecino.
-        const fechaISO  = cita.start.substring(0, 10); // "YYYY-MM-DD"
-        const fechaObj  = new Date(`${fechaISO}T12:00:00`);
-        const fechaTexto = formatearFechaTexto(fechaObj);
-
-        // El horario es la parte "HH:MM" del campo start; substring(11,16) lo extrae.
-        const horario = cita.start.substring(11, 16);
-
+        const fechaISO      = cita.start.substring(0, 10);
+        const fechaTexto    = formatearFechaTexto(new Date(`${fechaISO}T12:00:00`));
+        const horario       = cita.start.substring(11, 16);
         return { tramite: tramiteNombre, fecha: fechaTexto, horario };
       });
 
-      // Armamos el renglón de cada turno y los unimos en un bloque de texto.
-      const renglonesTurnos = listaTurnos.map((t, i) => {
-        return `  *${i + 1}.* ${t.tramite} — ${t.fecha} a las ${t.horario} hs`;
-      });
+      const renglonesTurnos = listaTurnos.map((t, i) =>
+        `  *${i + 1}.* ${t.tramite} — ${t.fecha} a las ${t.horario} hs`
+      );
       const textoBienvenida =
         `👋 Hola *${nombre}*, estos son tus turnos activos:\n\n` +
         renglonesTurnos.join('\n') +
         '\n\n¿Qué querés hacer?';
 
-      // Guardamos DNI y nombre en memoria temporal anticipadamente.
-      // Si el usuario elige "Nuevo Trámite", ya tenemos sus datos sin tener
-      // que volver a pedirlos; el flujo salta directo a la selección de trámite.
-      registrosEnProceso[chatId] = { dni: dniIngresado, nombre };
-
-      // Cambiamos el estado a MENU_GESTION para identificar que los próximos
-      // callbacks de este usuario provienen de los botones del menú.
-      estadosUsuarios[chatId] = 'MENU_GESTION';
-
-      // Construimos el Inline Keyboard con las 3 acciones disponibles.
-      // Cada botón ocupa su propia fila para mayor claridad visual.
-      const tecladoGestion = [
-        [{ text: '➕ Nuevo Trámite',   callback_data: 'nuevo_tramite'   }],
-        [{ text: '✏️ Modificar Turno', callback_data: 'modificar_turno' }],
-        [{ text: '❌ Cancelar Turno',  callback_data: 'cancelar_turno'  }],
-      ];
-
       bot.sendMessage(chatId, textoBienvenida, {
         parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: tecladoGestion },
+        reply_markup: { inline_keyboard: construirTecladoGestion(true) },
       });
       return;
     }
 
-    // B2c: No hay citas en EA para este DNI → el vecino es nuevo, iniciamos el registro.
-    // Guardamos el DNI en memoria temporal para usarlo al final del flujo de registro.
-    registrosEnProceso[chatId] = { dni: dniIngresado };
-    estadosUsuarios[chatId] = 'ESPERANDO_NOMBRE';
-
+    // B2b: El vecino existe pero no tiene turnos activos → menú reducido.
     bot.sendMessage(
       chatId,
-      'No encontramos registros para tu DNI. Vamos a registrarte.\n' +
-      'Por favor, ingresá tu Nombre y Apellido:'
+      `👋 Hola *${nombre}*, no tenés turnos activos por el momento.\n\n¿Qué querés hacer?`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: construirTecladoGestion(false) },
+      }
     );
     return;
   }
@@ -517,24 +577,65 @@ bot.on('callback_query', async (query) => {
     // Guardamos el nombre del trámite (no el índice) en el registro temporal.
     // El resto del flujo siempre trabaja con el texto legible, no con números.
     registrosEnProceso[chatId].tramite = TRAMITES[indice];
-    estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
+    estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    // Construimos el Inline Keyboard con los próximos 3 días hábiles.
-    // Cada botón lleva como callback_data la clave "fecha_YYYY-MM-DD".
-    const diasHabilesT = proximosDiasHabiles(3);
-    const botonesFechasT = diasHabilesT.map((dia) => ([{
+    // Mostramos el selector de semanas: primer paso del nuevo flujo de fechas.
+    const semanasT = proximasSemanas(30);
+    bot.sendMessage(
+      chatId,
+      `📋 Trámite elegido: *${TRAMITES[indice]}*\n\n📅 Ahora elegí una semana:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: construirBotonesSemanas(semanasT) },
+      }
+    );
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK A2: El usuario eligió una SEMANA → mostramos los días hábiles
+  // ==============================================================
+  if (estadoActual === 'ESPERANDO_DIA' && data.startsWith('semana_')) {
+
+    // callback_data: "semana_2026-04-07_2026-04-11"
+    // Las fechas ISO solo tienen guiones, así que el único guión bajo es el separador.
+    const [fechaInicio, fechaFin] = data.replace('semana_', '').split('_');
+
+    // Recorremos el rango día a día y nos quedamos solo con los días hábiles.
+    const diasDeSemana = [];
+    const cursor = new Date(`${fechaInicio}T12:00:00`);
+    const finSemana = new Date(`${fechaFin}T12:00:00`);
+    while (cursor <= finSemana) {
+      const dow = cursor.getDay();
+      if (dow !== 0 && dow !== 6) diasDeSemana.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const botonesDias = diasDeSemana.map((dia) => ([{
       text: formatearFechaTexto(dia),
       callback_data: `fecha_${formatearFechaClave(dia)}`,
     }]));
+    botonesDias.push([{ text: '⬅️ Volver a elegir semana', callback_data: 'volver_semanas' }]);
 
-    bot.sendMessage(
-      chatId,
-      `📋 Trámite elegido: *${TRAMITES[indice]}*\n\n📅 Ahora elegí una fecha:`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: botonesFechasT },
-      }
-    );
+    estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
+
+    bot.sendMessage(chatId, '📅 Ahora elegí el día:', {
+      reply_markup: { inline_keyboard: botonesDias },
+    });
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK A3: El usuario quiere volver al selector de semanas
+  // ==============================================================
+  if (estadoActual === 'ESPERANDO_FECHA' && data === 'volver_semanas') {
+
+    estadosUsuarios[chatId] = 'ESPERANDO_DIA';
+
+    const semanasVolver = proximasSemanas(30);
+    bot.sendMessage(chatId, '📅 Elegí una semana:', {
+      reply_markup: { inline_keyboard: construirBotonesSemanas(semanasVolver) },
+    });
     return;
   }
 
@@ -631,25 +732,18 @@ bot.on('callback_query', async (query) => {
     // Si el array quedó vacío, ningún horario está disponible para esa fecha y trámite.
     if (horariosLibres.length === 0) {
 
-      // Recalculamos las fechas hábiles para volver a mostrar el teclado de selección.
-      const diasHabiles = proximosDiasHabiles(3);
-      const botonesFechas = diasHabiles.map((dia) => ([{
-        text: formatearFechaTexto(dia),
-        callback_data: `fecha_${formatearFechaClave(dia)}`,
-      }]));
+      // Volvemos al selector de semanas para que el vecino elija otra fecha.
+      estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-      // Mantenemos el estado en ESPERANDO_FECHA para que el usuario pueda
-      // elegir otra fecha sin tener que reiniciar todo el flujo.
-      estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
-
+      const semanasNoSlots = proximasSemanas(30);
       bot.sendMessage(
         chatId,
         `⚠️ No hay horarios disponibles para *${fechaTexto}* ` +
         `en el trámite de *${tramiteElegido}*.\n\n` +
-        `Por favor, elegí otra fecha:`,
+        `Por favor, elegí otra semana:`,
         {
           parse_mode: 'Markdown',
-          reply_markup: { inline_keyboard: botonesFechas },
+          reply_markup: { inline_keyboard: construirBotonesSemanas(semanasNoSlots) },
         }
       );
       return;
@@ -815,21 +909,14 @@ bot.on('callback_query', async (query) => {
     // podría quedar huérfano y causar inconsistencias en pasos posteriores.
     delete registrosEnProceso[chatId].fecha;
 
-    // Retrocedemos al estado anterior en el flujo de conversación.
-    // El trámite y el nombre ya están guardados; solo se resetea la fecha.
-    estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
+    // Retrocedemos al selector de semanas; el trámite y el nombre siguen guardados.
+    estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    // Reconstruimos el teclado de fechas hábiles, igual que en CALLBACK A.
-    const diasHabilesV = proximosDiasHabiles(3);
-    const botonesFechasV = diasHabilesV.map((dia) => ([{
-      text: formatearFechaTexto(dia),
-      callback_data: `fecha_${formatearFechaClave(dia)}`,
-    }]));
-
+    const semanasD = proximasSemanas(30);
     bot.sendMessage(
       chatId,
-      '📅 Elegí una fecha para tu turno:',
-      { reply_markup: { inline_keyboard: botonesFechasV } }
+      '📅 Elegí una semana para tu turno:',
+      { reply_markup: { inline_keyboard: construirBotonesSemanas(semanasD) } }
     );
     return;
   }
@@ -1016,24 +1103,17 @@ bot.on('callback_query', async (query) => {
 
     console.log(`✏️  Turno a modificar liberado en EA: DNI ${dniEditar} → cita ${appointmentId} (${tramiteAEditar})`);
 
-    // Avanzamos el estado: el flujo de fecha y horario es exactamente el mismo
+    // Avanzamos al selector de semanas: el flujo de fecha y horario es el mismo
     // que cuando se saca un turno nuevo; no hace falta duplicar esa lógica.
-    estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
+    estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    // Construimos el Inline Keyboard con los próximos 3 días hábiles,
-    // idéntico al que se genera en CALLBACK A cuando el usuario elige un trámite.
-    const diasHabilesE = proximosDiasHabiles(3);
-    const botonesFechasE = diasHabilesE.map((dia) => ([{
-      text: formatearFechaTexto(dia),
-      callback_data: `fecha_${formatearFechaClave(dia)}`,
-    }]));
-
+    const semanasE = proximasSemanas(30);
     bot.sendMessage(
       chatId,
-      `Turno anterior liberado. 📅 Elegí la nueva fecha para tu trámite de *${tramiteAEditar}*:`,
+      `Turno anterior liberado. 📅 Elegí la nueva semana para tu trámite de *${tramiteAEditar}*:`,
       {
         parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: botonesFechasE },
+        reply_markup: { inline_keyboard: construirBotonesSemanas(semanasE) },
       }
     );
     return;
@@ -1044,15 +1124,44 @@ bot.on('callback_query', async (query) => {
   // ==============================================================
   if (data === 'volver_menu_gestion') {
 
-    // Limpiamos la memoria temporal y devolvemos al estado INICIAL.
-    // Al ingresar el DNI de nuevo el bot muestra el menú actualizado.
-    delete registrosEnProceso[chatId];
-    estadosUsuarios[chatId] = 'INICIAL';
+    const dniVolver = registrosEnProceso[chatId]?.dni;
 
-    bot.sendMessage(
-      chatId,
-      'Operación cancelada. Ingresá tu DNI para volver al menú principal.'
-    );
+    if (!dniVolver) {
+      estadosUsuarios[chatId] = 'ESPERANDO_DNI';
+      bot.sendMessage(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
+      return;
+    }
+
+    let citasVolver;
+    try {
+      citasVolver = await ea.obtenerCitasDelCliente(`dni_${dniVolver}@municipio.local`);
+    } catch (error) {
+      console.error(`❌ Error al consultar citas al volver al menú (DNI ${dniVolver}):`, error.message);
+      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      return;
+    }
+
+    const nombreVolver = citasVolver.nombreCliente || registrosEnProceso[chatId].nombre || 'vecino/a';
+    const citasV       = citasVolver.citas ?? [];
+
+    const textoMenuV = citasV.length > 0
+      ? `👋 Hola *${nombreVolver}*, estos son tus turnos activos:\n\n` +
+        citasV.map((cita, i) => {
+          const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+          const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
+          const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
+          const horario       = cita.start.substring(11, 16);
+          return `  *${i + 1}.* ${tramiteNombre} — ${fechaTexto} a las ${horario} hs`;
+        }).join('\n') + '\n\n¿Qué querés hacer?'
+      : `👋 Hola *${nombreVolver}*, no tenés turnos activos por el momento.\n\n¿Qué querés hacer?`;
+
+    registrosEnProceso[chatId].nombre = nombreVolver;
+    estadosUsuarios[chatId] = 'MENU_GESTION';
+
+    bot.sendMessage(chatId, textoMenuV, {
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: construirTecladoGestion(citasV.length > 0) },
+    });
     return;
   }
 
@@ -1174,34 +1283,133 @@ bot.on('callback_query', async (query) => {
     const mensajeCancelacion =
       `❌ Cancelaste exitosamente el turno de *${tramiteCancelado}* ` +
       `del *${fechaCancelada}* a las *${horarioCancelado}* hs.\n\n` +
-      `Por favor, ingresá tu número de DNI para volver al menú principal.`;
+      `Si necesitás hacer algo más, usá el botón de abajo.`;
 
-    // Limpiamos la memoria temporal y cambiamos el estado a ESPERANDO_DNI.
-    // Usamos ESPERANDO_DNI (no INICIAL) para que el bot esté listo para recibir
-    // el DNI inmediatamente sin que el usuario tenga que escribir "hola" primero.
-    // Al re-ingresar el DNI, RAMA B consultará EA y mostrará la lista actualizada.
-    delete registrosEnProceso[chatId];
-    estadosUsuarios[chatId] = 'ESPERANDO_DNI';
+    // Mantenemos registrosEnProceso con el DNI para que el handler de
+    // volver_menu_post_cancelacion pueda relanzar el menú sin pedirlo de nuevo.
+    // El estado pasa a INICIAL: el vecino ya no está en ningún flujo activo.
+    estadosUsuarios[chatId] = 'INICIAL';
 
-    bot.sendMessage(chatId, mensajeCancelacion, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, mensajeCancelacion, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📋 Volver al menú', callback_data: 'volver_menu_post_cancelacion' }],
+        ],
+      },
+    });
     return;
   }
 
   // ==============================================================
-  // CALLBACK I: El usuario tocó "Volver al menú" desde la pantalla de cancelación
+  // CALLBACK I: El usuario tocó "Volver al menú" tras cancelar un turno
+  // ==============================================================
+  if (data === 'volver_menu_post_cancelacion') {
+
+    const dniPostCancel = registrosEnProceso[chatId]?.dni;
+
+    // Si por alguna razón el DNI ya no está en memoria, pedimos que lo reingrese.
+    if (!dniPostCancel) {
+      estadosUsuarios[chatId] = 'ESPERANDO_DNI';
+      bot.sendMessage(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
+      return;
+    }
+
+    // Consultamos EA con el DNI que ya tenemos en memoria para mostrar la
+    // lista de turnos actualizada (sin el turno recién cancelado).
+    let citasPostCancel;
+    try {
+      citasPostCancel = await ea.obtenerCitasDelCliente(`dni_${dniPostCancel}@municipio.local`);
+    } catch (error) {
+      console.error(`❌ Error al consultar citas post-cancelación (DNI ${dniPostCancel}):`, error.message);
+      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      return;
+    }
+
+    const nombre = citasPostCancel.nombreCliente || registrosEnProceso[chatId].nombre || 'vecino/a';
+
+    let textoMenu;
+    if (citasPostCancel.citas && citasPostCancel.citas.length > 0) {
+
+      const listaTurnos = citasPostCancel.citas.map((cita) => {
+        const servicio     = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+        const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
+        const fechaISO     = cita.start.substring(0, 10);
+        const fechaTexto   = formatearFechaTexto(new Date(`${fechaISO}T12:00:00`));
+        const horario      = cita.start.substring(11, 16);
+        return { tramiteNombre, fechaTexto, horario };
+      });
+
+      const renglonesTurnos = listaTurnos.map((t, i) =>
+        `  *${i + 1}.* ${t.tramiteNombre} — ${t.fechaTexto} a las ${t.horario} hs`
+      );
+
+      textoMenu =
+        `👋 Hola *${nombre}*, estos son tus turnos activos:\n\n` +
+        renglonesTurnos.join('\n') +
+        '\n\n¿Qué querés hacer?';
+
+    } else {
+      textoMenu =
+        `👋 Hola *${nombre}*, no tenés turnos activos por el momento.\n\n¿Qué querés hacer?`;
+    }
+
+    // Actualizamos el nombre en memoria por si el vecino era nuevo y aún no lo teníamos.
+    registrosEnProceso[chatId].nombre = nombre;
+    estadosUsuarios[chatId] = 'MENU_GESTION';
+
+    const tecladoGestion = construirTecladoGestion(citasPostCancel.citas.length > 0);
+
+    bot.sendMessage(chatId, textoMenu, {
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: tecladoGestion },
+    });
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK J: El usuario tocó "Volver al menú" desde otra pantalla
   // ==============================================================
   if (data === 'volver_menu') {
 
-    // Limpiamos la memoria temporal y devolvemos al usuario al estado INICIAL.
-    // Al pedir el DNI de nuevo el bot muestra el menú con los datos actualizados,
-    // lo que garantiza que la vista sea siempre consistente con la base de datos.
-    delete registrosEnProceso[chatId];
-    estadosUsuarios[chatId] = 'INICIAL';
+    const dniMenu = registrosEnProceso[chatId]?.dni;
 
-    bot.sendMessage(
-      chatId,
-      'Operación cancelada. Ingresá tu DNI para volver al menú principal.'
-    );
+    if (!dniMenu) {
+      estadosUsuarios[chatId] = 'ESPERANDO_DNI';
+      bot.sendMessage(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
+      return;
+    }
+
+    let citasMenu;
+    try {
+      citasMenu = await ea.obtenerCitasDelCliente(`dni_${dniMenu}@municipio.local`);
+    } catch (error) {
+      console.error(`❌ Error al consultar citas al volver al menú (DNI ${dniMenu}):`, error.message);
+      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      return;
+    }
+
+    const nombreMenu = citasMenu.nombreCliente || registrosEnProceso[chatId].nombre || 'vecino/a';
+    const citasM     = citasMenu.citas ?? [];
+
+    const textoMenuM = citasM.length > 0
+      ? `👋 Hola *${nombreMenu}*, estos son tus turnos activos:\n\n` +
+        citasM.map((cita, i) => {
+          const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+          const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
+          const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
+          const horario       = cita.start.substring(11, 16);
+          return `  *${i + 1}.* ${tramiteNombre} — ${fechaTexto} a las ${horario} hs`;
+        }).join('\n') + '\n\n¿Qué querés hacer?'
+      : `👋 Hola *${nombreMenu}*, no tenés turnos activos por el momento.\n\n¿Qué querés hacer?`;
+
+    registrosEnProceso[chatId].nombre = nombreMenu;
+    estadosUsuarios[chatId] = 'MENU_GESTION';
+
+    bot.sendMessage(chatId, textoMenuM, {
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: construirTecladoGestion(citasM.length > 0) },
+    });
     return;
   }
 });
