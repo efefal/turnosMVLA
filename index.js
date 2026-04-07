@@ -583,13 +583,50 @@ bot.on('callback_query', async (query) => {
       fechaClave
     );
 
-    const horariosLibres      = disponibilidad.horariosLibres;
+    let   horariosLibres      = disponibilidad.horariosLibres;
     const mapaHorarioOperador = disponibilidad.mapaHorarioOperador;
 
     // Guardamos el mapa en memoria temporal para usarlo en CALLBACK C
     // al momento de confirmar la reserva con el operador correcto.
     registrosEnProceso[chatId].mapaHorarioOperador = mapaHorarioOperador;
     registrosEnProceso[chatId].serviceId           = servicioElegido.id;
+
+    // Filtramos los horarios que el vecino ya tiene ocupados en esa fecha,
+    // incluyendo cualquier slot que caiga dentro de la duración de una cita existente.
+    try {
+      const emailFicticio = `dni_${dniActual}@municipio.local`;
+      const { citas: citasVecino } = await ea.obtenerCitasDelCliente(emailFicticio);
+
+      // Convierte "HH:MM" a minutos totales desde medianoche para poder
+      // comparar rangos numéricos en lugar de strings de hora.
+      const toMinutos = (hhmm) => {
+        const [h, m] = hhmm.split(':').map(Number);
+        return h * 60 + m;
+      };
+
+      // Para cada cita del vecino en la fecha elegida, calculamos el rango
+      // [inicioOcupado, finOcupado) en minutos y descartamos todo slot que caiga dentro.
+      const citasEnFecha = citasVecino.filter((cita) => cita.start && cita.start.startsWith(fechaClave));
+
+      if (citasEnFecha.length > 0) {
+        const rangosOcupados = citasEnFecha.map((cita) => {
+          const horaInicio   = cita.start.substring(11, 16); // "HH:MM"
+          const inicioMin    = toMinutos(horaInicio);
+          const duracion     = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId)?.duration ?? 30;
+          return { inicio: inicioMin, fin: inicioMin + duracion };
+        });
+
+        horariosLibres = horariosLibres.filter((slot) => {
+          const slotMin = toMinutos(slot);
+          return !rangosOcupados.some((r) => slotMin >= r.inicio && slotMin < r.fin);
+        });
+      }
+    } catch (errCitas) {
+      // Si la consulta de citas propias falla, continuamos con todos los horarios
+      // de EA sin filtrar: es mejor ofrecer un horario potencialmente solapado
+      // que dejar al vecino sin opciones por un error secundario.
+      console.error('⚠️ No se pudieron obtener las citas del vecino para filtrar solapamientos:', errCitas.message);
+    }
 
     // Si el array quedó vacío, ningún horario está disponible para esa fecha y trámite.
     if (horariosLibres.length === 0) {
