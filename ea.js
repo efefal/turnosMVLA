@@ -182,37 +182,21 @@ async function obtenerDisponibilidadServicio(serviceId, fecha) {
 async function crearOObtenerCliente(datos) {
   const emailCliente = datos.email || `dni_${datos.dni}@municipio.local`;
 
-  console.log('🔍 Buscando cliente con email:', emailCliente);
+  // Obtenemos el listado completo paginado y filtramos localmente por email exacto,
+  // ya que EA no filtra por email en la query aunque se le pase como parámetro.
+  const todosLosClientes = await obtenerTodosLosPaginados('/index.php/api/v1/customers');
+  const clienteExistente = todosLosClientes.find((c) => c.email === emailCliente);
 
-  const clientesExistentes = await llamadaAPI(
-    'GET',
-    `/index.php/api/v1/customers?email=${encodeURIComponent(emailCliente)}`
-  );
+  if (clienteExistente) return clienteExistente.id;
 
-  console.log('🔍 Búsqueda por email:', JSON.stringify(clientesExistentes));
-
-  // EA no filtra por email en la query, devuelve todos los clientes.
-  // Filtramos manualmente en Node.js buscando el email exacto del vecino.
-  if (clientesExistentes && clientesExistentes.length > 0) {
-    const clienteExistente = clientesExistentes.find(
-      (c) => c.email === emailCliente
-    );
-    if (clienteExistente) {
-      console.log('🔍 Cliente encontrado con ID:', clienteExistente.id);
-      return clienteExistente.id;
-    }
-  }
-
-  // No existe el cliente, lo creamos
+  // No existe el cliente: lo creamos con los datos del vecino.
   const clienteNuevo = await llamadaAPI('POST', '/index.php/api/v1/customers', {
-  firstName:   datos.nombre,
-  lastName:    datos.apellido || '-',
-  email:       emailCliente,
-  phone:       datos.telefono || '0000000000',
-  notes:       `DNI: ${datos.dni}`,
-});
-
-  console.log('🔍 Respuesta creación cliente:', JSON.stringify(clienteNuevo));
+    firstName: datos.nombre,
+    lastName:  datos.apellido || '-',
+    email:     emailCliente,
+    phone:     datos.telefono || '0000000000',
+    notes:     `DNI: ${datos.dni}`,
+  });
 
   return clienteNuevo.id;
 }
