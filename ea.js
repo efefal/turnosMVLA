@@ -261,17 +261,42 @@ async function cancelarCita(appointmentId) {
 }
 
 // ---------------------------------------------------------------
+// FUNCIÓN AUXILIAR INTERNA: paginación genérica
+// ---------------------------------------------------------------
+// Recorre todas las páginas de un endpoint que devuelve arrays
+// y acumula los resultados en un único array. Se detiene cuando
+// la página devuelve menos registros que el límite (señal de que
+// es la última página) o devuelve un array vacío.
+//
+async function obtenerTodosLosPaginados(ruta) {
+  const acumulado = [];
+  let pagina = 1;
+
+  while (true) {
+    const resultado = await llamadaAPI('GET', `${ruta}?page=${pagina}`);
+
+    if (!Array.isArray(resultado) || resultado.length === 0) break;
+
+    acumulado.push(...resultado);
+
+    pagina++;
+  }
+
+  return acumulado;
+}
+
+// ---------------------------------------------------------------
 // FUNCIÓN 8: obtenerCitasDelCliente(email)
 // ---------------------------------------------------------------
 // Devuelve las citas activas de un cliente buscando por email.
 // Como usamos emails ficticios con el DNI, la búsqueda es:
 //   obtenerCitasDelCliente('dni_30123456@municipio.local')
 async function obtenerCitasDelCliente(email) {
-  const todasLasCitas = await llamadaAPI('GET', '/index.php/api/v1/appointments');
-  if (!todasLasCitas || todasLasCitas.length === 0) return { citas: [], nombreCliente: null };
+  const todasLasCitas = await obtenerTodosLosPaginados('/index.php/api/v1/appointments');
+  if (todasLasCitas.length === 0) return { citas: [], nombreCliente: null };
 
-  const todosLosClientes = await llamadaAPI('GET', '/index.php/api/v1/customers');
-  if (!todosLosClientes || todosLosClientes.length === 0) return { citas: [], nombreCliente: null };
+  const todosLosClientes = await obtenerTodosLosPaginados('/index.php/api/v1/customers');
+  if (todosLosClientes.length === 0) return { citas: [], nombreCliente: null };
 
   const cliente = todosLosClientes.find((c) => c.email === email);
   if (!cliente) return { citas: [], nombreCliente: null };
