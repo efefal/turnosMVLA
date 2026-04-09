@@ -3,3 +3,6 @@ node_modules/
 
 # Ignorar el archivo .env porque contiene información sensible (el token del bot)
 .env
+
+# Ignorar los archivos de log generados por Winston
+logs/

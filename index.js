@@ -11,6 +11,7 @@ require('dotenv').config();
 // ---------------------------------------------------------------
 // 2. IMPORTAR DEPENDENCIAS
 // ---------------------------------------------------------------
+const logger      = require('./logger');
 const TelegramBot = require('node-telegram-bot-api');
 
 // "fs" (File System) es un módulo nativo de Node.js (no necesita instalarse).
@@ -60,7 +61,7 @@ function leerUsuarios() {
     // JSON.parse() convierte el texto JSON en un objeto JavaScript utilizable.
     return JSON.parse(contenido);
   } catch (error) {
-    console.error('Error al leer el archivo de usuarios:', error);
+    logger.error('Error al leer el archivo de usuarios:', error);
     return [];
   }
 }
@@ -78,7 +79,7 @@ function guardarUsuarios(arrayUsuarios) {
     const contenidoJson = JSON.stringify(arrayUsuarios, null, 2);
     fs.writeFileSync(RUTA_DB, contenidoJson, 'utf-8');
   } catch (error) {
-    console.error('Error al guardar en el archivo de usuarios:', error);
+    logger.error('Error al guardar en el archivo de usuarios:', error);
   }
 }
 
@@ -119,9 +120,9 @@ async function cargarTramites() {
     }
     TRAMITES_COMPLETOS = servicios;
     TRAMITES = servicios.map((s) => s.name);
-    console.log(`✅ Trámites cargados: ${TRAMITES.join(', ')}`);
+    logger.info(`✅ Trámites cargados: ${TRAMITES.join(', ')}`);
   } catch (error) {
-    console.error('❌ Error al cargar trámites desde Easy!Appointments:', error.message);
+    logger.error('❌ Error al cargar trámites desde Easy!Appointments:', error.message);
   }
 }
 
@@ -173,7 +174,7 @@ function proximasSemanas(cantidadDias) {
   const hoy = new Date();
   const semanasMap = new Map(); // clave: fecha del lunes de esa semana → [Date, ...]
 
-  for (let i = 1; i <= cantidadDias; i++) {
+  for (let i = 0; i <= cantidadDias; i++) {
     const fecha = new Date(hoy);
     fecha.setDate(hoy.getDate() + i);
     const dow = fecha.getDay(); // 0 = domingo, 6 = sábado
@@ -234,7 +235,7 @@ function construirTecladoGestion(tieneTurnos) {
 const token = process.env.TELEGRAM_TOKEN;
 
 if (!token) {
-  console.error('❌ Error: No se encontró TELEGRAM_TOKEN en el archivo .env');
+  logger.error('❌ Error: No se encontró TELEGRAM_TOKEN en el archivo .env');
   process.exit(1);
 }
 
@@ -243,7 +244,7 @@ if (!token) {
 // ---------------------------------------------------------------
 const bot = new TelegramBot(token, { polling: true });
 
-console.log('✅ Bot iniciado correctamente. Esperando mensajes...');
+logger.info('✅ Bot iniciado correctamente. Esperando mensajes...');
 cargarTramites();
 
 // ---------------------------------------------------------------
@@ -403,7 +404,7 @@ function gestionarTimeout(chatId) {
         'Por favor, escribí tu DNI o el comando /start para volver al menú principal.'
       );
     } catch (error) {
-      console.error(`Error al enviar mensaje de timeout al usuario ${chatId}:`, error);
+      logger.error(`Error al enviar mensaje de timeout al usuario ${chatId}:`, error);
     }
   }, 600000);
 }
@@ -439,7 +440,7 @@ bot.on('message', async (msg) => {
   // Obtenemos el estado actual del usuario (INICIAL si es la primera vez)
   const estadoActual = estadosUsuarios[chatId] || 'INICIAL';
 
-  console.log(`📩 ${msg.chat.first_name} (${chatId}) | Estado: ${estadoActual} | Texto: "${texto}"`);
+  logger.info(`📩 ${msg.chat.first_name} (${chatId}) | Estado: ${estadoActual} | Texto: "${texto}"`);
 
   // ==============================================================
   // RAMA A: Comando /start o saludo en estado INICIAL
@@ -479,7 +480,7 @@ bot.on('message', async (msg) => {
     try {
       citasActivas = await ea.obtenerCitasDelCliente(emailVecino);
     } catch (error) {
-      console.error(`❌ Error al consultar citas para DNI ${dniIngresado}:`, error.message);
+      logger.error(`❌ Error al consultar citas para DNI ${dniIngresado}:`, error.message);
       bot.sendMessage(
         chatId,
         '⚠️ Hubo un problema al consultar tu información. Puede ser una falla momentánea.\n\n' +
@@ -681,7 +682,7 @@ bot.on('callback_query', async (query) => {
     try {
       citasCancelar = await ea.obtenerCitasDelCliente(`dni_${dniCancelar}@municipio.local`);
     } catch (error) {
-      console.error(`❌ Error al consultar citas al cancelar trámite (DNI ${dniCancelar}):`, error.message);
+      logger.error(`❌ Error al consultar citas al cancelar trámite (DNI ${dniCancelar}):`, error.message);
       bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
@@ -767,7 +768,7 @@ bot.on('callback_query', async (query) => {
     try {
       citasVT = await ea.obtenerCitasDelCliente(`dni_${dniVT}@municipio.local`);
     } catch (error) {
-      console.error(`❌ Error al consultar citas al volver a trámite (DNI ${dniVT}):`, error.message);
+      logger.error(`❌ Error al consultar citas al volver a trámite (DNI ${dniVT}):`, error.message);
       bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
@@ -898,7 +899,7 @@ bot.on('callback_query', async (query) => {
       // Si la consulta de citas propias falla, continuamos con todos los horarios
       // de EA sin filtrar: es mejor ofrecer un horario potencialmente solapado
       // que dejar al vecino sin opciones por un error secundario.
-      console.error('⚠️ No se pudieron obtener las citas del vecino para filtrar solapamientos:', errCitas.message);
+      logger.error('⚠️ No se pudieron obtener las citas del vecino para filtrar solapamientos:', errCitas.message);
     }
 
     // Si el array quedó vacío, ningún horario está disponible para esa fecha y trámite.
@@ -1023,7 +1024,7 @@ bot.on('callback_query', async (query) => {
     const fechaTexto     = formatearFechaTexto(new Date(`${fecha}T12:00:00`));
     const esModificacion = registrosEnProceso[chatId].esModificacion === true;
 
-    console.log('📤 Datos enviados a EA:', JSON.stringify({
+    logger.info('📤 Datos enviados a EA:', JSON.stringify({
       serviceId, providerId, nombre, dni,
       email: `dni_${dni}@municipio.local`,
       fechaHora, fechaHoraFin,
@@ -1041,9 +1042,9 @@ bot.on('callback_query', async (query) => {
         fechaHoraFin,
         notas:       `DNI: ${dni} | Trámite: ${tramite}`,
       });
-      console.log('📥 Respuesta de EA:', JSON.stringify(citaCreada));
+      logger.info('📥 Respuesta de EA:', JSON.stringify(citaCreada));
     } catch (error) {
-      console.error(`❌ Error al crear cita en EA para DNI ${dni}:`, error.message);
+      logger.error(`❌ Error al crear cita en EA para DNI ${dni}:`, error.message);
       bot.sendMessage(
         chatId,
         '⚠️ Hubo un problema al confirmar tu turno. Es posible que ese horario haya sido tomado en este momento.\n\n' +
@@ -1056,7 +1057,7 @@ bot.on('callback_query', async (query) => {
       return;
     }
 
-    console.log(`💾 Turno registrado en EA: ${nombre} (DNI: ${dni}) → ${tramite} | ${fechaTexto} ${horarioElegido}`);
+    logger.info(`💾 Turno registrado en EA: ${nombre} (DNI: ${dni}) → ${tramite} | ${fechaTexto} ${horarioElegido}`);
 
     const encabezadoConfirmacion = esModificacion
       ? '✏️ *¡Tu turno fue modificado correctamente!*'
@@ -1160,7 +1161,7 @@ bot.on('callback_query', async (query) => {
     try {
       citasActivasE = await ea.obtenerCitasDelCliente(`dni_${dniEnProceso}@municipio.local`);
     } catch (error) {
-      console.error(`❌ Error al obtener citas para nuevo trámite (DNI ${dniEnProceso}):`, error.message);
+      logger.error(`❌ Error al obtener citas para nuevo trámite (DNI ${dniEnProceso}):`, error.message);
       bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
@@ -1227,7 +1228,7 @@ bot.on('callback_query', async (query) => {
     try {
       citasModificacion = await ea.obtenerCitasDelCliente(`dni_${dniModificacion}@municipio.local`);
     } catch (error) {
-      console.error(`❌ Error al obtener citas para modificar (DNI ${dniModificacion}):`, error.message);
+      logger.error(`❌ Error al obtener citas para modificar (DNI ${dniModificacion}):`, error.message);
       estadosUsuarios[chatId] = 'MENU_GESTION';
       bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
@@ -1319,7 +1320,7 @@ bot.on('callback_query', async (query) => {
     try {
       await ea.cancelarCita(appointmentId);
     } catch (error) {
-      console.error(`❌ Error al liberar cita ${appointmentId} para modificar (DNI ${dniEditar}):`, error.message);
+      logger.error(`❌ Error al liberar cita ${appointmentId} para modificar (DNI ${dniEditar}):`, error.message);
       bot.sendMessage(
         chatId,
         '⚠️ No pudimos liberar tu turno anterior. Por favor, intentá de nuevo.'
@@ -1327,7 +1328,7 @@ bot.on('callback_query', async (query) => {
       return;
     }
 
-    console.log(`✏️  Turno a modificar liberado en EA: DNI ${dniEditar} → cita ${appointmentId} (${tramiteAEditar})`);
+    logger.info(`✏️  Turno a modificar liberado en EA: DNI ${dniEditar} → cita ${appointmentId} (${tramiteAEditar})`);
 
     // Avanzamos al selector de semanas: el flujo de fecha y horario es el mismo
     // que cuando se saca un turno nuevo; no hace falta duplicar esa lógica.
@@ -1362,7 +1363,7 @@ bot.on('callback_query', async (query) => {
     try {
       citasVolver = await ea.obtenerCitasDelCliente(`dni_${dniVolver}@municipio.local`);
     } catch (error) {
-      console.error(`❌ Error al consultar citas al volver al menú (DNI ${dniVolver}):`, error.message);
+      logger.error(`❌ Error al consultar citas al volver al menú (DNI ${dniVolver}):`, error.message);
       bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
@@ -1407,7 +1408,7 @@ bot.on('callback_query', async (query) => {
     try {
       citasCancelacion = await ea.obtenerCitasDelCliente(`dni_${dniCancelacion}@municipio.local`);
     } catch (error) {
-      console.error(`❌ Error al obtener citas para cancelar (DNI ${dniCancelacion}):`, error.message);
+      logger.error(`❌ Error al obtener citas para cancelar (DNI ${dniCancelacion}):`, error.message);
       estadosUsuarios[chatId] = 'MENU_GESTION';
       bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
@@ -1517,7 +1518,7 @@ bot.on('callback_query', async (query) => {
     try {
       await ea.cancelarCita(appointmentId);
     } catch (error) {
-      console.error(`❌ Error al cancelar cita ${appointmentId} para DNI ${dniBorrar}:`, error.message);
+      logger.error(`❌ Error al cancelar cita ${appointmentId} para DNI ${dniBorrar}:`, error.message);
       bot.sendMessage(
         chatId,
         '⚠️ No pudimos cancelar el turno en este momento. Por favor, intentá de nuevo.'
@@ -1525,7 +1526,7 @@ bot.on('callback_query', async (query) => {
       return;
     }
 
-    console.log(`🗑️  Turno cancelado en EA: DNI ${dniBorrar} → ${tramiteCancelado} | ${fechaCancelada} ${horarioCancelado}`);
+    logger.info(`🗑️  Turno cancelado en EA: DNI ${dniBorrar} → ${tramiteCancelado} | ${fechaCancelada} ${horarioCancelado}`);
 
     // Limpiamos el objeto de confirmación pero mantenemos el DNI para que
     // volver_menu_post_cancelacion pueda relanzar el menú sin pedirlo de nuevo.
@@ -1569,7 +1570,7 @@ bot.on('callback_query', async (query) => {
     try {
       citasPostCancel = await ea.obtenerCitasDelCliente(`dni_${dniPostCancel}@municipio.local`);
     } catch (error) {
-      console.error(`❌ Error al consultar citas post-cancelación (DNI ${dniPostCancel}):`, error.message);
+      logger.error(`❌ Error al consultar citas post-cancelación (DNI ${dniPostCancel}):`, error.message);
       bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
@@ -1632,7 +1633,7 @@ bot.on('callback_query', async (query) => {
     try {
       citasMenu = await ea.obtenerCitasDelCliente(`dni_${dniMenu}@municipio.local`);
     } catch (error) {
-      console.error(`❌ Error al consultar citas al volver al menú (DNI ${dniMenu}):`, error.message);
+      logger.error(`❌ Error al consultar citas al volver al menú (DNI ${dniMenu}):`, error.message);
       bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
@@ -1666,5 +1667,5 @@ bot.on('callback_query', async (query) => {
 // 13. MANEJO DE ERRORES DE POLLING
 // ---------------------------------------------------------------
 bot.on('polling_error', (error) => {
-  console.error('❌ Error de conexión con Telegram:', error.message);
+  logger.error('❌ Error de conexión con Telegram:', error.message);
 });
