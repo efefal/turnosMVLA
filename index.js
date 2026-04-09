@@ -511,8 +511,9 @@ function gestionarTimeout(chatId) {
     try {
       await bot.sendMessage(
         chatId,
-        '⏳ Tu sesión ha expirado por inactividad. ' +
-        'Por favor, escribí tu DNI o el comando /start para volver al menú principal.'
+        '⏳ Tu sesión ha expirado por inactividad.\n\n' +
+        'Escribí *Menu* para volver al inicio cuando quieras.',
+        { parse_mode: 'Markdown' }
       );
     } catch (error) {
       logger.error(`Error al enviar mensaje de timeout al usuario ${chatId}:`, error);
@@ -1779,6 +1780,40 @@ bot.on('callback_query', async (query) => {
     });
     return;
   }
+
+  // ==============================================================
+  // CATCH-ALL: botón no reconocido por ningún bloque anterior
+  // ==============================================================
+  // Si el código llegó hasta acá sin hacer "return", significa que
+  // el callback_data del botón presionado no coincidió con ninguna
+  // de las condiciones definidas arriba.
+  //
+  // Esto ocurre habitualmente cuando:
+  //   a) La sesión del usuario expiró (el bot se reinició, el estado
+  //      se perdió de memoria) y los botones del mensaje anterior
+  //      ya no tienen un flujo activo al que pertenecer.
+  //   b) El vecino presionó un botón de un paso anterior del flujo
+  //      (por ejemplo, un selector de semana que ya fue reemplazado
+  //      por el de horarios) y ese callback_data ya no es válido
+  //      en el estado actual.
+  //
+  // En lugar de ignorar silenciosamente el evento (lo que dejaría
+  // al usuario confundido sin respuesta), le explicamos qué pasó
+  // y le indicamos cómo volver a empezar.
+  //
+  // Nota: bot.answerCallbackQuery() ya fue llamado al inicio de este
+  // manejador (línea superior al primer bloque), por lo que NO se
+  // repite aquí. Repetirlo causaría un error de Telegram porque el
+  // mismo query.id no puede ser respondido dos veces.
+  logger.info(`⚠️ Callback no reconocido — chatId: ${chatId}, data: "${data}", estado: "${estadoActual}"`);
+
+  bot.sendMessage(
+    chatId,
+    '⚠️ Este botón ya no está disponible.\n\n' +
+    'Es posible que tu sesión haya expirado o que sea de un paso anterior del flujo.\n\n' +
+    'Escribí *Menu* para volver a empezar desde el principio.',
+    { parse_mode: 'Markdown' }
+  );
 });
 
 // ---------------------------------------------------------------

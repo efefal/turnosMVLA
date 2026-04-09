@@ -73,6 +73,23 @@ function llamadaAPI(método, ruta, cuerpo) {
 
     req.on('error', reject);
 
+    // ---------------------------------------------------------------
+    // TIMEOUT DE 30 SEGUNDOS
+    // ---------------------------------------------------------------
+    // Si Easy!Appointments tarda más de 30 segundos en responder,
+    // consideramos que algo salió mal (servidor caído, red lenta, etc.)
+    // y cancelamos la solicitud para no dejar al bot esperando indefinidamente.
+    //
+    // req.setTimeout() dispara el evento 'timeout' cuando se cumple el tiempo.
+    // Ese evento NO corta la conexión por sí solo; solo avisa que el tiempo pasó.
+    // Por eso, dentro del callback llamamos req.destroy(), que sí cierra
+    // la conexión de red y provoca que el evento 'error' se dispare,
+    // lo que a su vez llama a reject() con el mensaje que definimos abajo.
+    req.setTimeout(30000, () => {
+      // Destruimos la conexión para liberar recursos de red.
+      req.destroy(new Error(`El servidor de Easy!Appointments no respondió en 30 segundos (${método} ${ruta})`));
+    });
+
     // Si hay cuerpo, lo escribimos en el stream de la request.
     if (bodyStr) req.write(bodyStr);
     req.end();
