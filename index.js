@@ -24,6 +24,10 @@ const fs = require('fs');
 // (Windows usa "\", Linux/Mac usan "/").
 const path = require('path');
 
+// "https" es el módulo nativo de Node.js para hacer solicitudes HTTP seguras (HTTPS).
+// Lo usamos para consultar la API de feriados argentinos sin instalar dependencias externas.
+const https = require('https');
+
 // "ea" es el módulo de integración con Easy!Appointments.
 // Centraliza todas las llamadas a la API del motor de reservas:
 // obtener servicios, consultar disponibilidad, crear y cancelar citas.
@@ -167,20 +171,126 @@ function construirLabelSemana(primero, ultimo) {
     : `Semana del ${dia1} de ${mes1} al ${dia2} de ${mes2}`;
 }
 
+// ---------------------------------------------------------------
+// FUNCIÓN: obtenerFeriadosArgentinos()
+// ---------------------------------------------------------------
+// Consulta la API pública argentinadatos.com para obtener la lista
+// de feriados nacionales del año actual.
+//
+// Devuelve un Set de strings con fechas en formato "YYYY-MM-DD".
+// Un Set es como un array pero sin duplicados y con búsqueda instantánea:
+// en lugar de recorrer toda la lista para saber si una fecha es feriado,
+// basta con hacer feriados.has("2026-05-25"), que responde en tiempo constante.
+//
+// Si la consulta falla por cualquier motivo (sin internet, API caída, etc.),
+// la función devuelve un Set vacío para que el bot siga funcionando con
+// normalidad; en el peor caso, el usuario verá feriados como días disponibles.
+async function obtenerFeriadosArgentinos() {
+
+  // Obtenemos el año en curso (por ejemplo, 2026).
+  // Esto permite que la función sea correcta sin modificarla cada año.
+  const año = new Date().getFullYear();
+
+  // Armamos la URL completa de la API con el año actual.
+  // Ejemplo: "https://api.argentinadatos.com/v1/feriados/2026"
+  const url = `https://api.argentinadatos.com/v1/feriados/${año}`;
+
+  // try/catch: si algo dentro del bloque "try" lanza un error,
+  // el programa no se cae; en cambio, salta al bloque "catch"
+  // donde decidimos qué hacer con ese error (en este caso, loguearlo y seguir).
+  try {
+
+    // https.get() usa callbacks (funciones que se llaman cuando llega la respuesta),
+    // pero nosotros queremos usar async/await. Para eso, envolvemos la llamada
+    // en una "Promise": una promesa de que en algún momento habrá un resultado.
+    // resolve() indica éxito; reject() indica error.
+    const datos = await new Promise((resolve, reject) => {
+
+      // Iniciamos la solicitud GET a la URL de feriados.
+      https.get(url, (res) => {
+
+        // La respuesta llega en fragmentos ("chunks"). Los acumulamos en 'body'.
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+
+        // Cuando ya no hay más fragmentos, el evento 'end' se dispara.
+        res.on('end', () => {
+          try {
+            // Convertimos el texto JSON recibido en un array de objetos JavaScript.
+            // Si el texto no es JSON válido, JSON.parse() lanza un error
+            // que captura el catch interior y rechaza la Promise.
+            resolve(JSON.parse(body));
+          } catch (e) {
+            reject(new Error(`No se pudo parsear la respuesta de feriados: ${body}`));
+          }
+        });
+
+      // Si hay un error de red (sin conexión, DNS, timeout, etc.),
+      // rechazamos la Promise para que el catch exterior lo capture.
+      }).on('error', reject);
+    });
+
+    // La API devuelve un array de objetos con esta forma:
+    // [{ fecha: "2026-05-25", nombre: "Día de la Patria", tipo: "inamovible" }, ...]
+    // Nos quedamos solo con la propiedad "fecha" de cada elemento
+    // y construimos un Set para búsquedas rápidas en proximasSemanas().
+    return new Set(datos.map((f) => f.fecha));
+
+  } catch (err) {
+
+    // Algo falló: lo registramos en el log para poder diagnosticarlo después.
+    // Usamos logger.error porque es un problema que merece atención,
+    // aunque no sea fatal para el funcionamiento del bot.
+    logger.error(`No se pudieron obtener los feriados: ${err.message}`);
+
+    // Devolvemos un Set vacío. El código que llama a esta función
+    // puede seguir trabajando sin cambios: simplemente no habrá feriados filtrados.
+    return new Set();
+  }
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: proximasSemanas(cantidadDias)
+// ---------------------------------------------------------------
 // Devuelve un array de objetos semana { label, fechaInicio, fechaFin } con los
 // días hábiles disponibles dentro de los próximos cantidadDias días corridos,
 // agrupados por semana calendario (lunes–viernes).
-function proximasSemanas(cantidadDias) {
+//
+// CAMBIO respecto a la versión anterior:
+//   — La función ahora es "async" porque necesita esperar el resultado
+//     de obtenerFeriadosArgentinos(), que hace una consulta a internet.
+//     Una función async siempre devuelve una Promise; quien la llama
+//     debe usar "await" para obtener el valor final.
+//   — Se agrega el filtro de feriados: además de descartar sábados y domingos,
+//     ahora también se descartan los días que aparecen en el Set de feriados.
+async function proximasSemanas(cantidadDias) {
   const hoy = new Date();
   const semanasMap = new Map(); // clave: fecha del lunes de esa semana → [Date, ...]
+
+  // NUEVO: consultamos la API de feriados antes de recorrer los días.
+  // "await" pausa la función hasta que obtenerFeriadosArgentinos() termine
+  // y devuelva el Set con las fechas. Si la consulta falla, recibimos un Set vacío
+  // y el loop sigue sin filtrar feriados (comportamiento degradado pero funcional).
+  const feriados = await obtenerFeriadosArgentinos();
 
   for (let i = 0; i <= cantidadDias; i++) {
     const fecha = new Date(hoy);
     fecha.setDate(hoy.getDate() + i);
     const dow = fecha.getDay(); // 0 = domingo, 6 = sábado
+
+    // Descartamos fines de semana (igual que antes).
     if (dow === 0 || dow === 6) continue;
 
+    // NUEVO: convertimos la fecha a "YYYY-MM-DD" para compararla con el Set.
+    // formatearFechaClave() ya existe en este archivo y hace exactamente eso.
+    const fechaClave = formatearFechaClave(fecha);
+
+    // NUEVO: si la fecha está en el Set de feriados, la saltamos.
+    // feriados.has() devuelve true si el string está en el Set, false si no.
+    if (feriados.has(fechaClave)) continue;
+
     // Calculamos el lunes de la semana para usarlo como clave de agrupación.
+    // (Sin cambios respecto a la versión anterior.)
     const lunes = new Date(fecha);
     lunes.setDate(fecha.getDate() - (dow - 1));
     const clave = formatearFechaClave(lunes);
@@ -189,6 +299,7 @@ function proximasSemanas(cantidadDias) {
     semanasMap.get(clave).push(new Date(fecha));
   }
 
+  // Convertimos el Map en el array de objetos semana. (Sin cambios.)
   return [...semanasMap.values()].map((dias) => {
     const primero = dias[0];
     const ultimo  = dias[dias.length - 1];
@@ -647,7 +758,9 @@ bot.on('callback_query', async (query) => {
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
     // Mostramos el selector de semanas: primer paso del nuevo flujo de fechas.
-    const semanasT = proximasSemanas(30);
+    // "await" es necesario porque proximasSemanas() ahora consulta la API de feriados
+    // y devuelve una Promise; sin await, semanasT sería la Promise en sí (no el array).
+    const semanasT = await proximasSemanas(30);
     bot.sendMessage(
       chatId,
       `📋 Trámite elegido: *${TRAMITES[indice]}*\n\n📅 Ahora elegí una semana:`,
@@ -805,7 +918,8 @@ bot.on('callback_query', async (query) => {
 
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    const semanasVolver = proximasSemanas(30);
+    // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
+    const semanasVolver = await proximasSemanas(30);
     bot.sendMessage(chatId, '📅 Elegí una semana:', {
       reply_markup: { inline_keyboard: construirBotonesSemanas(semanasVolver) },
     });
@@ -908,7 +1022,8 @@ bot.on('callback_query', async (query) => {
       // Volvemos al selector de semanas para que el vecino elija otra fecha.
       estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-      const semanasNoSlots = proximasSemanas(30);
+      // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
+      const semanasNoSlots = await proximasSemanas(30);
       bot.sendMessage(
         chatId,
         `⚠️ No hay horarios disponibles para *${fechaTexto}* ` +
@@ -1100,7 +1215,8 @@ bot.on('callback_query', async (query) => {
 
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    const semanasC3 = proximasSemanas(30);
+    // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
+    const semanasC3 = await proximasSemanas(30);
     bot.sendMessage(
       chatId,
       '📅 Entendido. Elegí una nueva semana para tu turno:',
@@ -1122,7 +1238,8 @@ bot.on('callback_query', async (query) => {
     // Retrocedemos al selector de semanas; el trámite y el nombre siguen guardados.
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    const semanasD = proximasSemanas(30);
+    // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
+    const semanasD = await proximasSemanas(30);
     bot.sendMessage(
       chatId,
       '📅 Elegí una semana para tu turno:',
@@ -1334,7 +1451,8 @@ bot.on('callback_query', async (query) => {
     // que cuando se saca un turno nuevo; no hace falta duplicar esa lógica.
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    const semanasE = proximasSemanas(30);
+    // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
+    const semanasE = await proximasSemanas(30);
     bot.sendMessage(
       chatId,
       `Turno anterior liberado. 📅 Elegí la nueva semana para tu trámite de *${tramiteAEditar}*:`,
