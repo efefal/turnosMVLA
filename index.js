@@ -11,8 +11,8 @@ require('dotenv').config();
 // ---------------------------------------------------------------
 // 2. IMPORTAR DEPENDENCIAS
 // ---------------------------------------------------------------
-const logger      = require('./logger');
-const TelegramBot = require('node-telegram-bot-api');
+const logger  = require('./logger');
+const express = require('express');
 
 // "fs" (File System) es un módulo nativo de Node.js (no necesita instalarse).
 // Nos permite leer y escribir archivos en el disco, que es cómo lograremos
@@ -341,21 +341,104 @@ function construirTecladoGestion(tieneTurnos) {
 }
 
 // ---------------------------------------------------------------
-// 6. VALIDAR Y OBTENER EL TOKEN
+// 6. VALIDAR CREDENCIALES DE WHATSAPP
 // ---------------------------------------------------------------
-const token = process.env.TELEGRAM_TOKEN;
+// Meta for Developers requiere tres valores para que el bot pueda
+// operar con la API de WhatsApp Business:
+//
+//   WHATSAPP_VERIFY_TOKEN → string secreto que vos elegís y registrás
+//     en el panel de Meta. Meta lo usa para confirmar que la URL del
+//     webhook es tuya (ver endpoint GET /webhook más abajo).
+//
+//   WHATSAPP_TOKEN → token de acceso que genera Meta. Se incluye en
+//     cada llamada a la API para autenticar al bot como remitente.
+//
+//   WHATSAPP_PHONE_ID → identificador del número de teléfono registrado
+//     en Meta. Se usa en la URL de la API al enviar mensajes.
+const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WHATSAPP_TOKEN        = process.env.WHATSAPP_TOKEN;
+const WHATSAPP_PHONE_ID     = process.env.WHATSAPP_PHONE_ID;
 
-if (!token) {
-  logger.error('❌ Error: No se encontró TELEGRAM_TOKEN en el archivo .env');
+if (!WHATSAPP_VERIFY_TOKEN || !WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID) {
+  logger.error('❌ Faltan variables de entorno de WhatsApp. Verificar WHATSAPP_VERIFY_TOKEN, WHATSAPP_TOKEN y WHATSAPP_PHONE_ID en .env');
   process.exit(1);
 }
 
 // ---------------------------------------------------------------
-// 7. CREAR LA INSTANCIA DEL BOT
+// 7. CREAR LA APLICACIÓN EXPRESS Y LOS ENDPOINTS DE WEBHOOK
 // ---------------------------------------------------------------
-const bot = new TelegramBot(token, { polling: true });
+// Express es un framework web para Node.js que nos permite recibir
+// solicitudes HTTP. Meta envía los mensajes de WhatsApp a nuestra
+// aplicación via HTTP POST, por eso necesitamos un servidor web
+// en lugar del polling que usábamos con Telegram.
+const app = express();
 
-logger.info('✅ Bot iniciado correctamente. Esperando mensajes...');
+// express.json() hace que Express entienda automáticamente el cuerpo
+// de las solicitudes POST que llegan en formato JSON (que es lo que
+// envía Meta con cada mensaje). Sin esto, req.body estaría vacío.
+app.use(express.json());
+
+// ---------------------------------------------------------------
+// ENDPOINT GET /webhook — Verificación del webhook por Meta
+// ---------------------------------------------------------------
+// Antes de que Meta empiece a enviarnos mensajes, necesita confirmar
+// que la URL que le dimos realmente pertenece a nuestra aplicación.
+// Para eso hace una solicitud GET con tres parámetros en la URL:
+//   hub.mode         → siempre "subscribe"
+//   hub.verify_token → el string secreto que configuramos en Meta
+//   hub.challenge    → un número aleatorio que debemos devolver tal cual
+//
+// Si devolvemos el challenge correctamente, Meta activa el webhook.
+// Si no, Meta no enviará ningún mensaje a esta URL.
+app.get('/webhook', (req, res) => {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  // Verificamos que sea una solicitud de suscripción y que el token
+  // coincida con el que configuramos en las variables de entorno.
+  if (mode === 'subscribe' && token === WHATSAPP_VERIFY_TOKEN) {
+    logger.info('✅ Webhook de WhatsApp verificado correctamente.');
+    // Respondemos con el challenge para que Meta confíe en nuestra URL.
+    res.status(200).send(challenge);
+  } else {
+    // El token no coincide: rechazamos con 403 (Prohibido).
+    // Esto evita que cualquiera pueda activar el webhook con una URL falsa.
+    logger.error('❌ Verificación de webhook fallida: token inválido o mode incorrecto.');
+    res.sendStatus(403);
+  }
+});
+
+// ---------------------------------------------------------------
+// ENDPOINT POST /webhook — Recepción de mensajes de WhatsApp
+// ---------------------------------------------------------------
+// Meta envía cada mensaje entrante (y notificaciones de estado de
+// entrega) como una solicitud POST a esta URL. Por ahora registramos
+// el cuerpo completo para verificar que los mensajes llegan.
+// El procesamiento real de mensajes se implementará en la siguiente etapa.
+app.post('/webhook', (req, res) => {
+  logger.info('📨 Webhook recibido: ' + JSON.stringify(req.body));
+
+  // Respondemos 200 de inmediato para confirmarle a Meta que recibimos
+  // el mensaje. Si no respondemos a tiempo, Meta reintentará el envío
+  // varias veces, generando duplicados.
+  res.sendStatus(200);
+});
+
+// ---------------------------------------------------------------
+// STUB TEMPORAL DE BOT
+// ---------------------------------------------------------------
+// La lógica de negocio (flujos, estados, respuestas) aún usa
+// bot.sendMessage() y bot.answerCallbackQuery() que son métodos de
+// Telegram. Este objeto con métodos vacíos evita errores de
+// "bot is not defined" mientras se completa la migración a WhatsApp.
+// Se eliminará cuando los handlers se adapten a la API de WhatsApp.
+const bot = {
+  on:                  () => {},
+  sendMessage:         () => Promise.resolve(),
+  answerCallbackQuery: () => Promise.resolve(),
+};
+
 cargarTramites();
 
 // ---------------------------------------------------------------
@@ -1821,8 +1904,14 @@ bot.on('callback_query', async (query) => {
 });
 
 // ---------------------------------------------------------------
-// 13. MANEJO DE ERRORES DE POLLING
+// 13. INICIAR EL SERVIDOR WEB
 // ---------------------------------------------------------------
-bot.on('polling_error', (error) => {
-  logger.error('❌ Error de conexión con Telegram:', error.message);
+// Ponemos Express a escuchar en el puerto definido por la variable
+// de entorno PORT, o en el 3000 si no está configurada.
+// El puerto 3000 es útil para desarrollo local; en producción
+// (Railway, Render, etc.) la plataforma asigna el puerto via PORT.
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  logger.info(`✅ Servidor iniciado en el puerto ${PORT}. Esperando mensajes de WhatsApp...`);
 });
