@@ -440,8 +440,12 @@ function esDniValido(texto) {
 // Devuelve el mensaje de bienvenida estándar que pide el DNI.
 function mensajeBienvenida() {
   return (
-    '¡Hola! Bienvenido al sistema de turnos de prueba.\n' +
-    'Por favor, ingresá tu número de DNI (sin puntos ni espacios) para consultar tu estado.'
+    '¡Hola! Soy el asistente de turnos de la Municipalidad de Villa La Angostura. 👋\n\n' +
+    'Puedo ayudarte a:\n' +
+    '📋 Sacar un turno para tus trámites municipales\n' +
+    '✏️ Modificar un turno existente\n' +
+    '❌ Cancelar un turno que ya tenés reservado\n\n' +
+    'Para comenzar, ingresá tu número de DNI (sin puntos ni espacios):'
   );
 }
 
@@ -560,7 +564,7 @@ bot.on('message', async (msg) => {
   // ==============================================================
   if (texto.startsWith('/start') || (estadoActual === 'INICIAL' && esSaludo(texto))) {
     estadosUsuarios[chatId] = 'ESPERANDO_DNI';
-    bot.sendMessage(chatId, mensajeBienvenida());
+    bot.sendMessage(chatId, mensajeBienvenida(), { parse_mode: 'Markdown' });
     return;
   }
 
