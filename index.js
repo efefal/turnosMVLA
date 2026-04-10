@@ -159,16 +159,25 @@ function formatearFechaClave(fecha) {
 }
 
 // Construye el texto legible de una semana hábil dado su primer y último día.
-// Si los dos días caen en el mismo mes: "Semana del 7 al 11 de abril".
-// Si cruzan mes: "Semana del 28 de abril al 2 de mayo".
+// Formato corto para que entre dentro del límite de 24 caracteres de WhatsApp:
+//   — Mismo mes:     "13-17 de abril"
+//   — Meses distintos: "28 abr - 2 may"  (mes abreviado para no exceder el límite)
 function construirLabelSemana(primero, ultimo) {
   const dia1 = primero.getDate();
   const dia2 = ultimo.getDate();
   const mes1 = primero.toLocaleDateString('es-AR', { month: 'long' });
   const mes2 = ultimo.toLocaleDateString('es-AR', { month: 'long' });
-  return mes1 === mes2
-    ? `Semana del ${dia1} al ${dia2} de ${mes1}`
-    : `Semana del ${dia1} de ${mes1} al ${dia2} de ${mes2}`;
+
+  if (mes1 === mes2) {
+    // Mismo mes: "13-17 de abril" (máximo ~20 caracteres con septiembre)
+    return `${dia1}-${dia2} de ${mes1}`;
+  }
+
+  // Meses distintos: usamos abreviatura para no superar los 24 caracteres del título.
+  // toLocaleDateString con month:'short' devuelve "abr.", "may.", etc.; quitamos el punto.
+  const mes1corto = primero.toLocaleDateString('es-AR', { month: 'short' }).replace('.', '');
+  const mes2corto = ultimo.toLocaleDateString('es-AR',  { month: 'short' }).replace('.', '');
+  return `${dia1} ${mes1corto} - ${dia2} ${mes2corto}`;
 }
 
 // ---------------------------------------------------------------
@@ -319,7 +328,8 @@ function construirBotonesSemanas(semanas) {
     text: s.label,
     callback_data: `semana_${s.fechaInicio}_${s.fechaFin}`,
   }]));
-  filas.push([{ text: '⬅️ Volver a elegir trámite', callback_data: 'volver_tramites' }]);
+  // Título acortado para respetar el límite de 24 caracteres del botón de lista de WhatsApp.
+  filas.push([{ text: '↩️ Volver', callback_data: 'volver_tramites' }]);
   return filas;
 }
 
@@ -338,6 +348,78 @@ function construirTecladoGestion(tieneTurnos) {
   }
   filas.push([{ text: '🔚 Finalizar', callback_data: 'finalizar_sesion' }]);
   return filas;
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: opcionesGestion(tieneTurnos)
+// ---------------------------------------------------------------
+// Versión de construirTecladoGestion() adaptada para enviarLista().
+// Devuelve un array de { id, titulo } con las opciones del menú de gestión.
+function opcionesGestion(tieneTurnos) {
+  const opciones = [
+    { id: 'nuevo_tramite', titulo: '➕ Nuevo Trámite' },
+  ];
+  if (tieneTurnos) {
+    opciones.push({ id: 'modificar_turno', titulo: '✏️ Modificar Turno' });
+    opciones.push({ id: 'cancelar_turno',  titulo: '❌ Cancelar Turno'  });
+  }
+  opciones.push({ id: 'finalizar_sesion', titulo: '🔚 Finalizar' });
+  return opciones;
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: enviarMenuGestion(chatId, texto, tieneTurnos)
+// ---------------------------------------------------------------
+// Envía el menú de gestión eligiendo el componente visual más adecuado
+// según la cantidad de opciones que tenga el vecino en ese momento:
+//
+//   — Con turnos activos (tieneTurnos = true): hay 4 opciones (Nuevo Trámite,
+//     Modificar, Cancelar, Finalizar). Como WhatsApp solo permite 3 botones de
+//     respuesta rápida, usamos una lista desplegable que no tiene ese límite.
+//
+//   — Sin turnos activos (tieneTurnos = false): solo hay 2 opciones (Nuevo Trámite
+//     y Finalizar). Con tan pocas opciones, los botones de respuesta rápida son más
+//     directos y cómodos que abrir una lista, por eso los usamos en este caso.
+async function enviarMenuGestion(chatId, texto, tieneTurnos) {
+  if (tieneTurnos) {
+    // 4 opciones → lista desplegable (supera el límite de 3 botones de WhatsApp).
+    return enviarLista(chatId, texto, opcionesGestion(true));
+  }
+  // 2 opciones → botones de respuesta rápida, más simples y directos para el vecino.
+  return enviarBotones(chatId, texto, [
+    { id: 'nuevo_tramite',    titulo: '➕ Nuevo Trámite' },
+    { id: 'finalizar_sesion', titulo: '🔚 Finalizar'     },
+  ]);
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: opcionesSemanas(semanas)
+// ---------------------------------------------------------------
+// Versión de construirBotonesSemanas() adaptada para enviarLista().
+// Convierte el array de semanas (de proximasSemanas()) al formato
+// { id, titulo } que espera enviarLista().
+function opcionesSemanas(semanas) {
+  const opciones = semanas.map((s) => ({
+    id:     `semana_${s.fechaInicio}_${s.fechaFin}`,
+    titulo: s.label,
+  }));
+  // Título acortado para respetar el límite de 24 caracteres de las filas de lista de WhatsApp.
+  opciones.push({ id: 'volver_tramites', titulo: '↩️ Volver' });
+  return opciones;
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: opcionesTramites(indicesPermitidos)
+// ---------------------------------------------------------------
+// Versión de teclasMenuTramites() adaptada para enviarLista().
+// Devuelve un array de { id, titulo } con los trámites disponibles.
+function opcionesTramites(indicesPermitidos) {
+  const indices = indicesPermitidos !== undefined
+    ? indicesPermitidos
+    : TRAMITES.map((_, i) => i);
+  const opciones = indices.map((i) => ({ id: `tramite_${i}`, titulo: TRAMITES[i] }));
+  opciones.push({ id: 'cancelar_tramite', titulo: '❌ Cancelar' });
+  return opciones;
 }
 
 // ---------------------------------------------------------------
@@ -413,31 +495,294 @@ app.get('/webhook', (req, res) => {
 // ENDPOINT POST /webhook — Recepción de mensajes de WhatsApp
 // ---------------------------------------------------------------
 // Meta envía cada mensaje entrante (y notificaciones de estado de
-// entrega) como una solicitud POST a esta URL. Por ahora registramos
-// el cuerpo completo para verificar que los mensajes llegan.
-// El procesamiento real de mensajes se implementará en la siguiente etapa.
-app.post('/webhook', (req, res) => {
-  logger.info('📨 Webhook recibido: ' + JSON.stringify(req.body));
-
-  // Respondemos 200 de inmediato para confirmarle a Meta que recibimos
-  // el mensaje. Si no respondemos a tiempo, Meta reintentará el envío
-  // varias veces, generando duplicados.
+// entrega) como una solicitud POST a esta URL.
+//
+// IMPORTANTE: siempre respondemos 200 ANTES de procesar el mensaje.
+// Si Meta no recibe el 200 dentro de unos segundos, considera que
+// falló y reintenta el envío, lo que generaría mensajes duplicados.
+// Por eso respondemos primero y procesamos después en un try/catch.
+app.post('/webhook', async (req, res) => {
+  // Respondemos 200 de inmediato, independientemente de lo que pase después.
   res.sendStatus(200);
+
+  try {
+    // procesarMensajeEntrante() extrae los datos del payload de Meta
+    // y ejecuta toda la lógica conversacional.
+    await procesarMensajeEntrante(req.body);
+  } catch (err) {
+    // Logueamos el error pero no propagamos la excepción: el 200 ya fue enviado
+    // y no hay nada más que hacer desde el punto de vista del protocolo.
+    logger.error('❌ Error al procesar mensaje entrante de WhatsApp: ' + err.message);
+  }
 });
 
 // ---------------------------------------------------------------
-// STUB TEMPORAL DE BOT
+// FUNCIÓN: enviarMensaje(telefono, texto)
 // ---------------------------------------------------------------
-// La lógica de negocio (flujos, estados, respuestas) aún usa
-// bot.sendMessage() y bot.answerCallbackQuery() que son métodos de
-// Telegram. Este objeto con métodos vacíos evita errores de
-// "bot is not defined" mientras se completa la migración a WhatsApp.
-// Se eliminará cuando los handlers se adapten a la API de WhatsApp.
-const bot = {
-  on:                  () => {},
-  sendMessage:         () => Promise.resolve(),
-  answerCallbackQuery: () => Promise.resolve(),
-};
+// Envía un mensaje de texto a un número de WhatsApp a través de la
+// Graph API de Meta (versión 25.0).
+//
+// Parámetros:
+//   telefono  → número en formato internacional sin "+" (ej: "5492944123456")
+//   texto     → contenido del mensaje a enviar
+//   _opciones → se acepta para mantener compatibilidad con las llamadas
+//               existentes que aún pasan parse_mode o reply_markup, pero
+//               se ignora por ahora. Se implementará en la siguiente etapa.
+async function enviarMensaje(telefono, texto, _opciones) {
+
+  // Armamos la URL del endpoint de mensajes con el ID de número de teléfono.
+  // Cada número registrado en Meta tiene su propio PHONE_ID.
+  const urlStr = `https://graph.facebook.com/v25.0/${WHATSAPP_PHONE_ID}/messages`;
+  const urlObj = new URL(urlStr);
+
+  // ---------------------------------------------------------------
+  // ---------------------------------------------------------------
+  // NORMALIZACIÓN DEL NÚMERO DE TELÉFONO
+  // ---------------------------------------------------------------
+  // La API de Meta requiere el formato E.164: "+" seguido del código de país
+  // y el número sin espacios ni guiones.
+  //
+  // CASO ESPECIAL — ARGENTINA (549...):
+  // Los números argentinos llegan del webhook con un "9" extra después del
+  // código de país: "549XXXXXXXXXX". Ese "9" es un artefacto histórico de
+  // la telefonía celular argentina que WhatsApp incluye en el wa_id pero
+  // que Meta NO acepta en el campo "to" al enviar. Si lo dejamos, el envío
+  // falla. La solución es quitarlo: "549..." → "+54...".
+  //
+  // CASO ARGENTINO SIN EL 9 (54...):
+  // Si el número ya viene sin el "9" (empieza directamente con "54"),
+  // solo agregamos el "+".
+  //
+  // CASO GENERAL:
+  // Para cualquier otro número, agregamos "+" si no lo tiene.
+  let telefonoNormalizado;
+  if (telefono.startsWith('549')) {
+    // Quitamos el "9" extra: descartamos los 3 primeros caracteres ("549")
+    // y los reemplazamos por "+54".
+    telefonoNormalizado = '+54' + telefono.slice(3);
+  } else if (telefono.startsWith('54')) {
+    // Ya sin el "9": solo agregamos el "+".
+    telefonoNormalizado = '+' + telefono;
+  } else if (telefono.startsWith('+')) {
+    // Cualquier número que ya trae "+": lo dejamos tal cual.
+    telefonoNormalizado = telefono;
+  } else {
+    // Resto de países: agregamos "+" y listo.
+    telefonoNormalizado = '+' + telefono;
+  }
+
+  // Construimos el cuerpo del mensaje en el formato que exige la API de Meta:
+  //   messaging_product → siempre "whatsapp" para esta API
+  //   to                → número de destino en formato internacional
+  //   type              → "text" para mensajes de texto plano
+  //   text.body         → el contenido visible del mensaje
+  const bodyStr = JSON.stringify({
+    messaging_product: 'whatsapp',
+    to:   telefonoNormalizado,
+    type: 'text',
+    text: { body: texto },
+  });
+
+  // Envolvemos la llamada HTTPS en una Promise para poder usar async/await.
+  // En lugar de reject(), usamos resolve(null) en los errores para que un
+  // fallo al enviar un mensaje no interrumpa el flujo conversacional.
+  return new Promise((resolve) => {
+
+    const opciones = {
+      hostname: urlObj.hostname,
+      path:     urlObj.pathname,
+      method:   'POST',
+      headers: {
+        // El token de acceso autentica cada llamada a la API de Meta.
+        'Authorization':  `Bearer ${WHATSAPP_TOKEN}`,
+        'Content-Type':   'application/json',
+        // Content-Length es obligatorio en POST para que el servidor
+        // sepa cuántos bytes leer del cuerpo.
+        'Content-Length': Buffer.byteLength(bodyStr),
+      },
+    };
+
+    const req = https.request(opciones, (res) => {
+      let data = '';
+      // La respuesta llega en fragmentos; los acumulamos.
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          // Éxito: cualquier código 2xx es aceptable.
+          resolve(null);
+        } else {
+          // Error HTTP: logueamos pero resolvemos para no cortar el flujo.
+          logger.error(`❌ Error al enviar mensaje de WhatsApp (HTTP ${res.statusCode}): ${data}`);
+          resolve(null);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      // Error de red (sin conexión, DNS, etc.): logueamos y resolvemos.
+      logger.error(`❌ Error de red al enviar mensaje a ${telefono}: ${err.message}`);
+      resolve(null);
+    });
+
+    // Timeout de 30 segundos: si la API no responde, cancelamos la solicitud.
+    req.setTimeout(30000, () => {
+      req.destroy(new Error('Timeout al enviar mensaje de WhatsApp'));
+    });
+
+    // Escribimos el cuerpo JSON y cerramos la solicitud para enviarla.
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: enviarMensajeInteractivo(telefono, tipo, cuerpo, acciones)
+// ---------------------------------------------------------------
+// Envía un mensaje interactivo a WhatsApp (lista de opciones o botones
+// de respuesta rápida) via la Graph API de Meta.
+// Es la función base que usan enviarLista() y enviarBotones() internamente.
+//
+// Parámetros:
+//   telefono → número de destino (se normaliza igual que en enviarMensaje)
+//   tipo     → "list" para listas desplegables, "button" para botones de respuesta rápida
+//   cuerpo   → texto del mensaje visible antes de las opciones (equivale al
+//              texto del mensaje en Telegram al que acompañaban los botones)
+//   acciones → objeto con la estructura de opciones según el tipo:
+//              - Para "list":   { button: "Ver opciones", sections: [...] }
+//              - Para "button": { buttons: [...] }
+async function enviarMensajeInteractivo(telefono, tipo, cuerpo, acciones) {
+
+  // Reutilizamos la misma lógica de normalización que en enviarMensaje().
+  let telefonoNormalizado;
+  if (telefono.startsWith('549')) {
+    telefonoNormalizado = '+54' + telefono.slice(3);
+  } else if (telefono.startsWith('54')) {
+    telefonoNormalizado = '+' + telefono;
+  } else if (telefono.startsWith('+')) {
+    telefonoNormalizado = telefono;
+  } else {
+    telefonoNormalizado = '+' + telefono;
+  }
+
+  const urlStr = `https://graph.facebook.com/v25.0/${WHATSAPP_PHONE_ID}/messages`;
+  const urlObj = new URL(urlStr);
+
+  // El objeto "interactive" es el formato que exige Meta para este tipo de mensaje.
+  // "body.text" es el texto que el usuario ve antes de abrir la lista o los botones.
+  const bodyStr = JSON.stringify({
+    messaging_product: 'whatsapp',
+    to:          telefonoNormalizado,
+    type:        'interactive',
+    interactive: {
+      type:   tipo,
+      body:   { text: cuerpo },
+      action: acciones,
+    },
+  });
+
+  return new Promise((resolve) => {
+    const opciones = {
+      hostname: urlObj.hostname,
+      path:     urlObj.pathname,
+      method:   'POST',
+      headers: {
+        'Authorization':  `Bearer ${WHATSAPP_TOKEN}`,
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+      },
+    };
+
+    const req = https.request(opciones, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(null);
+        } else {
+          logger.error(`❌ Error al enviar mensaje interactivo (HTTP ${res.statusCode}): ${data}`);
+          resolve(null);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      logger.error(`❌ Error de red al enviar interactivo a ${telefono}: ${err.message}`);
+      resolve(null);
+    });
+
+    req.setTimeout(30000, () => {
+      req.destroy(new Error('Timeout al enviar mensaje interactivo'));
+    });
+
+    // TODO: eliminar este log una vez resuelto el diagnóstico de mensajes interactivos.
+    logger.info('📤 enviarMensajeInteractivo body: ' + bodyStr);
+
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: enviarLista(telefono, texto, opciones)
+// ---------------------------------------------------------------
+// Construye y envía un mensaje de tipo "lista" a WhatsApp.
+// Las listas muestran un botón "Ver opciones" que al tocarlo despliega
+// una hoja con todas las opciones disponibles para elegir una.
+// Son el equivalente a los Inline Keyboards de Telegram cuando hay
+// más de 3 opciones.
+//
+// Parámetros:
+//   telefono → número de destino
+//   texto    → texto del mensaje que aparece antes de la lista
+//   opciones → array de { id, titulo }. El id llega en list_reply.id
+//              del webhook y equivale al callback_data de Telegram.
+async function enviarLista(telefono, texto, opciones) {
+
+  // Convertimos al formato que espera la API de Meta para las filas de una lista.
+  // La API limita el título de cada fila a 24 caracteres; truncamos si es necesario.
+  const rows = opciones.map((op) => ({
+    id:    op.id,
+    title: op.titulo.substring(0, 24),
+  }));
+
+  // Una lista de WhatsApp agrupa filas en "sections". Usamos una sola sección
+  // llamada "Opciones" ya que no necesitamos categorizar las elecciones.
+  const acciones = {
+    button:   'Ver opciones',
+    sections: [{ title: 'Opciones', rows }],
+  };
+
+  return enviarMensajeInteractivo(telefono, 'list', texto, acciones);
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: enviarBotones(telefono, texto, botones)
+// ---------------------------------------------------------------
+// Construye y envía un mensaje con botones de respuesta rápida a WhatsApp.
+// A diferencia de las listas, los botones aparecen directamente debajo
+// del mensaje. Máximo 3 botones por limitación de la API de Meta.
+// Son el equivalente a los botones de confirmación (Sí/No) de Telegram.
+//
+// Parámetros:
+//   telefono → número de destino
+//   texto    → texto del mensaje que aparece sobre los botones
+//   botones  → array de { id, titulo }, máximo 3 elementos.
+//              El id llega en button_reply.id del webhook.
+async function enviarBotones(telefono, texto, botones) {
+
+  // Convertimos al formato que espera la API para botones de tipo "reply".
+  // La API limita el título de cada botón a 20 caracteres; truncamos si es necesario.
+  // Tomamos como máximo 3 botones (límite de la API de Meta).
+  const buttons = botones.slice(0, 3).map((b) => ({
+    type:  'reply',
+    reply: {
+      id:    b.id,
+      title: b.titulo.substring(0, 20),
+    },
+  }));
+
+  return enviarMensajeInteractivo(telefono, 'button', texto, { buttons });
+}
 
 cargarTramites();
 
@@ -596,7 +941,7 @@ function gestionarTimeout(chatId) {
 
     // Notificamos al usuario que su sesión expiró.
     try {
-      await bot.sendMessage(
+      await enviarMensaje(
         chatId,
         '⏳ Tu sesión ha expirado por inactividad.\n\n' +
         'Escribí *Menu* para volver al inicio cuando quieras.',
@@ -609,16 +954,60 @@ function gestionarTimeout(chatId) {
 }
 
 // ---------------------------------------------------------------
-// 11. MANEJADOR PRINCIPAL DE MENSAJES
+// 11. FUNCIÓN PRINCIPAL: procesarMensajeEntrante(body)
 // ---------------------------------------------------------------
-// Toda la lógica conversacional vive en este único bloque.
-// El evento 'message' se dispara con cada mensaje que llega al bot.
-bot.on('message', async (msg) => {
-  const chatId = msg.chat.id;
-  const texto = msg.text;
+// Recibe el body completo del webhook de Meta, extrae los datos del
+// mensaje entrante y ejecuta toda la lógica conversacional.
+//
+// Meta puede enviarnos dos tipos de notificaciones POST:
+//   a) Mensajes entrantes: el vecino nos escribió algo.
+//   b) Notificaciones de estado: el mensaje fue entregado o leído.
+// Solo procesamos el tipo a); el tipo b) lo ignoramos silenciosamente.
+async function procesarMensajeEntrante(body) {
 
-  // Ignoramos mensajes sin texto (fotos, stickers, archivos, etc.)
-  if (!texto) return;
+  // El payload de Meta tiene varios niveles de anidación. Usamos
+  // optional chaining (?.) para que si algún nivel no existe, el código
+  // no lance un error sino que simplemente devuelva 'undefined'.
+  const value = body?.entry?.[0]?.changes?.[0]?.value;
+
+  // Si no hay mensajes en el payload es una notificación de estado
+  // (entregado, leído, etc.). Salimos sin hacer nada.
+  if (!value?.messages || value.messages.length === 0) return;
+
+  // Tomamos el primer mensaje (Meta normalmente envía uno por notificación).
+  const mensaje = value.messages[0];
+
+  // wa_id es el número de teléfono del remitente en formato internacional
+  // (por ejemplo "5492944123456"). Cumple el mismo rol que chatId en
+  // Telegram: identifica de forma única al usuario en la conversación.
+  const chatId = value.contacts?.[0]?.wa_id;
+  if (!chatId) return;
+
+  // Si el mensaje es interactivo (respuesta a una lista o un botón de respuesta rápida)
+  // extraemos el id de la opción elegida. Ese id es equivalente al callback_data de
+  // Telegram: contiene el mismo valor que usábamos allí (ej: "tramite_0", "confirmar_turno").
+  // Llamamos a procesarCallback() que contiene toda la lógica de manejo de interacciones.
+  if (mensaje.type === 'interactive') {
+    // Meta envía list_reply si el usuario eligió de una lista, button_reply si tocó un botón.
+    const data = mensaje.interactive?.list_reply?.id || mensaje.interactive?.button_reply?.id;
+    if (!data) return;
+    // Procesamos el id exactamente igual que procesábamos callback_data en Telegram.
+    await procesarCallback(chatId, data);
+    return;
+  }
+
+  // Si el mensaje no es texto ni interactivo (imagen, audio, video, documento, etc.)
+  // avisamos al vecino y salimos.
+  if (mensaje.type !== 'text') {
+    await enviarMensaje(chatId, 'Por el momento solo puedo procesar mensajes de texto o selecciones de menú. Por favor, escribí Menu para comenzar.');
+    return;
+  }
+
+  // Extraemos el texto del mensaje. En la API de Meta el contenido está en text.body.
+  const texto = mensaje.text.body;
+
+  // A partir de acá la lógica es idéntica al handler de Telegram original.
+  // chatId = wa_id del remitente, texto = contenido del mensaje recibido.
 
   // Reinicio global del flujo: si el usuario escribe "menu", "hola", etc.
   // desde cualquier estado que no sea INICIAL, limpiamos su sesión y lo
@@ -627,7 +1016,8 @@ bot.on('message', async (msg) => {
   if (esSaludo(texto) && estadoActualParaReinicio !== 'INICIAL') {
     delete registrosEnProceso[chatId];
     estadosUsuarios[chatId] = 'ESPERANDO_DNI';
-    bot.sendMessage(chatId, mensajeBienvenida(), { parse_mode: 'Markdown' });
+    // Usamos enviarMensaje() en lugar de enviarMensaje() (migración a WhatsApp).
+    enviarMensaje(chatId, mensajeBienvenida());
     return;
   }
 
@@ -639,7 +1029,8 @@ bot.on('message', async (msg) => {
   // Obtenemos el estado actual del usuario (INICIAL si es la primera vez)
   const estadoActual = estadosUsuarios[chatId] || 'INICIAL';
 
-  logger.info(`📩 ${msg.chat.first_name} (${chatId}) | Estado: ${estadoActual} | Texto: "${texto}"`);
+  // Usamos el número de WhatsApp (chatId = wa_id) en lugar del nombre de Telegram.
+  logger.info(`📩 WhatsApp (${chatId}) | Estado: ${estadoActual} | Texto: "${texto}"`);
 
   // ==============================================================
   // RAMA A: Comando /start o saludo en estado INICIAL
@@ -647,7 +1038,7 @@ bot.on('message', async (msg) => {
   // ==============================================================
   if (texto.startsWith('/start') || (estadoActual === 'INICIAL' && esSaludo(texto))) {
     estadosUsuarios[chatId] = 'ESPERANDO_DNI';
-    bot.sendMessage(chatId, mensajeBienvenida(), { parse_mode: 'Markdown' });
+    enviarMensaje(chatId, mensajeBienvenida(), { parse_mode: 'Markdown' });
     return;
   }
 
@@ -658,7 +1049,7 @@ bot.on('message', async (msg) => {
 
     // B1: Validación de formato
     if (!esDniValido(texto)) {
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         '⚠️ El DNI ingresado no es válido.\n' +
         'Tiene que ser solo números, sin puntos ni espacios, y tener entre 7 y 8 dígitos.\n' +
@@ -680,7 +1071,7 @@ bot.on('message', async (msg) => {
       citasActivas = await ea.obtenerCitasDelCliente(emailVecino);
     } catch (error) {
       logger.error(`❌ Error al consultar citas para DNI ${dniIngresado}:`, error.message);
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         '⚠️ Hubo un problema al consultar tu información. Puede ser una falla momentánea.\n\n' +
         'Esperá unos segundos e intentá ingresar tu DNI de nuevo, o escribí *Menu* para volver al inicio.',
@@ -698,7 +1089,7 @@ bot.on('message', async (msg) => {
       registrosEnProceso[chatId] = { dni: dniIngresado };
       estadosUsuarios[chatId] = 'ESPERANDO_NOMBRE';
 
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         'No encontramos registros para tu DNI. Vamos a registrarte.\n' +
         'Por favor, ingresá tu Nombre y Apellido:'
@@ -731,21 +1122,16 @@ bot.on('message', async (msg) => {
         renglonesTurnos.join('\n') +
         '\n\n¿Qué querés hacer?';
 
-      bot.sendMessage(chatId, textoBienvenida, {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: construirTecladoGestion(true) },
-      });
+      // Enviamos el saludo y el menú de gestión (lista porque hay 4 opciones).
+      enviarMenuGestion(chatId, textoBienvenida, true);
       return;
     }
 
-    // B2b: El vecino existe pero no tiene turnos activos → menú reducido.
-    bot.sendMessage(
+    // B2b: El vecino existe pero no tiene turnos activos → menú reducido como botones (2 opciones).
+    enviarMenuGestion(
       chatId,
-      `👋 Hola *${nombre}*, no tenés turnos activos por el momento.\n\n¿Qué querés hacer?`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: construirTecladoGestion(false) },
-      }
+      `👋 Hola ${nombre}, no tenés turnos activos por el momento.\n\n¿Qué querés hacer?`,
+      false
     );
     return;
   }
@@ -763,15 +1149,11 @@ bot.on('message', async (msg) => {
     // Pasamos al siguiente estado: elegir el trámite
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
-    // Enviamos el mensaje con el Inline Keyboard de trámites.
-    // teclasMenuTramites() devuelve el array de filas listo para usar en reply_markup.
-    bot.sendMessage(
+    // Enviamos la bienvenida con la lista de trámites disponibles.
+    enviarLista(
       chatId,
-      `¡Bienvenido, *${nombreIngresado}*! ¿Qué trámite querés realizar?`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: teclasMenuTramites() },
-      }
+      `¡Bienvenido, ${nombreIngresado}! ¿Qué trámite querés realizar?`,
+      opcionesTramites()
     );
     return;
   }
@@ -798,28 +1180,25 @@ bot.on('message', async (msg) => {
 
   const orientacion = mensajesOrientadores[estadoActual] || 'No estoy seguro de en qué paso estamos.';
 
-  bot.sendMessage(
+  enviarMensaje(
     chatId,
     `${orientacion}\n\nSi preferís empezar de cero, escribí *Menu*.`,
     { parse_mode: 'Markdown' }
   );
-});
+}
 
 // ---------------------------------------------------------------
-// 12. MANEJADOR DE CALLBACKS (botones Inline Keyboard)
+// 12. FUNCIÓN: procesarCallback(chatId, data)
 // ---------------------------------------------------------------
-// El evento 'callback_query' se dispara cada vez que el usuario
-// hace clic en un botón de un Inline Keyboard.
-bot.on('callback_query', async (query) => {
-  const chatId = query.message.chat.id;
-  const data = query.data; // El valor de callback_data del botón presionado
+// Procesa una acción del usuario disparada por un botón o lista de WhatsApp.
+// Recibe el chatId (wa_id del usuario) y el id de la opción elegida,
+// que es equivalente al callback_data que usábamos en Telegram.
+// Es llamada desde procesarMensajeEntrante() cuando llega un mensaje
+// de tipo "interactive" (respuesta a lista o botón de respuesta rápida).
+async function procesarCallback(chatId, data) {
 
-  // Reiniciamos el temporizador de inactividad con cada pulsación de botón,
-  // igual que hacemos en el manejador de mensajes de texto.
+  // Reiniciamos el temporizador de inactividad, igual que en los mensajes de texto.
   gestionarTimeout(chatId);
-
-  // Siempre respondemos al callback para que Telegram quite el "reloj" del botón.
-  bot.answerCallbackQuery(query.id);
 
   const estadoActual = estadosUsuarios[chatId];
 
@@ -836,7 +1215,7 @@ bot.on('callback_query', async (query) => {
     // Verificamos que el índice sea un número válido y que exista en el array.
     // isNaN() devuelve true si parseInt() no pudo convertir el string a número.
     if (isNaN(indice) || !TRAMITES[indice]) {
-      bot.sendMessage(chatId, '⚠️ Ocurrió un error al procesar tu selección. Por favor, intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ Ocurrió un error al procesar tu selección. Por favor, intentá de nuevo.');
       return;
     }
 
@@ -845,17 +1224,12 @@ bot.on('callback_query', async (query) => {
     registrosEnProceso[chatId].tramite = TRAMITES[indice];
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    // Mostramos el selector de semanas: primer paso del nuevo flujo de fechas.
-    // "await" es necesario porque proximasSemanas() ahora consulta la API de feriados
-    // y devuelve una Promise; sin await, semanasT sería la Promise en sí (no el array).
+    // Mostramos el selector de semanas como lista de WhatsApp.
     const semanasT = await proximasSemanas(30);
-    bot.sendMessage(
+    enviarLista(
       chatId,
-      `📋 Trámite elegido: *${TRAMITES[indice]}*\n\n📅 Ahora elegí una semana:`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: construirBotonesSemanas(semanasT) },
-      }
+      `📋 Trámite elegido: ${TRAMITES[indice]}\n\n📅 Ahora elegí una semana:`,
+      opcionesSemanas(semanasT)
     );
     return;
   }
@@ -871,7 +1245,7 @@ bot.on('callback_query', async (query) => {
     if (!dniCancelar) {
       delete registrosEnProceso[chatId];
       estadosUsuarios[chatId] = 'INICIAL';
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         'No hay problema. Si en algún momento querés sacar un turno, escribí *Menu* y arrancamos de nuevo.',
         { parse_mode: 'Markdown' }
@@ -884,7 +1258,7 @@ bot.on('callback_query', async (query) => {
       citasCancelar = await ea.obtenerCitasDelCliente(`dni_${dniCancelar}@municipio.local`);
     } catch (error) {
       logger.error(`❌ Error al consultar citas al cancelar trámite (DNI ${dniCancelar}):`, error.message);
-      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
 
@@ -903,20 +1277,17 @@ bot.on('callback_query', async (query) => {
       registrosEnProceso[chatId].nombre = nombreC;
       estadosUsuarios[chatId] = 'MENU_GESTION';
 
-      bot.sendMessage(
+      enviarMenuGestion(
         chatId,
-        `👋 Hola *${nombreC}*, estos son tus turnos activos:\n\n` +
+        `👋 Hola ${nombreC}, estos son tus turnos activos:\n\n` +
         renglones.join('\n') + '\n\n¿Qué querés hacer?',
-        {
-          parse_mode: 'Markdown',
-          reply_markup: { inline_keyboard: construirTecladoGestion(true) },
-        }
+        true
       );
     } else {
       // Sin turnos → es vecino nuevo que canceló; despedida amigable.
       delete registrosEnProceso[chatId];
       estadosUsuarios[chatId] = 'INICIAL';
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         'No hay problema. Si en algún momento querés sacar un turno, escribí *Menu* y arrancamos de nuevo.',
         { parse_mode: 'Markdown' }
@@ -944,17 +1315,17 @@ bot.on('callback_query', async (query) => {
       cursor.setDate(cursor.getDate() + 1);
     }
 
-    const botonesDias = diasDeSemana.map((dia) => ([{
-      text: formatearFechaTexto(dia),
-      callback_data: `fecha_${formatearFechaClave(dia)}`,
-    }]));
-    botonesDias.push([{ text: '⬅️ Volver a elegir semana', callback_data: 'volver_semanas' }]);
+    // Construimos las opciones de días hábiles para la lista de WhatsApp.
+    const opcionesDias = diasDeSemana.map((dia) => ({
+      id:     `fecha_${formatearFechaClave(dia)}`,
+      titulo: formatearFechaTexto(dia),
+    }));
+    // Título acortado para respetar el límite de 24 caracteres de las filas de lista de WhatsApp.
+    opcionesDias.push({ id: 'volver_semanas', titulo: '↩️ Volver' });
 
     estadosUsuarios[chatId] = 'ESPERANDO_FECHA';
 
-    bot.sendMessage(chatId, '📅 Ahora elegí el día:', {
-      reply_markup: { inline_keyboard: botonesDias },
-    });
+    enviarLista(chatId, '📅 Ahora elegí el día:', opcionesDias);
     return;
   }
 
@@ -970,7 +1341,7 @@ bot.on('callback_query', async (query) => {
       citasVT = await ea.obtenerCitasDelCliente(`dni_${dniVT}@municipio.local`);
     } catch (error) {
       logger.error(`❌ Error al consultar citas al volver a trámite (DNI ${dniVT}):`, error.message);
-      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
 
@@ -986,16 +1357,14 @@ bot.on('callback_query', async (query) => {
       .map(({ i }) => i);
 
     if (indicesDisponibles.length === 0) {
-      bot.sendMessage(chatId, '⚠️ Ya tenés turnos activos para todos los trámites disponibles.');
+      enviarMensaje(chatId, '⚠️ Ya tenés turnos activos para todos los trámites disponibles.');
       return;
     }
 
     delete registrosEnProceso[chatId].tramite;
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
-    bot.sendMessage(chatId, '📋 ¿Qué trámite querés realizar?', {
-      reply_markup: { inline_keyboard: teclasMenuTramites(indicesDisponibles) },
-    });
+    enviarLista(chatId, '📋 ¿Qué trámite querés realizar?', opcionesTramites(indicesDisponibles));
     return;
   }
 
@@ -1006,11 +1375,8 @@ bot.on('callback_query', async (query) => {
 
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
     const semanasVolver = await proximasSemanas(30);
-    bot.sendMessage(chatId, '📅 Elegí una semana:', {
-      reply_markup: { inline_keyboard: construirBotonesSemanas(semanasVolver) },
-    });
+    enviarLista(chatId, '📅 Elegí una semana:', opcionesSemanas(semanasVolver));
     return;
   }
 
@@ -1042,7 +1408,7 @@ bot.on('callback_query', async (query) => {
     // Recargamos y pedimos al usuario que intente de nuevo.
     if (!servicioElegido) {
       await cargarTramites();
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         '⚠️ Hubo un problema al identificar el trámite. Por favor, escribí /start para intentar de nuevo.'
       );
@@ -1110,17 +1476,12 @@ bot.on('callback_query', async (query) => {
       // Volvemos al selector de semanas para que el vecino elija otra fecha.
       estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-      // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
       const semanasNoSlots = await proximasSemanas(30);
-      bot.sendMessage(
+      enviarLista(
         chatId,
-        `⚠️ No hay horarios disponibles para *${fechaTexto}* ` +
-        `en el trámite de *${tramiteElegido}*.\n\n` +
-        `Por favor, elegí otra semana:`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: { inline_keyboard: construirBotonesSemanas(semanasNoSlots) },
-        }
+        `⚠️ No hay horarios disponibles para ${fechaTexto} ` +
+        `en el trámite de ${tramiteElegido}.\n\nPor favor, elegí otra semana:`,
+        opcionesSemanas(semanasNoSlots)
       );
       return;
     }
@@ -1130,33 +1491,38 @@ bot.on('callback_query', async (query) => {
     registrosEnProceso[chatId].fecha = fechaClave;
     estadosUsuarios[chatId] = 'ESPERANDO_HORARIO';
 
-    // Construimos el Inline Keyboard con los horarios libres y el botón de retroceso.
-    // El array de filas tiene dos elementos:
-    //   - Fila 1: un botón por cada horario disponible, todos en la misma fila horizontal.
-    //   - Fila 2: botón de retroceso en su propia fila para que sea bien visible.
-    // Agrupamos los horarios de a pares para mostrarlos en filas de 2 columnas.
-    // Así son más compactos visualmente sin perder legibilidad.
-    const filasHorarios = [];
-    for (let i = 0; i < horariosLibres.length; i += 2) {
-      const fila = [{ text: `🕐 ${horariosLibres[i]}`, callback_data: `horario_${horariosLibres[i]}` }];
-      if (horariosLibres[i + 1]) {
-        fila.push({ text: `🕐 ${horariosLibres[i + 1]}`, callback_data: `horario_${horariosLibres[i + 1]}` });
-      }
-      filasHorarios.push(fila);
+    // Guardamos TODOS los horarios disponibles y la página actual (0 = primera).
+    // Esto permite la navegación bidireccional cuando hay más de 8 horarios en el día.
+    registrosEnProceso[chatId].todosLosHorarios = horariosLibres;
+    registrosEnProceso[chatId].paginaHorarios   = 0;
+
+    // WhatsApp permite máximo 10 filas por lista.
+    // Con 8 horarios por página quedan 2 filas libres para los botones de navegación.
+    const HORARIOS_POR_PAGINA = 8;
+    const fin0          = HORARIOS_POR_PAGINA;
+    // ¿Hay más horarios a partir de la página 2?
+    const haySiguiente0 = horariosLibres.length > fin0;
+
+    // Construimos las filas de horarios de la primera página.
+    const opcionesHorarios = horariosLibres.slice(0, fin0).map((h) => ({
+      id:     `horario_${h}`,
+      titulo: `🕐 ${h}`,
+    }));
+
+    // En la primera página nunca hay botón "Anterior".
+    // Si hay más horarios adelante, mostramos "Ver más" apuntando a la página 1.
+    if (haySiguiente0) {
+      opcionesHorarios.push({ id: 'mas_horarios_1', titulo: '➡️ Ver más' });
     }
 
-    const botonesHorarios = [
-      ...filasHorarios,
-      [{ text: '⬅️ Volver a elegir fecha', callback_data: 'volver_fechas' }],
-    ];
+    // "↩️ Volver" aparece siempre en la primera página (y en la última).
+    // En páginas intermedias no se muestra: el vecino usa "⬅️ Anterior" para retroceder.
+    opcionesHorarios.push({ id: 'volver_fechas', titulo: '↩️ Volver' });
 
-    bot.sendMessage(
+    enviarLista(
       chatId,
-      `📅 Fecha elegida: *${fechaTexto}*\n\n🕐 Ahora elegí un horario:`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: botonesHorarios },
-      }
+      `📅 Fecha elegida: ${fechaTexto}\n\n🕐 Ahora elegí un horario:`,
+      opcionesHorarios
     );
     return;
   }
@@ -1194,23 +1560,19 @@ bot.on('callback_query', async (query) => {
 
     estadosUsuarios[chatId] = 'ESPERANDO_CONFIRMACION';
 
-    bot.sendMessage(
+    // Usamos botones de respuesta rápida para la confirmación (Sí/No).
+    enviarBotones(
       chatId,
       `¿Confirmás el siguiente turno?\n\n` +
-      `👤 *Nombre:* ${nombre}\n` +
-      `🪪 *DNI:* ${dni}\n` +
-      `📋 *Trámite:* ${tramite}\n` +
-      `📅 *Fecha:* ${fechaTexto}\n` +
-      `🕐 *Horario:* ${horarioElegido} hs`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '✅ Confirmar',  callback_data: 'confirmar_turno'        },
-            { text: '❌ Cancelar',   callback_data: 'cancelar_confirmacion'  },
-          ]],
-        },
-      }
+      `👤 Nombre: ${nombre}\n` +
+      `🪪 DNI: ${dni}\n` +
+      `📋 Trámite: ${tramite}\n` +
+      `📅 Fecha: ${fechaTexto}\n` +
+      `🕐 Horario: ${horarioElegido} hs`,
+      [
+        { id: 'confirmar_turno',       titulo: '✅ Confirmar' },
+        { id: 'cancelar_confirmacion', titulo: '❌ Cancelar'  },
+      ]
     );
     return;
   }
@@ -1248,7 +1610,7 @@ bot.on('callback_query', async (query) => {
       logger.info('📥 Respuesta de EA:', JSON.stringify(citaCreada));
     } catch (error) {
       logger.error(`❌ Error al crear cita en EA para DNI ${dni}:`, error.message);
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         '⚠️ Hubo un problema al confirmar tu turno. Es posible que ese horario haya sido tomado en este momento.\n\n' +
         'Escribí *Menu* para volver al inicio y elegir otro horario.',
@@ -1270,7 +1632,7 @@ bot.on('callback_query', async (query) => {
       ? 'Te esperamos. ¡Hasta pronto!'
       : 'Tu turno quedó registrado en el sistema. Te esperamos. ¡Hasta pronto!';
 
-    bot.sendMessage(
+    enviarMensaje(
       chatId,
       `${encabezadoConfirmacion}\n\n` +
       `👤 *Nombre:* ${nombre}\n` +
@@ -1303,13 +1665,8 @@ bot.on('callback_query', async (query) => {
 
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
     const semanasC3 = await proximasSemanas(30);
-    bot.sendMessage(
-      chatId,
-      '📅 Entendido. Elegí una nueva semana para tu turno:',
-      { reply_markup: { inline_keyboard: construirBotonesSemanas(semanasC3) } }
-    );
+    enviarLista(chatId, '📅 Entendido. Elegí una nueva semana para tu turno:', opcionesSemanas(semanasC3));
     return;
   }
 
@@ -1326,13 +1683,8 @@ bot.on('callback_query', async (query) => {
     // Retrocedemos al selector de semanas; el trámite y el nombre siguen guardados.
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
     const semanasD = await proximasSemanas(30);
-    bot.sendMessage(
-      chatId,
-      '📅 Elegí una semana para tu turno:',
-      { reply_markup: { inline_keyboard: construirBotonesSemanas(semanasD) } }
-    );
+    enviarLista(chatId, '📅 Elegí una semana para tu turno:', opcionesSemanas(semanasD));
     return;
   }
 
@@ -1345,7 +1697,7 @@ bot.on('callback_query', async (query) => {
     estadosUsuarios[chatId] = 'INICIAL';
     gestionarTimeout(chatId);
 
-    bot.sendMessage(
+    enviarMensaje(
       chatId,
       '¡Hasta luego! Si necesitás algo más, escribí *Menu* cuando quieras.',
       { parse_mode: 'Markdown' }
@@ -1367,7 +1719,7 @@ bot.on('callback_query', async (query) => {
       citasActivasE = await ea.obtenerCitasDelCliente(`dni_${dniEnProceso}@municipio.local`);
     } catch (error) {
       logger.error(`❌ Error al obtener citas para nuevo trámite (DNI ${dniEnProceso}):`, error.message);
-      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
 
@@ -1396,7 +1748,7 @@ bot.on('callback_query', async (query) => {
     // NO cambiamos el estado ni mostramos botones: solo enviamos el aviso informativo
     // y lo dejamos en MENU_GESTION para que pueda elegir otra acción.
     if (indicesDisponibles.length === 0) {
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         '⚠️ Ya tenés turnos activos para todos los trámites disponibles.'
       );
@@ -1407,13 +1759,7 @@ bot.on('callback_query', async (query) => {
     // y le mostramos solo los botones de los trámites que todavía puede reservar.
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
-    // Pasamos los índices filtrados a teclasMenuTramites() para que construya
-    // únicamente los botones correspondientes a los trámites disponibles.
-    bot.sendMessage(
-      chatId,
-      '📋 ¿Qué trámite querés agregar?',
-      { reply_markup: { inline_keyboard: teclasMenuTramites(indicesDisponibles) } }
-    );
+    enviarLista(chatId, '📋 ¿Qué trámite querés agregar?', opcionesTramites(indicesDisponibles));
     return;
   }
 
@@ -1435,7 +1781,7 @@ bot.on('callback_query', async (query) => {
     } catch (error) {
       logger.error(`❌ Error al obtener citas para modificar (DNI ${dniModificacion}):`, error.message);
       estadosUsuarios[chatId] = 'MENU_GESTION';
-      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
 
@@ -1443,7 +1789,7 @@ bot.on('callback_query', async (query) => {
     if (!citasModificacion || citasModificacion.citas.length === 0) {
 
       estadosUsuarios[chatId] = 'MENU_GESTION';
-      bot.sendMessage(chatId, '⚠️ No tenés turnos activos para modificar.');
+      enviarMensaje(chatId, '⚠️ No tenés turnos activos para modificar.');
       return;
     }
 
@@ -1452,30 +1798,19 @@ bot.on('callback_query', async (query) => {
     registrosEnProceso[chatId].citasModificacion = citasModificacion.citas;
 
 
-    // Construimos el Inline Keyboard: una fila por cada cita activa.
-    // IMPORTANTE: usamos cita.id (ID real de EA) en el callback_data, no el índice
-    // del array. Al confirmar, necesitamos ese ID para llamar a cancelarCita().
-    const botonesEditar = citasModificacion.citas.map((cita) => {
-
+    // Construimos las opciones para la lista de WhatsApp con los turnos a editar.
+    // Usamos cita.id (ID real de EA) como identificador de cada opción.
+    const opcionesEditar = citasModificacion.citas.map((cita) => {
       const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
       const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
       const horario       = cita.start.substring(11, 16);
-
-      return [{
-        text: `✏️ ${tramiteNombre} — ${fechaTexto} ${horario} hs`,
-        callback_data: `editar_${cita.id}`,
-      }];
+      return { id: `editar_${cita.id}`, titulo: `${tramiteNombre} ${fechaTexto} ${horario}` };
     });
+    // Título acortado para respetar el límite de 24 caracteres de las filas de lista de WhatsApp.
+    opcionesEditar.push({ id: 'volver_menu_gestion', titulo: '↩️ Volver' });
 
-    // Agregamos al final el botón de retroceso en su propia fila.
-    botonesEditar.push([{ text: '⬅️ Volver al menú', callback_data: 'volver_menu_gestion' }]);
-
-    bot.sendMessage(
-      chatId,
-      '¿Qué turno necesitás modificar?',
-      { reply_markup: { inline_keyboard: botonesEditar } }
-    );
+    enviarLista(chatId, '¿Qué turno necesitás modificar?', opcionesEditar);
     return;
   }
 
@@ -1490,7 +1825,7 @@ bot.on('callback_query', async (query) => {
     const appointmentId = parseInt(data.replace('editar_', ''), 10);
 
     if (isNaN(appointmentId)) {
-      bot.sendMessage(chatId, '⚠️ Ocurrió un error al procesar la selección. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ Ocurrió un error al procesar la selección. Intentá de nuevo.');
       return;
     }
 
@@ -1500,7 +1835,7 @@ bot.on('callback_query', async (query) => {
 
     // Si no se encuentra (botón desactualizado, sesión renovada, etc.), abortamos.
     if (!citaAEditar) {
-      bot.sendMessage(chatId, '⚠️ Ese turno ya no existe o la sesión expiró. Ingresá tu DNI para volver al menú.');
+      enviarMensaje(chatId, '⚠️ Ese turno ya no existe o la sesión expiró. Ingresá tu DNI para volver al menú.');
       delete registrosEnProceso[chatId];
       estadosUsuarios[chatId] = 'INICIAL';
       return;
@@ -1526,7 +1861,7 @@ bot.on('callback_query', async (query) => {
       await ea.cancelarCita(appointmentId);
     } catch (error) {
       logger.error(`❌ Error al liberar cita ${appointmentId} para modificar (DNI ${dniEditar}):`, error.message);
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         '⚠️ No pudimos liberar tu turno anterior. Por favor, intentá de nuevo.'
       );
@@ -1539,15 +1874,11 @@ bot.on('callback_query', async (query) => {
     // que cuando se saca un turno nuevo; no hace falta duplicar esa lógica.
     estadosUsuarios[chatId] = 'ESPERANDO_DIA';
 
-    // "await" es necesario porque proximasSemanas() es async: espera la consulta de feriados.
     const semanasE = await proximasSemanas(30);
-    bot.sendMessage(
+    enviarLista(
       chatId,
-      `Turno anterior liberado. 📅 Elegí la nueva semana para tu trámite de *${tramiteAEditar}*:`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: construirBotonesSemanas(semanasE) },
-      }
+      `Turno anterior liberado. 📅 Elegí la nueva semana para tu trámite de ${tramiteAEditar}:`,
+      opcionesSemanas(semanasE)
     );
     return;
   }
@@ -1561,7 +1892,7 @@ bot.on('callback_query', async (query) => {
 
     if (!dniVolver) {
       estadosUsuarios[chatId] = 'ESPERANDO_DNI';
-      bot.sendMessage(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
+      enviarMensaje(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
       return;
     }
 
@@ -1570,7 +1901,7 @@ bot.on('callback_query', async (query) => {
       citasVolver = await ea.obtenerCitasDelCliente(`dni_${dniVolver}@municipio.local`);
     } catch (error) {
       logger.error(`❌ Error al consultar citas al volver al menú (DNI ${dniVolver}):`, error.message);
-      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
 
@@ -1591,10 +1922,7 @@ bot.on('callback_query', async (query) => {
     registrosEnProceso[chatId].nombre = nombreVolver;
     estadosUsuarios[chatId] = 'MENU_GESTION';
 
-    bot.sendMessage(chatId, textoMenuV, {
-      parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: construirTecladoGestion(citasV.length > 0) },
-    });
+    enviarMenuGestion(chatId, textoMenuV, citasV.length > 0);
     return;
   }
 
@@ -1616,14 +1944,14 @@ bot.on('callback_query', async (query) => {
     } catch (error) {
       logger.error(`❌ Error al obtener citas para cancelar (DNI ${dniCancelacion}):`, error.message);
       estadosUsuarios[chatId] = 'MENU_GESTION';
-      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
 
     // Si no hay citas activas, no hay nada para cancelar.
     if (!citasCancelacion || citasCancelacion.citas.length === 0) {
       estadosUsuarios[chatId] = 'MENU_GESTION';
-      bot.sendMessage(chatId, '⚠️ No tenés turnos activos para cancelar.');
+      enviarMensaje(chatId, '⚠️ No tenés turnos activos para cancelar.');
       return;
     }
 
@@ -1632,31 +1960,19 @@ bot.on('callback_query', async (query) => {
     // La clave es el ID de la cita en EA, que también viaja en el callback_data del botón.
     registrosEnProceso[chatId].citasCancelacion = citasCancelacion.citas;
 
-    // Construimos el Inline Keyboard dinámico: una fila por cada cita activa.
-    // IMPORTANTE: el callback_data usa el ID real de EA (cita.id), NO el índice
-    // del array. Esto es necesario porque cancelarCita() requiere el ID de EA,
-    // no una posición relativa que puede cambiar entre consultas.
-    const botonesTurnos = citasCancelacion.citas.map((cita) => {
-      // Convertimos el formato de EA al texto legible para el botón.
-      const servicio     = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
+    // Construimos las opciones para la lista de WhatsApp con los turnos a cancelar.
+    // Usamos cita.id (ID real de EA) como identificador de cada opción.
+    const opcionesTurnos = citasCancelacion.citas.map((cita) => {
+      const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
-      const fechaTexto   = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
-      const horario      = cita.start.substring(11, 16);
-
-      return [{
-        text: `❌ ${tramiteNombre} — ${fechaTexto} ${horario} hs`,
-        callback_data: `borrar_${cita.id}`,
-      }];
+      const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
+      const horario       = cita.start.substring(11, 16);
+      return { id: `borrar_${cita.id}`, titulo: `${tramiteNombre} ${fechaTexto} ${horario}` };
     });
+    // Título acortado para respetar el límite de 24 caracteres de las filas de lista de WhatsApp.
+    opcionesTurnos.push({ id: 'volver_menu', titulo: '↩️ Volver' });
 
-    // Agregamos al final una fila con el botón de retroceso.
-    botonesTurnos.push([{ text: '⬅️ Volver al menú', callback_data: 'volver_menu' }]);
-
-    bot.sendMessage(
-      chatId,
-      'Seleccioná el turno que deseás cancelar:',
-      { reply_markup: { inline_keyboard: botonesTurnos } }
-    );
+    enviarLista(chatId, 'Seleccioná el turno que deseás cancelar:', opcionesTurnos);
     return;
   }
 
@@ -1668,7 +1984,7 @@ bot.on('callback_query', async (query) => {
     const appointmentId = parseInt(data.replace('borrar_', ''), 10);
 
     if (isNaN(appointmentId)) {
-      bot.sendMessage(chatId, '⚠️ Ocurrió un error al procesar la selección. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ Ocurrió un error al procesar la selección. Intentá de nuevo.');
       return;
     }
 
@@ -1676,7 +1992,7 @@ bot.on('callback_query', async (query) => {
     const citaACancelar    = citasCancelacion.find((c) => c.id === appointmentId);
 
     if (!citaACancelar) {
-      bot.sendMessage(chatId, '⚠️ Ese turno ya no existe o la sesión expiró. Ingresá tu DNI para volver al menú.');
+      enviarMensaje(chatId, '⚠️ Ese turno ya no existe o la sesión expiró. Ingresá tu DNI para volver al menú.');
       delete registrosEnProceso[chatId];
       estadosUsuarios[chatId] = 'INICIAL';
       return;
@@ -1694,21 +2010,18 @@ bot.on('callback_query', async (query) => {
     };
     estadosUsuarios[chatId] = 'ESPERANDO_CONFIRMACION_CANCELACION';
 
-    bot.sendMessage(
+    // Botones de respuesta rápida para confirmar o cancelar la cancelación.
+    enviarBotones(
       chatId,
       `¿Confirmás la cancelación del siguiente turno?\n\n` +
-      `📋 *Trámite:* ${tramiteCancelado}\n` +
-      `📅 *Fecha:* ${fechaCancelada}\n` +
-      `🕐 *Horario:* ${horarioCancelado} hs`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '✅ Confirmar cancelación', callback_data: 'confirmar_cancelacion' },
-            { text: '🔙 Volver al menú',        callback_data: 'volver_menu'           },
-          ]],
-        },
-      }
+      `📋 Trámite: ${tramiteCancelado}\n` +
+      `📅 Fecha: ${fechaCancelada}\n` +
+      `🕐 Horario: ${horarioCancelado} hs`,
+      [
+        { id: 'confirmar_cancelacion', titulo: '✅ Confirmar cancelación' },
+        // Título acortado para respetar el límite de 20 caracteres de los botones de WhatsApp.
+        { id: 'volver_menu', titulo: '↩️ Volver' },
+      ]
     );
     return;
   }
@@ -1725,7 +2038,7 @@ bot.on('callback_query', async (query) => {
       await ea.cancelarCita(appointmentId);
     } catch (error) {
       logger.error(`❌ Error al cancelar cita ${appointmentId} para DNI ${dniBorrar}:`, error.message);
-      bot.sendMessage(
+      enviarMensaje(
         chatId,
         '⚠️ No pudimos cancelar el turno en este momento. Por favor, intentá de nuevo.'
       );
@@ -1739,19 +2052,14 @@ bot.on('callback_query', async (query) => {
     delete registrosEnProceso[chatId].citaAConfirmarCancelacion;
     estadosUsuarios[chatId] = 'INICIAL';
 
-    bot.sendMessage(
+    // Un solo botón para volver al menú tras la cancelación exitosa.
+    enviarBotones(
       chatId,
-      `❌ Cancelaste exitosamente el turno de *${tramiteCancelado}* ` +
-      `del *${fechaCancelada}* a las *${horarioCancelado}* hs.\n\n` +
-      `Si necesitás hacer algo más, usá el botón de abajo.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '📋 Volver al menú', callback_data: 'volver_menu_post_cancelacion' }],
-          ],
-        },
-      }
+      `❌ Cancelaste exitosamente el turno de ${tramiteCancelado} ` +
+      `del ${fechaCancelada} a las ${horarioCancelado} hs.\n\n` +
+      `Si necesitás hacer algo más, tocá el botón de abajo.`,
+      // Título acortado para respetar el límite de 20 caracteres de los botones de WhatsApp.
+      [{ id: 'volver_menu_post_cancelacion', titulo: '↩️ Volver al menú' }]
     );
     return;
   }
@@ -1766,7 +2074,7 @@ bot.on('callback_query', async (query) => {
     // Si por alguna razón el DNI ya no está en memoria, pedimos que lo reingrese.
     if (!dniPostCancel) {
       estadosUsuarios[chatId] = 'ESPERANDO_DNI';
-      bot.sendMessage(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
+      enviarMensaje(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
       return;
     }
 
@@ -1777,7 +2085,7 @@ bot.on('callback_query', async (query) => {
       citasPostCancel = await ea.obtenerCitasDelCliente(`dni_${dniPostCancel}@municipio.local`);
     } catch (error) {
       logger.error(`❌ Error al consultar citas post-cancelación (DNI ${dniPostCancel}):`, error.message);
-      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
 
@@ -1813,12 +2121,7 @@ bot.on('callback_query', async (query) => {
     registrosEnProceso[chatId].nombre = nombre;
     estadosUsuarios[chatId] = 'MENU_GESTION';
 
-    const tecladoGestion = construirTecladoGestion(citasPostCancel.citas.length > 0);
-
-    bot.sendMessage(chatId, textoMenu, {
-      parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: tecladoGestion },
-    });
+    enviarMenuGestion(chatId, textoMenu, citasPostCancel.citas.length > 0);
     return;
   }
 
@@ -1831,7 +2134,7 @@ bot.on('callback_query', async (query) => {
 
     if (!dniMenu) {
       estadosUsuarios[chatId] = 'ESPERANDO_DNI';
-      bot.sendMessage(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
+      enviarMensaje(chatId, 'La sesión expiró. Por favor, ingresá tu DNI para volver al menú.');
       return;
     }
 
@@ -1840,7 +2143,7 @@ bot.on('callback_query', async (query) => {
       citasMenu = await ea.obtenerCitasDelCliente(`dni_${dniMenu}@municipio.local`);
     } catch (error) {
       logger.error(`❌ Error al consultar citas al volver al menú (DNI ${dniMenu}):`, error.message);
-      bot.sendMessage(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
+      enviarMensaje(chatId, '⚠️ No pudimos consultar tus turnos en este momento. Intentá de nuevo.');
       return;
     }
 
@@ -1861,10 +2164,75 @@ bot.on('callback_query', async (query) => {
     registrosEnProceso[chatId].nombre = nombreMenu;
     estadosUsuarios[chatId] = 'MENU_GESTION';
 
-    bot.sendMessage(chatId, textoMenuM, {
-      parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: construirTecladoGestion(citasM.length > 0) },
-    });
+    enviarMenuGestion(chatId, textoMenuM, citasM.length > 0);
+    return;
+  }
+
+  // ==============================================================
+  // CALLBACK B2: Navegación entre páginas de horarios (anterior / siguiente)
+  // ==============================================================
+  // Maneja dos tipos de id, ambos con el número de página destino al final:
+  //   "mas_horarios_N"      → el vecino avanzó a la página N
+  //   "horarios_anterior_N" → el vecino retrocedió a la página N
+  // La lógica de construcción de filas es idéntica en ambos casos.
+  if (estadoActual === 'ESPERANDO_HORARIO' &&
+      (data.startsWith('mas_horarios_') || data.startsWith('horarios_anterior_'))) {
+
+    // Extraemos el número de página destino según el prefijo del id.
+    const pagina = data.startsWith('mas_horarios_')
+      ? parseInt(data.replace('mas_horarios_', ''), 10)
+      : parseInt(data.replace('horarios_anterior_', ''), 10);
+
+    // WhatsApp permite máximo 10 filas por lista.
+    // Con 8 horarios por página quedan 2 filas para los botones de navegación.
+    const HORARIOS_POR_PAGINA = 8;
+    const inicio = pagina * HORARIOS_POR_PAGINA;
+    const fin    = inicio + HORARIOS_POR_PAGINA;
+
+    // Recuperamos todos los horarios guardados al inicio de CALLBACK B.
+    const todosLosHorarios = registrosEnProceso[chatId].todosLosHorarios || [];
+    const horariosPagina   = todosLosHorarios.slice(inicio, fin);
+
+    // Calculamos si existe página anterior y/o página siguiente.
+    const hayAnterior  = pagina > 0;
+    const haySiguiente = fin < todosLosHorarios.length;
+
+    // Actualizamos la página actual en memoria.
+    registrosEnProceso[chatId].paginaHorarios = pagina;
+
+    // Construimos las filas de horarios de esta página.
+    const opcionesHorariosPag = horariosPagina.map((h) => ({
+      id:     `horario_${h}`,
+      titulo: `🕐 ${h}`,
+    }));
+
+    // Si no es la primera página, mostramos "Anterior" para que el vecino pueda retroceder.
+    // El id lleva el número de la página anterior (pagina - 1).
+    if (hayAnterior) {
+      opcionesHorariosPag.push({ id: `horarios_anterior_${pagina - 1}`, titulo: '⬅️ Anterior' });
+    }
+
+    // Si hay más horarios adelante, mostramos "Ver más" con el número de la siguiente página.
+    if (haySiguiente) {
+      opcionesHorariosPag.push({ id: `mas_horarios_${pagina + 1}`, titulo: '➡️ Ver más' });
+    }
+
+    // "↩️ Volver" aparece solo en la primera página (sin anterior) o en la última (sin siguiente).
+    // En páginas intermedias el vecino usa "⬅️ Anterior" para retroceder, por lo que
+    // agregar "Volver" solo añadiría ruido y podría superar las 10 filas del límite de WhatsApp.
+    if (!hayAnterior || !haySiguiente) {
+      opcionesHorariosPag.push({ id: 'volver_fechas', titulo: '↩️ Volver' });
+    }
+
+    // Recuperamos la fecha guardada para mostrarla en el encabezado del mensaje.
+    const fechaGuardada = registrosEnProceso[chatId].fecha;
+    const fechaTextoPag = formatearFechaTexto(new Date(`${fechaGuardada}T12:00:00`));
+
+    enviarLista(
+      chatId,
+      `📅 Fecha elegida: ${fechaTextoPag}\n\n🕐 Elegí un horario:`,
+      opcionesHorariosPag
+    );
     return;
   }
 
@@ -1888,20 +2256,19 @@ bot.on('callback_query', async (query) => {
   // al usuario confundido sin respuesta), le explicamos qué pasó
   // y le indicamos cómo volver a empezar.
   //
-  // Nota: bot.answerCallbackQuery() ya fue llamado al inicio de este
-  // manejador (línea superior al primer bloque), por lo que NO se
-  // repite aquí. Repetirlo causaría un error de Telegram porque el
-  // mismo query.id no puede ser respondido dos veces.
+  // En WhatsApp no existe el concepto de "responder al callback" como en Telegram.
+  // Llegamos acá porque el id de la opción elegida no coincidió con ninguna
+  // condición del flujo. Enviamos un mensaje explicativo al vecino.
   logger.info(`⚠️ Callback no reconocido — chatId: ${chatId}, data: "${data}", estado: "${estadoActual}"`);
 
-  bot.sendMessage(
+  enviarMensaje(
     chatId,
     '⚠️ Este botón ya no está disponible.\n\n' +
     'Es posible que tu sesión haya expirado o que sea de un paso anterior del flujo.\n\n' +
     'Escribí *Menu* para volver a empezar desde el principio.',
     { parse_mode: 'Markdown' }
   );
-});
+}
 
 // ---------------------------------------------------------------
 // 13. INICIAR EL SERVIDOR WEB
