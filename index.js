@@ -145,6 +145,7 @@ function proximosDiasHabiles(cantidad) {
 }
 
 // Formatea un objeto Date como texto legible en español (ej: "martes 17 de marzo").
+// Se usa en mensajes de texto normales donde el espacio no es limitado.
 function formatearFechaTexto(fecha) {
   return fecha.toLocaleDateString('es-AR', {
     weekday: 'long',
@@ -153,9 +154,49 @@ function formatearFechaTexto(fecha) {
   });
 }
 
+// Formatea un objeto Date como "DD/MM" (dos dígitos día / dos dígitos mes).
+// Se usa únicamente en títulos de botones y filas de lista, donde el espacio
+// es muy limitado (máximo 20 caracteres en botones, 24 en filas de lista de WhatsApp).
+// Ejemplo: 5 de abril → "05/04"
+function formatearFechaCorta(fecha) {
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  return `${dia}/${mes}`;
+}
+
 // Formatea un objeto Date como string compacto para usar en callback_data (ej: "2026-03-17").
 function formatearFechaClave(fecha) {
   return fecha.toISOString().split('T')[0];
+}
+
+// Construye el título de una fila de lista para mostrar un turno existente,
+// respetando el límite de 24 caracteres que impone WhatsApp en cada fila.
+//
+// Cálculo del espacio disponible para el nombre del trámite:
+//   24 (límite total de la fila)
+//   - fecha.length    (ej: "14/04" son 5 caracteres)
+//   - horario.length  (ej: "10:00" son 5 caracteres)
+//   - 2               (los dos espacios que separan las tres partes)
+//   = caracteres que le quedan al nombre del trámite
+//
+// Si el nombre entra completo, se usa tal cual.
+// Si no entra, se recorta y se agrega "…" para indicar que fue cortado.
+// Formato final: "NombreTrámite DD/MM HH:MM"
+function formatearTituloTurno(tramiteNombre, fecha, horario) {
+  const espacioDisponible = 24 - fecha.length - horario.length - 2;
+  const nombreTruncado = tramiteNombre.length <= espacioDisponible
+    ? tramiteNombre
+    : tramiteNombre.substring(0, espacioDisponible - 1) + '…';
+  return `${nombreTruncado} ${fecha} ${horario}`;
+}
+
+// Devuelve true si la cita todavía no ocurrió (su inicio es posterior a ahora).
+// Se usa para filtrar turnos vencidos de todas las listas que ve el vecino:
+// nadie debería ver, modificar ni cancelar un turno que ya pasó.
+// cita.start viene de EA en formato "YYYY-MM-DD HH:MM:SS", que JavaScript
+// convierte directamente a Date sin necesidad de parseo manual.
+function esCitaFutura(cita) {
+  return new Date(cita.start) > new Date();
 }
 
 // Construye el texto legible de una semana hábil dado su primer y último día.
@@ -355,6 +396,8 @@ function construirTecladoGestion(tieneTurnos) {
 // ---------------------------------------------------------------
 // Versión de construirTecladoGestion() adaptada para enviarLista().
 // Devuelve un array de { id, titulo } con las opciones del menú de gestión.
+// "Finalizar" ya NO está incluido en la lista: el vecino puede escribir
+// la palabra "Finalizar" directamente para salir, y el pie del mensaje se lo indica.
 function opcionesGestion(tieneTurnos) {
   const opciones = [
     { id: 'nuevo_tramite', titulo: '➕ Nuevo Trámite' },
@@ -363,7 +406,6 @@ function opcionesGestion(tieneTurnos) {
     opciones.push({ id: 'modificar_turno', titulo: '✏️ Modificar Turno' });
     opciones.push({ id: 'cancelar_turno',  titulo: '❌ Cancelar Turno'  });
   }
-  opciones.push({ id: 'finalizar_sesion', titulo: '🔚 Finalizar' });
   return opciones;
 }
 
@@ -382,10 +424,14 @@ function opcionesGestion(tieneTurnos) {
 //     directos y cómodos que abrir una lista, por eso los usamos en este caso.
 async function enviarMenuGestion(chatId, texto, tieneTurnos) {
   if (tieneTurnos) {
-    // 4 opciones → lista desplegable (supera el límite de 3 botones de WhatsApp).
-    return enviarLista(chatId, texto, opcionesGestion(true));
+    // Lista desplegable: con turnos activos hay 3 acciones (Nuevo, Modificar, Cancelar).
+    // "Finalizar" se quitó de la lista; en su lugar agregamos una línea al pie del
+    // mensaje para que el vecino sepa que puede escribir la palabra para terminar.
+    const textoConPie = texto + '\n\nSi querés terminar, escribí *Finalizar*.';
+    return enviarLista(chatId, textoConPie, opcionesGestion(true));
   }
-  // 2 opciones → botones de respuesta rápida, más simples y directos para el vecino.
+  // Sin turnos → 2 opciones: usamos botones de respuesta rápida.
+  // "Finalizar" se conserva como botón porque aquí no hay lista desplegable.
   return enviarBotones(chatId, texto, [
     { id: 'nuevo_tramite',    titulo: '➕ Nuevo Trámite' },
     { id: 'finalizar_sesion', titulo: '🔚 Finalizar'     },
@@ -413,12 +459,13 @@ function opcionesSemanas(semanas) {
 // ---------------------------------------------------------------
 // Versión de teclasMenuTramites() adaptada para enviarLista().
 // Devuelve un array de { id, titulo } con los trámites disponibles.
+// "Cancelar" ya NO está incluido en la lista: el vecino puede escribir
+// la palabra "Cancelar" directamente, y el pie del mensaje se lo recuerda.
 function opcionesTramites(indicesPermitidos) {
   const indices = indicesPermitidos !== undefined
     ? indicesPermitidos
     : TRAMITES.map((_, i) => i);
   const opciones = indices.map((i) => ({ id: `tramite_${i}`, titulo: TRAMITES[i] }));
-  opciones.push({ id: 'cancelar_tramite', titulo: '❌ Cancelar' });
   return opciones;
 }
 
@@ -940,11 +987,12 @@ function gestionarTimeout(chatId) {
     delete timeoutsSesion[chatId];
 
     // Notificamos al usuario que su sesión expiró.
+    // También recordamos las dos palabras clave para retomar o cancelar.
     try {
       await enviarMensaje(
         chatId,
         '⏳ Tu sesión ha expirado por inactividad.\n\n' +
-        'Escribí *Menu* para volver al inicio cuando quieras.',
+        'Escribí *Menu* para volver al inicio, o *Cancelar* para detener el proceso.',
         { parse_mode: 'Markdown' }
       );
     } catch (error) {
@@ -1016,8 +1064,44 @@ async function procesarMensajeEntrante(body) {
   if (esSaludo(texto) && estadoActualParaReinicio !== 'INICIAL') {
     delete registrosEnProceso[chatId];
     estadosUsuarios[chatId] = 'ESPERANDO_DNI';
-    // Usamos enviarMensaje() en lugar de enviarMensaje() (migración a WhatsApp).
     enviarMensaje(chatId, mensajeBienvenida());
+    return;
+  }
+
+  // Cancelación global del flujo: si el usuario escribe exactamente "cancelar"
+  // (sin importar mayúsculas ni tildes) y está en medio de algún proceso,
+  // limpiamos todo y lo devolvemos al estado inicial sin necesidad de
+  // que ingrese su DNI de nuevo.
+  const textoNormalizado = texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // quita tildes y diacríticos
+    .trim();
+
+  if (textoNormalizado === 'cancelar' && estadoActualParaReinicio !== 'INICIAL') {
+    delete registrosEnProceso[chatId];   // borramos cualquier dato parcial del trámite
+    estadosUsuarios[chatId] = 'INICIAL'; // volvemos al estado neutral
+    gestionarTimeout(chatId);            // cancela el timeout activo (no crea uno nuevo porque el estado es INICIAL)
+    enviarMensaje(
+      chatId,
+      'Proceso cancelado. Si necesitás algo más, escribí *Menu* cuando quieras.',
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  // Finalización global: si el usuario escribe exactamente "finalizar" desde
+  // cualquier estado activo, lo despedimos y limpiamos su sesión completa.
+  // Mismo efecto que tocar el botón "🔚 Finalizar" del menú de gestión.
+  if (textoNormalizado === 'finalizar' && estadoActualParaReinicio !== 'INICIAL') {
+    delete registrosEnProceso[chatId];   // borramos datos del trámite en curso
+    estadosUsuarios[chatId] = 'INICIAL'; // volvemos al estado neutral
+    gestionarTimeout(chatId);            // cancela el timeout activo
+    enviarMensaje(
+      chatId,
+      '¡Hasta luego! Si necesitás algo más, escribí *Menu* cuando quieras.',
+      { parse_mode: 'Markdown' }
+    );
     return;
   }
 
@@ -1102,10 +1186,14 @@ async function procesarMensajeEntrante(body) {
     registrosEnProceso[chatId] = { dni: dniIngresado, nombre };
     estadosUsuarios[chatId] = 'MENU_GESTION';
 
-    // B2a: El vecino existe Y tiene turnos activos → mostramos la lista y el menú completo.
-    if (citasCargadas.length > 0) {
+    // Filtramos los turnos pasados: solo mostramos y contamos los que aún no ocurrieron.
+    // Un turno vencido no tiene sentido en el menú porque no se puede modificar ni cancelar.
+    const citasFuturas = citasCargadas.filter(esCitaFutura);
 
-      const listaTurnos = citasCargadas.map((cita) => {
+    // B2a: El vecino existe Y tiene turnos futuros → mostramos la lista y el menú completo.
+    if (citasFuturas.length > 0) {
+
+      const listaTurnos = citasFuturas.map((cita) => {
         const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
         const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
         const fechaISO      = cita.start.substring(0, 10);
@@ -1127,10 +1215,11 @@ async function procesarMensajeEntrante(body) {
       return;
     }
 
-    // B2b: El vecino existe pero no tiene turnos activos → menú reducido como botones (2 opciones).
+    // B2b: El vecino existe pero no tiene turnos futuros → menú reducido como botones (2 opciones).
+    // El nombre va entre asteriscos para que aparezca en negrita en WhatsApp.
     enviarMenuGestion(
       chatId,
-      `👋 Hola ${nombre}, no tenés turnos activos por el momento.\n\n¿Qué querés hacer?`,
+      `👋 Hola *${nombre}*, no tenés turnos activos por el momento.\n\n¿Qué querés hacer?`,
       false
     );
     return;
@@ -1150,9 +1239,10 @@ async function procesarMensajeEntrante(body) {
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
     // Enviamos la bienvenida con la lista de trámites disponibles.
+    // Al pie recordamos que puede escribir "Cancelar" para salir en cualquier momento.
     enviarLista(
       chatId,
-      `¡Bienvenido, ${nombreIngresado}! ¿Qué trámite querés realizar?`,
+      `¡Bienvenido, ${nombreIngresado}! ¿Qué trámite querés realizar?\n\nSi no querés continuar, escribí *Cancelar*.`,
       opcionesTramites()
     );
     return;
@@ -1165,7 +1255,9 @@ async function procesarMensajeEntrante(body) {
   // ==============================================================
   // Construimos un mensaje orientador según el estado actual del usuario.
   // Si está en medio de un flujo, le explicamos qué se espera de él en ese paso.
-  // En todos los casos le recordamos que puede escribir Menu para reiniciar.
+  // Al pie de cada mensaje recordamos las dos palabras clave disponibles:
+  //   — "Cancelar" para abandonar el proceso actual y volver al estado inicial.
+  //   — "Menu"     para reiniciar desde cero (pide el DNI de nuevo).
   const mensajesOrientadores = {
     ESPERANDO_DNI:          'Estoy esperando que ingreses tu número de DNI (solo números, sin puntos ni espacios).\n\nEjemplo: *12345678*',
     ESPERANDO_NOMBRE:       'Estoy esperando que ingreses tu nombre y apellido completos.\n\nEjemplo: *Juan Pérez*',
@@ -1180,9 +1272,11 @@ async function procesarMensajeEntrante(body) {
 
   const orientacion = mensajesOrientadores[estadoActual] || 'No estoy seguro de en qué paso estamos.';
 
+  // Al pie recordamos ambas salidas disponibles: Cancelar (detiene el proceso actual)
+  // y Menu (reinicia desde cero pidiendo el DNI nuevamente).
   enviarMensaje(
     chatId,
-    `${orientacion}\n\nSi preferís empezar de cero, escribí *Menu*.`,
+    `${orientacion}\n\nSi querés detener el proceso, escribí *Cancelar*. Si preferís empezar de cero, escribí *Menu*.`,
     { parse_mode: 'Markdown' }
   );
 }
@@ -1262,11 +1356,15 @@ async function procesarCallback(chatId, data) {
       return;
     }
 
-    if (citasCancelar.citas && citasCancelar.citas.length > 0) {
+    // Filtramos los turnos pasados: solo cuentan los que todavía no ocurrieron
+    // para decidir si el vecino tiene turnos activos y para armar la lista del menú.
+    const citasFuturasA1b = (citasCancelar.citas || []).filter(esCitaFutura);
 
-      // El vecino ya tiene turnos activos → lo devolvemos al menú de gestión.
-      const nombreC    = citasCancelar.nombreCliente || registrosEnProceso[chatId].nombre || 'vecino/a';
-      const renglones  = citasCancelar.citas.map((cita, i) => {
+    if (citasFuturasA1b.length > 0) {
+
+      // El vecino ya tiene turnos futuros activos → lo devolvemos al menú de gestión.
+      const nombreC   = citasCancelar.nombreCliente || registrosEnProceso[chatId].nombre || 'vecino/a';
+      const renglones = citasFuturasA1b.map((cita, i) => {
         const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
         const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
         const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
@@ -1284,7 +1382,7 @@ async function procesarCallback(chatId, data) {
         true
       );
     } else {
-      // Sin turnos → es vecino nuevo que canceló; despedida amigable.
+      // Sin turnos futuros → vecino sin reservas vigentes; despedida amigable.
       delete registrosEnProceso[chatId];
       estadosUsuarios[chatId] = 'INICIAL';
       enviarMensaje(
@@ -1345,8 +1443,10 @@ async function procesarCallback(chatId, data) {
       return;
     }
 
+    // Solo bloqueamos trámites que tienen turnos futuros: si el único turno de
+    // un trámite ya pasó, el vecino debería poder reservar uno nuevo.
     const tramitesActivos = new Set();
-    (citasVT.citas || []).forEach((cita) => {
+    (citasVT.citas || []).filter(esCitaFutura).forEach((cita) => {
       const servicio = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       if (servicio) tramitesActivos.add(servicio.name);
     });
@@ -1364,7 +1464,8 @@ async function procesarCallback(chatId, data) {
     delete registrosEnProceso[chatId].tramite;
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
-    enviarLista(chatId, '📋 ¿Qué trámite querés realizar?', opcionesTramites(indicesDisponibles));
+    // Pie recordatorio: el vecino puede escribir "Cancelar" para salir sin elegir.
+    enviarLista(chatId, '📋 ¿Qué trámite querés realizar?\n\nSi no querés continuar, escribí *Cancelar*.', opcionesTramites(indicesDisponibles));
     return;
   }
 
@@ -1727,8 +1828,10 @@ async function procesarCallback(chatId, data) {
     // Usamos Set porque has() es más eficiente que includes() para búsquedas repetidas.
     // Convertimos serviceId → nombre usando TRAMITES_COMPLETOS para poder comparar
     // contra el array TRAMITES[], que trabaja con nombres (no con IDs numéricos).
+    // Solo bloqueamos los trámites con turnos futuros: si el turno ya pasó,
+    // el vecino puede volver a reservar ese trámite sin problema.
     const tramitesActivos = new Set();
-    (citasActivasE.citas || []).forEach((cita) => {
+    (citasActivasE.citas || []).filter(esCitaFutura).forEach((cita) => {
       const servicio = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       if (servicio) tramitesActivos.add(servicio.name);
     });
@@ -1759,7 +1862,8 @@ async function procesarCallback(chatId, data) {
     // y le mostramos solo los botones de los trámites que todavía puede reservar.
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
-    enviarLista(chatId, '📋 ¿Qué trámite querés agregar?', opcionesTramites(indicesDisponibles));
+    // Pie recordatorio: el vecino puede escribir "Cancelar" para salir sin elegir.
+    enviarLista(chatId, '📋 ¿Qué trámite querés agregar?\n\nSi no querés continuar, escribí *Cancelar*.', opcionesTramites(indicesDisponibles));
     return;
   }
 
@@ -1785,27 +1889,31 @@ async function procesarCallback(chatId, data) {
       return;
     }
 
-    // Si no hay citas activas, no hay nada que modificar.
-    if (!citasModificacion || citasModificacion.citas.length === 0) {
+    // Filtramos los turnos pasados: no tiene sentido modificar un turno que ya ocurrió.
+    const citasFuturasMod = (citasModificacion?.citas || []).filter(esCitaFutura);
+
+    // Si no quedan citas futuras, no hay nada que modificar.
+    if (citasFuturasMod.length === 0) {
 
       estadosUsuarios[chatId] = 'MENU_GESTION';
       enviarMensaje(chatId, '⚠️ No tenés turnos activos para modificar.');
       return;
     }
 
-    // Guardamos la lista de citas en memoria temporal para que CALLBACK F2
+    // Guardamos solo las citas futuras en memoria temporal para que CALLBACK F2
     // pueda identificar la cita elegida por su ID sin re-consultar EA.
-    registrosEnProceso[chatId].citasModificacion = citasModificacion.citas;
-
+    registrosEnProceso[chatId].citasModificacion = citasFuturasMod;
 
     // Construimos las opciones para la lista de WhatsApp con los turnos a editar.
     // Usamos cita.id (ID real de EA) como identificador de cada opción.
-    const opcionesEditar = citasModificacion.citas.map((cita) => {
+    // formatearTituloTurno() garantiza que el título no supere los 24 caracteres
+    // del límite de WhatsApp, truncando el nombre del trámite si fuera necesario.
+    const opcionesEditar = citasFuturasMod.map((cita) => {
       const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
-      const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
+      const fechaCorta    = formatearFechaCorta(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
       const horario       = cita.start.substring(11, 16);
-      return { id: `editar_${cita.id}`, titulo: `${tramiteNombre} ${fechaTexto} ${horario}` };
+      return { id: `editar_${cita.id}`, titulo: formatearTituloTurno(tramiteNombre, fechaCorta, horario) };
     });
     // Título acortado para respetar el límite de 24 caracteres de las filas de lista de WhatsApp.
     opcionesEditar.push({ id: 'volver_menu_gestion', titulo: '↩️ Volver' });
@@ -1906,7 +2014,8 @@ async function procesarCallback(chatId, data) {
     }
 
     const nombreVolver = citasVolver.nombreCliente || registrosEnProceso[chatId].nombre || 'vecino/a';
-    const citasV       = citasVolver.citas ?? [];
+    // Filtramos turnos pasados: el menú solo debe reflejar turnos que aún no ocurrieron.
+    const citasV = (citasVolver.citas ?? []).filter(esCitaFutura);
 
     const textoMenuV = citasV.length > 0
       ? `👋 Hola *${nombreVolver}*, estos son tus turnos activos:\n\n` +
@@ -1948,26 +2057,31 @@ async function procesarCallback(chatId, data) {
       return;
     }
 
-    // Si no hay citas activas, no hay nada para cancelar.
-    if (!citasCancelacion || citasCancelacion.citas.length === 0) {
+    // Filtramos los turnos pasados: no tiene sentido cancelar un turno que ya ocurrió.
+    const citasFuturasCan = (citasCancelacion?.citas || []).filter(esCitaFutura);
+
+    // Si no quedan citas futuras, no hay nada para cancelar.
+    if (citasFuturasCan.length === 0) {
       estadosUsuarios[chatId] = 'MENU_GESTION';
       enviarMensaje(chatId, '⚠️ No tenés turnos activos para cancelar.');
       return;
     }
 
-    // Guardamos la lista de citas en memoria temporal para que CALLBACK H
+    // Guardamos solo las citas futuras en memoria temporal para que CALLBACK H
     // pueda leer los datos del turno (tramite, fecha, horario) sin re-consultar EA.
     // La clave es el ID de la cita en EA, que también viaja en el callback_data del botón.
-    registrosEnProceso[chatId].citasCancelacion = citasCancelacion.citas;
+    registrosEnProceso[chatId].citasCancelacion = citasFuturasCan;
 
     // Construimos las opciones para la lista de WhatsApp con los turnos a cancelar.
     // Usamos cita.id (ID real de EA) como identificador de cada opción.
-    const opcionesTurnos = citasCancelacion.citas.map((cita) => {
+    // formatearTituloTurno() garantiza que el título no supere los 24 caracteres
+    // del límite de WhatsApp, truncando el nombre del trámite si fuera necesario.
+    const opcionesTurnos = citasFuturasCan.map((cita) => {
       const servicio      = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
       const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
-      const fechaTexto    = formatearFechaTexto(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
+      const fechaCorta    = formatearFechaCorta(new Date(`${cita.start.substring(0, 10)}T12:00:00`));
       const horario       = cita.start.substring(11, 16);
-      return { id: `borrar_${cita.id}`, titulo: `${tramiteNombre} ${fechaTexto} ${horario}` };
+      return { id: `borrar_${cita.id}`, titulo: formatearTituloTurno(tramiteNombre, fechaCorta, horario) };
     });
     // Título acortado para respetar el límite de 24 caracteres de las filas de lista de WhatsApp.
     opcionesTurnos.push({ id: 'volver_menu', titulo: '↩️ Volver' });
@@ -2018,8 +2132,9 @@ async function procesarCallback(chatId, data) {
       `📅 Fecha: ${fechaCancelada}\n` +
       `🕐 Horario: ${horarioCancelado} hs`,
       [
-        { id: 'confirmar_cancelacion', titulo: '✅ Confirmar cancelación' },
-        // Título acortado para respetar el límite de 20 caracteres de los botones de WhatsApp.
+        // Límite de WhatsApp: 20 caracteres por título de botón.
+        // '✅ Confirmar cancelación' tiene 21 → se acorta a '✅ Confirmar' (10 caracteres).
+        { id: 'confirmar_cancelacion', titulo: '✅ Confirmar' },
         { id: 'volver_menu', titulo: '↩️ Volver' },
       ]
     );
@@ -2091,10 +2206,13 @@ async function procesarCallback(chatId, data) {
 
     const nombre = citasPostCancel.nombreCliente || registrosEnProceso[chatId].nombre || 'vecino/a';
 
-    let textoMenu;
-    if (citasPostCancel.citas && citasPostCancel.citas.length > 0) {
+    // Filtramos turnos pasados: mostramos solo los que todavía no ocurrieron.
+    const citasFuturasPost = (citasPostCancel.citas || []).filter(esCitaFutura);
 
-      const listaTurnos = citasPostCancel.citas.map((cita) => {
+    let textoMenu;
+    if (citasFuturasPost.length > 0) {
+
+      const listaTurnos = citasFuturasPost.map((cita) => {
         const servicio     = TRAMITES_COMPLETOS.find((s) => s.id === cita.serviceId);
         const tramiteNombre = servicio ? servicio.name : `Servicio ${cita.serviceId}`;
         const fechaISO     = cita.start.substring(0, 10);
@@ -2121,7 +2239,7 @@ async function procesarCallback(chatId, data) {
     registrosEnProceso[chatId].nombre = nombre;
     estadosUsuarios[chatId] = 'MENU_GESTION';
 
-    enviarMenuGestion(chatId, textoMenu, citasPostCancel.citas.length > 0);
+    enviarMenuGestion(chatId, textoMenu, citasFuturasPost.length > 0);
     return;
   }
 
@@ -2148,7 +2266,8 @@ async function procesarCallback(chatId, data) {
     }
 
     const nombreMenu = citasMenu.nombreCliente || registrosEnProceso[chatId].nombre || 'vecino/a';
-    const citasM     = citasMenu.citas ?? [];
+    // Filtramos turnos pasados: el menú solo debe reflejar turnos que aún no ocurrieron.
+    const citasM = (citasMenu.citas ?? []).filter(esCitaFutura);
 
     const textoMenuM = citasM.length > 0
       ? `👋 Hola *${nombreMenu}*, estos son tus turnos activos:\n\n` +
