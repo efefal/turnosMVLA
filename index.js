@@ -374,22 +374,9 @@ function construirBotonesSemanas(semanas) {
   return filas;
 }
 
-// ---------------------------------------------------------------
-// 5b. TECLADO DE GESTIÓN DINÁMICO
-// ---------------------------------------------------------------
-// Devuelve el Inline Keyboard del menú principal adaptado a si el vecino
-// tiene turnos activos o no. Sin turnos, Modificar y Cancelar no aplican.
-function construirTecladoGestion(tieneTurnos) {
-  const filas = [
-    [{ text: '➕ Nuevo Trámite', callback_data: 'nuevo_tramite' }],
-  ];
-  if (tieneTurnos) {
-    filas.push([{ text: '✏️ Modificar Turno', callback_data: 'modificar_turno' }]);
-    filas.push([{ text: '❌ Cancelar Turno',  callback_data: 'cancelar_turno'  }]);
-  }
-  filas.push([{ text: '🔚 Finalizar', callback_data: 'finalizar_sesion' }]);
-  return filas;
-}
+// (construirTecladoGestion eliminada: código muerto de la versión Telegram,
+//  reemplazada por opcionesGestion() y nunca invocada en el archivo.)
+
 
 // ---------------------------------------------------------------
 // FUNCIÓN: opcionesGestion(tieneTurnos)
@@ -924,31 +911,8 @@ function mensajeBienvenida() {
   );
 }
 
-// Construye el array de filas de botones para el menú de trámites.
-// Acepta un parámetro opcional "indicesPermitidos": un array de números
-// que indica cuáles índices de TRAMITES deben mostrarse como botones.
-// Si no se pasa el parámetro, se muestran TODOS los trámites (comportamiento
-// original, usado cuando el usuario es nuevo y nunca sacó ningún turno).
-// IMPORTANTE: preservar los índices originales de TRAMITES es clave porque
-// el callback_data los usa para recuperar el nombre en CALLBACK A.
-function teclasMenuTramites(indicesPermitidos) {
-  // Si no se recibió el parámetro, construimos un array con todos los índices
-  // posibles usando map() sobre el propio array TRAMITES.
-  const indices = indicesPermitidos !== undefined
-    ? indicesPermitidos
-    : TRAMITES.map((_, i) => i);
-
-  // Por cada índice permitido armamos una fila con un único botón.
-  // El texto visible es el nombre del trámite; el callback_data lleva el índice
-  // original para que CALLBACK A pueda identificarlo correctamente.
-  const filas = indices.map((i) => ([{
-    text: TRAMITES[i],
-    callback_data: `tramite_${i}`,
-  }]));
-  // Botón de cancelación siempre presente como última fila.
-  filas.push([{ text: '❌ Cancelar', callback_data: 'cancelar_tramite' }]);
-  return filas;
-}
+// (teclasMenuTramites eliminada: código muerto de la versión Telegram,
+//  reemplazada por opcionesTramites() y nunca invocada en el archivo.)
 
 // ---------------------------------------------------------------
 // 10b. GESTIÓN DE TIMEOUT POR INACTIVIDAD
