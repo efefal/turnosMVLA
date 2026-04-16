@@ -28,6 +28,12 @@ const path = require('path');
 // Lo usamos para consultar la API de feriados argentinos sin instalar dependencias externas.
 const https = require('https');
 
+// "crypto" es el módulo nativo de Node.js para operaciones criptográficas.
+// Lo usamos para calcular el HMAC-SHA256 que permite verificar que cada
+// solicitud POST al webhook fue firmada realmente por Meta y no por alguien
+// que encontró nuestra URL pública. No requiere instalación: viene con Node.js.
+const crypto = require('crypto');
+
 // "ea" es el módulo de integración con Easy!Appointments.
 // Centraliza todas las llamadas a la API del motor de reservas:
 // obtener servicios, consultar disponibilidad, crear y cancelar citas.
@@ -459,7 +465,7 @@ function opcionesTramites(indicesPermitidos) {
 // ---------------------------------------------------------------
 // 6. VALIDAR CREDENCIALES DE WHATSAPP
 // ---------------------------------------------------------------
-// Meta for Developers requiere tres valores para que el bot pueda
+// Meta for Developers requiere cuatro valores para que el bot pueda
 // operar con la API de WhatsApp Business:
 //
 //   WHATSAPP_VERIFY_TOKEN → string secreto que vos elegís y registrás
@@ -471,12 +477,18 @@ function opcionesTramites(indicesPermitidos) {
 //
 //   WHATSAPP_PHONE_ID → identificador del número de teléfono registrado
 //     en Meta. Se usa en la URL de la API al enviar mensajes.
+//
+//   WHATSAPP_APP_SECRET → clave secreta de la aplicación en Meta for Developers.
+//     Meta usa esta misma clave para firmar cada solicitud POST al webhook con
+//     un HMAC-SHA256. Nosotros la usamos para recalcular esa firma y verificar
+//     que el mensaje viene realmente de Meta (ver endpoint POST /webhook más abajo).
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN        = process.env.WHATSAPP_TOKEN;
 const WHATSAPP_PHONE_ID     = process.env.WHATSAPP_PHONE_ID;
+const WHATSAPP_APP_SECRET   = process.env.WHATSAPP_APP_SECRET;
 
-if (!WHATSAPP_VERIFY_TOKEN || !WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID) {
-  logger.error('❌ Faltan variables de entorno de WhatsApp. Verificar WHATSAPP_VERIFY_TOKEN, WHATSAPP_TOKEN y WHATSAPP_PHONE_ID en .env');
+if (!WHATSAPP_VERIFY_TOKEN || !WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID || !WHATSAPP_APP_SECRET) {
+  logger.error('❌ Faltan variables de entorno de WhatsApp. Verificar WHATSAPP_VERIFY_TOKEN, WHATSAPP_TOKEN, WHATSAPP_PHONE_ID y WHATSAPP_APP_SECRET en .env');
   process.exit(1);
 }
 
@@ -492,7 +504,21 @@ const app = express();
 // express.json() hace que Express entienda automáticamente el cuerpo
 // de las solicitudes POST que llegan en formato JSON (que es lo que
 // envía Meta con cada mensaje). Sin esto, req.body estaría vacío.
-app.use(express.json());
+//
+// El callback "verify" es una función especial que express.json() ejecuta
+// ANTES de parsear el JSON. Acá capturamos el body en su forma cruda (bytes
+// sin interpretar) y lo guardamos en req.rawBody.
+// Necesitamos el body crudo porque la firma HMAC que Meta envía fue calculada
+// sobre exactamente esos bytes, no sobre el objeto JavaScript parseado.
+// Si comparáramos usando req.body (ya parseado y re-serializado), los bytes
+// podrían diferir y la comparación fallaría aunque el mensaje sea legítimo.
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    // buf es un Buffer (secuencia de bytes) con el body sin tocar.
+    // Lo guardamos en req.rawBody para usarlo en la verificación HMAC del webhook.
+    req.rawBody = buf;
+  }
+}));
 
 // ---------------------------------------------------------------
 // ENDPOINT GET /webhook — Verificación del webhook por Meta
@@ -531,12 +557,70 @@ app.get('/webhook', (req, res) => {
 // Meta envía cada mensaje entrante (y notificaciones de estado de
 // entrega) como una solicitud POST a esta URL.
 //
-// IMPORTANTE: siempre respondemos 200 ANTES de procesar el mensaje.
-// Si Meta no recibe el 200 dentro de unos segundos, considera que
-// falló y reintenta el envío, lo que generaría mensajes duplicados.
-// Por eso respondemos primero y procesamos después en un try/catch.
+// IMPORTANTE: antes de procesar cualquier mensaje verificamos la firma
+// HMAC-SHA256 que Meta incluye en el header "x-hub-signature-256".
+// Esto garantiza que la solicitud viene realmente de Meta y no de alguien
+// que encontró nuestra URL pública y quiere inyectar mensajes falsos.
+//
+// ¿Qué es HMAC? Es un algoritmo que combina un mensaje con una clave
+// secreta para producir una "huella" única. Solo quien tiene la clave
+// puede producir esa huella, entonces si la huella coincide, el mensaje
+// es auténtico. Meta calcula el HMAC-SHA256 del body usando WHATSAPP_APP_SECRET
+// como clave, y nosotros recalculamos lo mismo para comparar.
 app.post('/webhook', async (req, res) => {
-  // Respondemos 200 de inmediato, independientemente de lo que pase después.
+
+  // ── PASO 1: leer la firma que Meta incluyó en el header ──────────────────
+  // Meta envía el header en el formato: "sha256=<hash_en_hexadecimal>"
+  const firmaHeader = req.headers['x-hub-signature-256'];
+
+  if (!firmaHeader) {
+    // Si el header no existe, la solicitud no pasó por el sistema de Meta.
+    // Rechazamos con 401 (No autorizado) y dejamos registro del intento.
+    logger.error('❌ Webhook rechazado: falta el header x-hub-signature-256.');
+    return res.sendStatus(401);
+  }
+
+  // ── PASO 2: recalcular el HMAC-SHA256 del body crudo ─────────────────────
+  // Usamos el módulo nativo "crypto" para crear un HMAC con el algoritmo
+  // SHA-256 y la clave secreta WHATSAPP_APP_SECRET.
+  // Luego lo "alimentamos" con los bytes crudos del body (req.rawBody,
+  // capturado antes del parseo en la configuración de express.json).
+  // digest('hex') convierte el resultado binario a texto hexadecimal,
+  // igual que el formato que usa Meta.
+  const hashCalculado = crypto
+    .createHmac('sha256', WHATSAPP_APP_SECRET)
+    .update(req.rawBody)
+    .digest('hex');
+
+  // Agregamos el prefijo "sha256=" para que el formato sea idéntico al header.
+  const firmaCalculada = `sha256=${hashCalculado}`;
+
+  // ── PASO 3: comparar con crypto.timingSafeEqual() ─────────────────────────
+  // ¿Por qué no usar simplemente firmaHeader === firmaCalculada?
+  // Porque una comparación normal con === se detiene en el primer carácter
+  // diferente, y eso permite medir tiempos de respuesta para adivinar la firma
+  // carácter a carácter (ataque de "timing"). crypto.timingSafeEqual() siempre
+  // tarda el mismo tiempo sin importar en qué posición difieren las cadenas,
+  // eliminando ese canal de ataque.
+  // Requiere Buffers de igual longitud, por eso convertimos ambas cadenas.
+  const bufferHeader    = Buffer.from(firmaHeader);
+  const bufferCalculada = Buffer.from(firmaCalculada);
+
+  const firmaValida =
+    bufferHeader.length === bufferCalculada.length &&
+    crypto.timingSafeEqual(bufferHeader, bufferCalculada);
+
+  if (!firmaValida) {
+    // Las firmas no coinciden: la solicitud fue alterada o no viene de Meta.
+    logger.error('❌ Webhook rechazado: firma HMAC-SHA256 inválida.');
+    return res.sendStatus(401);
+  }
+
+  // ── PASO 4: la firma es válida → procesar el mensaje ─────────────────────
+  // Solo llegamos acá si Meta firmó correctamente la solicitud.
+  // Respondemos 200 de inmediato para que Meta no reintente el envío
+  // (si no recibe el 200 en pocos segundos, lo considera un fallo y reenvía,
+  // generando mensajes duplicados).
   res.sendStatus(200);
 
   try {
