@@ -499,10 +499,7 @@ const RATE_LIMIT_WHITELIST = (process.env.RATE_LIMIT_WHITELIST || '')
   .map(n => n.trim())
   .filter(n => n.length > 0);
 
-if (!WHATSAPP_VERIFY_TOKEN || !WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID || !WHATSAPP_APP_SECRET) {
-  logger.error('❌ Faltan variables de entorno de WhatsApp. Verificar WHATSAPP_VERIFY_TOKEN, WHATSAPP_TOKEN, WHATSAPP_PHONE_ID y WHATSAPP_APP_SECRET en .env');
-  process.exit(1);
-}
+  
 
 // ---------------------------------------------------------------
 // 7. CREAR LA APLICACIÓN EXPRESS Y LOS ENDPOINTS DE WEBHOOK
