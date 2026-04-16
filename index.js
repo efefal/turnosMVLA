@@ -482,10 +482,22 @@ function opcionesTramites(indicesPermitidos) {
 //     Meta usa esta misma clave para firmar cada solicitud POST al webhook con
 //     un HMAC-SHA256. Nosotros la usamos para recalcular esa firma y verificar
 //     que el mensaje viene realmente de Meta (ver endpoint POST /webhook más abajo).
+//
+//   RATE_LIMIT_WHITELIST → lista de números de teléfono separados por coma que
+//     están exentos del rate limiting. Útil para el número de prueba o para los
+//     empleados municipales. Si está vacía, no hay exenciones.
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN        = process.env.WHATSAPP_TOKEN;
 const WHATSAPP_PHONE_ID     = process.env.WHATSAPP_PHONE_ID;
 const WHATSAPP_APP_SECRET   = process.env.WHATSAPP_APP_SECRET;
+
+// RATE_LIMIT_WHITELIST es opcional: si no está definida usamos un string vacío.
+// Lo dividimos por coma y limpiamos espacios para obtener un array de números.
+// Ejemplo del .env: RATE_LIMIT_WHITELIST=5492944123456,5492944654321
+const RATE_LIMIT_WHITELIST = (process.env.RATE_LIMIT_WHITELIST || '')
+  .split(',')
+  .map(n => n.trim())
+  .filter(n => n.length > 0);
 
 if (!WHATSAPP_VERIFY_TOKEN || !WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID || !WHATSAPP_APP_SECRET) {
   logger.error('❌ Faltan variables de entorno de WhatsApp. Verificar WHATSAPP_VERIFY_TOKEN, WHATSAPP_TOKEN, WHATSAPP_PHONE_ID y WHATSAPP_APP_SECRET en .env');
@@ -947,6 +959,91 @@ const registrosEnProceso = {};
 let timeoutsSesion = {};
 
 // ---------------------------------------------------------------
+// 9c. RATE LIMITING POR NÚMERO DE TELÉFONO
+// ---------------------------------------------------------------
+// El rate limiting evita que un mismo número sature el bot con
+// mensajes en ráfaga, ya sea por error del usuario (bucle automático)
+// o por un intento deliberado de abusar del servicio.
+//
+// Estrategia: ventana deslizante de tiempo fijo.
+// Cada número tiene un contador y el momento en que empezó la ventana.
+// Si llegaron más de RATE_LIMIT_MAX mensajes en menos de RATE_LIMIT_VENTANA
+// milisegundos, el número está bloqueado hasta que la ventana expire.
+
+// Cuántos segundos dura la ventana de tiempo (1 minuto).
+const RATE_LIMIT_VENTANA_MS = 60 * 1000;
+
+// Cuántos mensajes como máximo se permiten dentro de la ventana.
+const RATE_LIMIT_MAX = 15;
+
+// Objeto que actúa como "tablero de control" del rate limiting.
+// Por cada número de teléfono guardamos:
+//   - contador:    cuántos mensajes recibimos en la ventana actual.
+//   - inicioVentana: timestamp (Date.now()) de cuándo empezó la ventana.
+//
+// Ejemplo: { '5492944123456': { contador: 3, inicioVentana: 1713000000000 } }
+const rateLimiter = {};
+
+// verificarRateLimit(telefono): decide si el número puede seguir enviando mensajes.
+// Devuelve true si el mensaje puede procesarse, false si el límite fue superado.
+function verificarRateLimit(telefono) {
+
+  // Los números de la whitelist nunca están limitados.
+  // Sirve para el número de prueba y para empleados municipales.
+  if (RATE_LIMIT_WHITELIST.includes(telefono)) return true;
+
+  const ahora = Date.now();
+
+  // Si el número no tiene entrada en el tablero, la creamos desde cero.
+  if (!rateLimiter[telefono]) {
+    rateLimiter[telefono] = { contador: 1, inicioVentana: ahora };
+    return true;
+  }
+
+  const entrada = rateLimiter[telefono];
+  const tiempoTranscurrido = ahora - entrada.inicioVentana;
+
+  // Si ya pasaron más de RATE_LIMIT_VENTANA_MS desde el inicio de la ventana,
+  // la ventana expiró: reiniciamos el contador y empezamos una ventana nueva.
+  if (tiempoTranscurrido > RATE_LIMIT_VENTANA_MS) {
+    entrada.contador = 1;
+    entrada.inicioVentana = ahora;
+    return true;
+  }
+
+  // Estamos dentro de la ventana activa. Revisamos si ya se alcanzó el límite.
+  if (entrada.contador >= RATE_LIMIT_MAX) {
+    // El número superó el máximo: rechazamos el mensaje sin incrementar el contador.
+    return false;
+  }
+
+  // Todavía tiene mensajes disponibles: incrementamos y autorizamos.
+  entrada.contador += 1;
+  return true;
+}
+
+// Limpieza periódica del objeto rateLimiter.
+// Cada 5 minutos eliminamos las entradas cuya ventana ya expiró.
+// Sin esta limpieza el objeto acumularía una entrada por cada número que
+// alguna vez escribió al bot, creciendo indefinidamente en memoria.
+setInterval(() => {
+  const ahora = Date.now();
+  let eliminados = 0;
+
+  for (const telefono of Object.keys(rateLimiter)) {
+    const tiempoTranscurrido = ahora - rateLimiter[telefono].inicioVentana;
+    if (tiempoTranscurrido > RATE_LIMIT_VENTANA_MS) {
+      delete rateLimiter[telefono];
+      eliminados += 1;
+    }
+  }
+
+  if (eliminados > 0) {
+    logger.info(`🧹 Rate limiter: se eliminaron ${eliminados} entradas expiradas de la memoria.`);
+  }
+}, 5 * 60 * 1000); // cada 5 minutos
+
+// ---------------------------------------------------------------
 // 10. FUNCIONES AUXILIARES DE LÓGICA
 // ---------------------------------------------------------------
 
@@ -1078,6 +1175,15 @@ async function procesarMensajeEntrante(body) {
   // Telegram: identifica de forma única al usuario en la conversación.
   const chatId = value.contacts?.[0]?.wa_id;
   if (!chatId) return;
+
+  // Verificamos que el número no superó el límite de mensajes por minuto.
+  // Si verificarRateLimit() devuelve false, el número mandó demasiados mensajes
+  // en la ventana de tiempo actual: le avisamos y descartamos el mensaje.
+  if (!verificarRateLimit(chatId)) {
+    logger.error(`⚠️ Rate limit superado para el número ${chatId}. Mensaje descartado.`);
+    await enviarMensaje(chatId, '⚠️ Demasiados mensajes en poco tiempo. Por favor esperá un momento antes de continuar.');
+    return;
+  }
 
   // Si el mensaje es interactivo (respuesta a una lista o un botón de respuesta rápida)
   // extraemos el id de la opción elegida. Ese id es equivalente al callback_data de
