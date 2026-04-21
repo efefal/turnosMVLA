@@ -151,6 +151,13 @@ async function obtenerDisponibilidad(serviceId, providerId, fecha) {
 // Si un horario está disponible en múltiples operadores, se
 // asigna al primero encontrado (distribución FIFO simple).
 async function obtenerDisponibilidadServicio(serviceId, fecha) {
+  // Los query params de Express siempre llegan como strings, pero el campo
+  // 'services' de cada proveedor contiene IDs numéricos. Si comparamos
+  // string contra número, includes() siempre devuelve false y ningún
+  // proveedor pasa el filtro. Convertimos a entero para que la comparación
+  // sea del mismo tipo en ambos lados.
+  serviceId = parseInt(serviceId, 10);
+
   // Primero obtenemos todos los proveedores del sistema.
   const todosLosProveedores = await obtenerProveedores();
 

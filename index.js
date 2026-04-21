@@ -841,8 +841,7 @@ async function enviarMensajeInteractivo(telefono, tipo, cuerpo, acciones) {
       req.destroy(new Error('Timeout al enviar mensaje interactivo'));
     });
 
-    // TODO: eliminar este log una vez resuelto el diagnóstico de mensajes interactivos.
-    logger.info('📤 enviarMensajeInteractivo body: ' + bodyStr);
+
 
     req.write(bodyStr);
     req.end();
@@ -1841,12 +1840,9 @@ async function procesarCallback(chatId, data) {
     const fechaTexto     = formatearFechaTexto(new Date(`${fecha}T12:00:00`));
     const esModificacion = registrosEnProceso[chatId].esModificacion === true;
 
-    logger.info('📤 Datos enviados a EA:', JSON.stringify({
-      serviceId, providerId, nombre, dni,
-      email: `dni_${dni}@municipio.local`,
-      fechaHora, fechaHoraFin,
-    }));
-
+    // Los logs de datos enviados y respuesta de EA se eliminaron de aquí
+    // porque esa información ahora queda registrada centralmente desde
+    // el endpoint POST /api/turno, evitando duplicados en los logs.
     try {
       const citaCreada = await ea.crearCita({
         serviceId,
@@ -1859,7 +1855,6 @@ async function procesarCallback(chatId, data) {
         fechaHoraFin,
         notas:       `DNI: ${dni} | Trámite: ${tramite}`,
       });
-      logger.info('📥 Respuesta de EA:', JSON.stringify(citaCreada));
     } catch (error) {
       logger.error(`❌ Error al crear cita en EA para DNI ${dni}:`, error.message);
       enviarMensaje(
@@ -2541,7 +2536,99 @@ async function procesarCallback(chatId, data) {
 }
 
 // ---------------------------------------------------------------
-// 13. INICIAR EL SERVIDOR WEB
+// 13. ENDPOINTS PROXY HACIA EASY!APPOINTMENTS
+// ---------------------------------------------------------------
+// Estos tres endpoints actúan como un intermediario seguro entre
+// el frontend (o cualquier cliente) y la API de Easy!Appointments.
+// Así la clave de la API nunca queda expuesta en el navegador.
+
+// GET /api/servicios
+// Devuelve la lista de todos los servicios disponibles para sacar turno.
+// El cliente no necesita parámetros: simplemente hace GET a esta ruta.
+app.get('/api/servicios', async (req, res) => {
+  try {
+    // Pedimos los servicios a Easy!Appointments a través del módulo ea.
+    const servicios = await ea.obtenerServicios();
+    // Respondemos con los servicios en formato JSON.
+    res.json(servicios);
+  } catch (error) {
+    // Si algo falla (red caída, API sin respuesta, etc.), avisamos al cliente.
+    logger.error('Error al obtener servicios desde Easy!Appointments:', error);
+    res.status(500).json({ error: 'No se pudieron obtener los servicios. Intentá de nuevo más tarde.' });
+  }
+});
+
+// GET /api/disponibilidad?serviceId=X&fecha=YYYY-MM-DD
+// Devuelve los horarios disponibles para un servicio en una fecha específica.
+// Parámetros de consulta (query params):
+//   serviceId → ID del servicio (número)
+//   fecha     → fecha en formato YYYY-MM-DD (ej: 2026-04-25)
+app.get('/api/disponibilidad', async (req, res) => {
+  try {
+    const { serviceId, fecha } = req.query;
+
+    // Validamos que llegaron los dos parámetros obligatorios.
+    if (!serviceId || !fecha) {
+      return res.status(400).json({ error: 'Faltan parámetros: se requieren serviceId y fecha.' });
+    }
+
+    // Los query params de Express siempre son strings. Convertimos serviceId
+    // a número entero para que el filtro dentro de ea.js funcione correctamente
+    // al comparar contra los IDs numéricos que devuelve Easy!Appointments.
+    const serviceIdNum = parseInt(serviceId, 10);
+
+    // Si el valor no era un número válido (ej: "abc"), parseInt devuelve NaN.
+    // En ese caso rechazamos la solicitud antes de llamar a la API externa.
+    if (isNaN(serviceIdNum)) {
+      return res.status(400).json({ error: 'El parámetro serviceId debe ser un número entero válido.' });
+    }
+
+    // Consultamos la disponibilidad en Easy!Appointments.
+    const disponibilidad = await ea.obtenerDisponibilidadServicio(serviceIdNum, fecha);
+    res.json(disponibilidad);
+  } catch (error) {
+    logger.error('Error al obtener disponibilidad desde Easy!Appointments:', error);
+    res.status(500).json({ error: 'No se pudo obtener la disponibilidad. Intentá de nuevo más tarde.' });
+  }
+});
+
+// POST /api/turno
+// Crea una nueva cita en Easy!Appointments con los datos del vecino.
+// Body JSON esperado:
+//   dni         → número de documento del vecino
+//   nombre      → nombre completo del vecino
+//   serviceId   → ID del servicio elegido
+//   providerId  → ID del prestador (profesional o recurso) elegido
+//   fechaHora   → inicio del turno en formato ISO 8601 (ej: "2026-04-25T10:00:00")
+//   fechaHoraFin→ fin del turno en formato ISO 8601    (ej: "2026-04-25T10:30:00")
+app.post('/api/turno', async (req, res) => {
+  try {
+    const { dni, nombre, serviceId, providerId, fechaHora, fechaHoraFin } = req.body;
+
+    // Verificamos que todos los campos obligatorios estén presentes.
+    if (!dni || !nombre || !serviceId || !providerId || !fechaHora || !fechaHoraFin) {
+      return res.status(400).json({
+        error: 'Faltan datos. Se requieren: dni, nombre, serviceId, providerId, fechaHora y fechaHoraFin.'
+      });
+    }
+
+    // Armamos el objeto de datos y creamos la cita en Easy!Appointments.
+    const cita = await ea.crearCita({ dni, nombre, serviceId, providerId, fechaHora, fechaHoraFin });
+
+    // Registramos la cita creada con los datos clave para poder rastrearla
+    // en los logs sin tener que buscar en la respuesta completa de la API.
+    logger.info(`✅ Cita creada en EA — ID: ${cita.id} | DNI: ${dni} | serviceId: ${serviceId} | providerId: ${providerId}`);
+
+    // Respondemos con la cita creada (incluye el ID asignado por Easy!Appointments).
+    res.status(201).json(cita);
+  } catch (error) {
+    logger.error('Error al crear el turno en Easy!Appointments:', error);
+    res.status(500).json({ error: 'No se pudo crear el turno. Intentá de nuevo más tarde.' });
+  }
+});
+
+// ---------------------------------------------------------------
+// 14. INICIAR EL SERVIDOR WEB
 // ---------------------------------------------------------------
 // Ponemos Express a escuchar en el puerto definido por la variable
 // de entorno PORT, o en el 3000 si no está configurada.
