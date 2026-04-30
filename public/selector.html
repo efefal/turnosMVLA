@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turnos Online — Municipalidad de Villa La Angostura</title>
+  <style>
+    /* ---------------------------------------------------------------
+       VARIABLES DE COLOR — Identidad visual de la Municipalidad de
+       Villa La Angostura. Extraídas del sitio oficial villalaangostura.gob.ar
+    --------------------------------------------------------------- */
+    :root {
+      --vla-azul:        #1a3a5c;
+      --vla-teal:        #2a9d8f;
+      --vla-teal-hover:  #21867a;
+      --vla-teal-claro:  #e8f5f3;
+      --vla-gris:        #f5f5f5;
+      --vla-borde:       #ddd;
+      --vla-texto:       #222;
+      --vla-muted:       #666;
+      --vla-error:       #c0392b;
+      --vla-error-bg:    #fdf0ef;
+    }
+
+    /* ---------------------------------------------------------------
+       RESET Y BASE
+    --------------------------------------------------------------- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--vla-gris);
+      color: var(--vla-texto);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    /* ---------------------------------------------------------------
+       CONTENEDOR PRINCIPAL
+    --------------------------------------------------------------- */
+    .contenedor {
+      max-width: 660px;
+      margin: 0 auto;
+    }
+
+    /* ---------------------------------------------------------------
+       ENCABEZADO DEL SELECTOR
+    --------------------------------------------------------------- */
+    .encabezado {
+      background: var(--vla-teal);
+      color: #fff;
+      padding: 1.25rem 2rem;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .encabezado h1 {
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .encabezado p {
+      font-size: 13px;
+      opacity: 0.85;
+      margin-top: 3px;
+    }
+
+    /* ---------------------------------------------------------------
+       TARJETA BLANCA (envuelve todo el formulario)
+    --------------------------------------------------------------- */
+    .tarjeta {
+      background: #fff;
+      border: 0.5px solid var(--vla-borde);
+      border-radius: 0 0 8px 8px;
+      padding: 2rem;
+    }
+
+    /* ---------------------------------------------------------------
+       BARRA DE PASOS (indicador de progreso)
+    --------------------------------------------------------------- */
+    .barra-pasos {
+      display: flex;
+      border-bottom: 2px solid var(--vla-borde);
+      margin-bottom: 2rem;
+    }
+
+    .paso-tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px 4px;
+      font-size: 12px;
+      color: var(--vla-muted);
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.15s;
+    }
+
+    .paso-tab.activo {
+      color: var(--vla-teal);
+      border-bottom-color: var(--vla-teal);
+      font-weight: 500;
+    }
+
+    .paso-tab.completado {
+      color: var(--vla-azul);
+    }
+
+    /* ---------------------------------------------------------------
+       VISIBILIDAD DE PASOS
+       Solo el paso con clase "visible" se muestra.
+    --------------------------------------------------------------- */
+    .paso { display: none; }
+    .paso.visible { display: block; }
+
+    /* ---------------------------------------------------------------
+       TIPOGRAFÍA DE SECCIÓN
+    --------------------------------------------------------------- */
+    .seccion-titulo {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--vla-azul);
+      margin-bottom: 1rem;
+    }
+
+    /* ---------------------------------------------------------------
+       CAMPOS DE FORMULARIO
+    --------------------------------------------------------------- */
+    .campo { margin-bottom: 1.25rem; }
+
+    .campo label {
+      display: block;
+      font-size: 13px;
+      color: var(--vla-muted);
+      margin-bottom: 6px;
+    }
+
+    .campo input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--vla-borde);
+      border-radius: 4px;
+      font-size: 15px;
+      background: #fafafa;
+      color: var(--vla-texto);
+      outline: none;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .campo input:focus {
+      border-color: var(--vla-teal);
+      background: #fff;
+    }
+
+    /* ---------------------------------------------------------------
+       MENSAJES DE ERROR
+    --------------------------------------------------------------- */
+    .error-msg {
+      font-size: 12px;
+      color: var(--vla-error);
+      background: var(--vla-error-bg);
+      border-radius: 4px;
+      padding: 6px 10px;
+      margin-top: 6px;
+      display: none;
+    }
+
+    .error-msg.visible { display: block; }
+
+    /* ---------------------------------------------------------------
+       BOTONES
+    --------------------------------------------------------------- */
+    .btn-primario {
+      background: var(--vla-teal);
+      color: #fff;
+      border: none;
+      padding: 11px 24px;
+      border-radius: 4px;
+      font-size: 15px;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.15s;
+    }
+
+    .btn-primario:hover:not(:disabled) { background: var(--vla-teal-hover); }
+    .btn-primario:disabled { background: #aaa; cursor: not-allowed; }
+
+    .btn-secundario {
+      background: transparent;
+      color: var(--vla-teal);
+      border: 1px solid var(--vla-teal);
+      padding: 10px 24px;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.15s;
+    }
+
+    .btn-secundario:hover { background: var(--vla-teal-claro); }
+
+    .nav-botones {
+      display: flex;
+      gap: 10px;
+      margin-top: 1.5rem;
+    }
+
+    /* ---------------------------------------------------------------
+       TARJETAS DE TRÁMITE (paso 2)
+    --------------------------------------------------------------- */
+    .tramite-opcion {
+      border: 1px solid var(--vla-borde);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .tramite-opcion:hover { border-color: var(--vla-teal); background: #f0faf9; }
+    .tramite-opcion.seleccionado { border-color: var(--vla-teal); background: var(--vla-teal-claro); }
+
+    .tramite-icono {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      background: var(--vla-teal);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .tramite-icono svg {
+      width: 20px;
+      height: 20px;
+      stroke: #fff;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .tramite-nombre {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--vla-texto);
+    }
+
+    .tramite-duracion {
+      font-size: 12px;
+      color: var(--vla-muted);
+      margin-top: 2px;
+    }
+
+    /* ---------------------------------------------------------------
+       GRILLA DE DÍAS (paso 3)
+    --------------------------------------------------------------- */
+    .dias-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+      margin-bottom: 1.5rem;
+    }
+
+    .dia-btn {
+      border: 1px solid var(--vla-borde);
+      border-radius: 6px;
+      padding: 12px 8px;
+      text-align: center;
+      cursor: pointer;
+      background: #fff;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .dia-btn:hover { border-color: var(--vla-teal); background: #f0faf9; }
+    .dia-btn.seleccionado { border-color: var(--vla-teal); background: var(--vla-teal-claro); }
+
+    .dia-nombre { font-size: 11px; color: var(--vla-muted); display: block; text-transform: capitalize; }
+    .dia-numero { font-size: 22px; font-weight: 500; color: var(--vla-azul); display: block; line-height: 1.2; }
+    .dia-mes    { font-size: 11px; color: var(--vla-muted); display: block; text-transform: capitalize; }
+
+    /* ---------------------------------------------------------------
+       GRILLA DE HORARIOS (paso 3)
+    --------------------------------------------------------------- */
+    .horarios-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+      gap: 8px;
+    }
+
+    .horario-btn {
+      border: 1px solid var(--vla-borde);
+      border-radius: 6px;
+      padding: 10px 6px;
+      text-align: center;
+      cursor: pointer;
+      background: #fff;
+      font-size: 14px;
+      color: var(--vla-texto);
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .horario-btn:hover { border-color: var(--vla-teal); background: #f0faf9; }
+    .horario-btn.seleccionado { border-color: var(--vla-teal); background: var(--vla-teal-claro); font-weight: 500; }
+
+    /* ---------------------------------------------------------------
+       RESUMEN DE TURNO (paso 4 y pantalla de éxito)
+    --------------------------------------------------------------- */
+    .resumen-fila {
+      display: flex;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 0.5px solid var(--vla-borde);
+      font-size: 14px;
+    }
+
+    .resumen-fila:last-child { border-bottom: none; }
+
+    .resumen-label {
+      color: var(--vla-muted);
+      width: 110px;
+      flex-shrink: 0;
+    }
+
+    .resumen-valor {
+      color: var(--vla-texto);
+      font-weight: 500;
+    }
+
+    /* ---------------------------------------------------------------
+       PANTALLA DE ÉXITO
+    --------------------------------------------------------------- */
+    .exito-icono {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--vla-teal-claro);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+    }
+
+    .exito-icono svg {
+      width: 30px;
+      height: 30px;
+      stroke: var(--vla-teal);
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .exito-titulo {
+      text-align: center;
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--vla-azul);
+      margin-bottom: 8px;
+    }
+
+    .exito-subtitulo {
+      text-align: center;
+      font-size: 14px;
+      color: var(--vla-muted);
+      margin-bottom: 1.5rem;
+    }
+
+    /* ---------------------------------------------------------------
+       ESTADO DE CARGA
+    --------------------------------------------------------------- */
+    .cargando {
+      text-align: center;
+      padding: 2rem;
+      color: var(--vla-muted);
+      font-size: 14px;
+    }
+
+    .cargando-spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--vla-borde);
+      border-top-color: var(--vla-teal);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---------------------------------------------------------------
+       AVISO DE DÍA SIN HORARIOS
+    --------------------------------------------------------------- */
+    .aviso-sin-horarios {
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #7a5c00;
+      display: none;
+    }
+
+    .aviso-sin-horarios.visible { display: block; }
+
+    /* ---------------------------------------------------------------
+       RESPONSIVE — pantallas pequeñas
+    --------------------------------------------------------------- */
+    @media (max-width: 480px) {
+      body { padding: 0; }
+      .encabezado { border-radius: 0; }
+      .tarjeta { border-radius: 0; padding: 1.25rem; }
+      .dias-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="contenedor">
+
+  <!-- Encabezado verde teal igual al de los formularios del sitio -->
+  <div class="encabezado">
+    <h1>Sacar turno online</h1>
+    <p>Municipalidad de Villa La Angostura</p>
+  </div>
+
+  <div class="tarjeta">
+
+    <!-- Barra de progreso con los 4 pasos -->
+    <div class="barra-pasos">
+      <div class="paso-tab activo"  id="tab-1">1. Mis datos</div>
+      <div class="paso-tab"         id="tab-2">2. Trámite</div>
+      <div class="paso-tab"         id="tab-3">3. Fecha y hora</div>
+      <div class="paso-tab"         id="tab-4">4. Confirmar</div>
+    </div>
+
+    <!-- ================================================
+         PASO 1 — DNI y nombre
+    ================================================ -->
+    <div id="paso-1" class="paso visible">
+      <p class="seccion-titulo">Ingresá tus datos para comenzar</p>
+
+      <div class="campo">
+        <label for="input-dni">Número de DNI</label>
+        <input type="text" id="input-dni" placeholder="Ej: 30123456"
+               maxlength="8" inputmode="numeric" autocomplete="off" />
+        <div class="error-msg" id="error-dni">
+          El DNI debe tener entre 7 y 8 números, sin puntos ni espacios.
+        </div>
+      </div>
+
+      <div class="campo">
+        <label for="input-nombre">Nombre y apellido</label>
+        <input type="text" id="input-nombre" placeholder="Ej: Juan Pérez"
+               autocomplete="name" />
+        <div class="error-msg" id="error-nombre">
+          Por favor ingresá tu nombre completo.
+        </div>
+      </div>
+
+      <button class="btn-primario" id="btn-paso1">Continuar</button>
+    </div>
+
+    <!-- ================================================
+         PASO 2 — Elegir trámite
+    ================================================ -->
+    <div id="paso-2" class="paso">
+      <p class="seccion-titulo">¿Qué trámite querés realizar?</p>
+      <div id="lista-tramites">
+        <div class="cargando">
+          <span class="cargando-spinner"></span> Cargando trámites...
+        </div>
+      </div>
+      <div class="nav-botones">
+        <button class="btn-secundario" id="btn-volver-1">Volver</button>
+        <button class="btn-primario"   id="btn-paso2" disabled>Continuar</button>
+      </div>
+    </div>
+
+    <!-- ================================================
+         PASO 3 — Elegir día y horario
+    ================================================ -->
+    <div id="paso-3" class="paso">
+      <p class="seccion-titulo">Elegí el día</p>
+      <div id="lista-dias" class="dias-grid">
+        <div class="cargando" style="grid-column: 1 / -1;">
+          <span class="cargando-spinner"></span> Cargando días...
+        </div>
+      </div>
+
+      <div id="seccion-horarios" style="display:none;">
+        <p class="seccion-titulo">Elegí el horario</p>
+        <div id="lista-horarios" class="horarios-grid"></div>
+        <div class="aviso-sin-horarios" id="aviso-sin-horarios">
+          No hay horarios disponibles para este día. Elegí otra fecha.
+        </div>
+      </div>
+
+      <div class="nav-botones">
+        <button class="btn-secundario" id="btn-volver-2">Volver</button>
+        <button class="btn-primario"   id="btn-paso3" disabled>Continuar</button>
+      </div>
+    </div>
+
+    <!-- ================================================
+         PASO 4 — Confirmar
+    ================================================ -->
+    <div id="paso-4" class="paso">
+      <p class="seccion-titulo">Confirmá tu turno</p>
+      <div id="resumen-turno"></div>
+      <div class="nav-botones">
+        <button class="btn-secundario" id="btn-volver-3">Volver</button>
+        <button class="btn-primario"   id="btn-confirmar">Confirmar turno</button>
+      </div>
+    </div>
+
+    <!-- ================================================
+         PANTALLA DE ÉXITO (no es un "paso" con tab)
+    ================================================ -->
+    <div id="paso-exito" class="paso">
+      <div class="exito-icono">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <p class="exito-titulo">¡Turno confirmado!</p>
+      <p class="exito-subtitulo">Tu turno quedó registrado en el sistema. Te esperamos.</p>
+      <div id="resumen-exito"></div>
+      <button class="btn-secundario" id="btn-nuevo" style="margin-top: 1.5rem;">
+        Sacar otro turno
+      </button>
+    </div>
+
+  </div><!-- /tarjeta -->
+</div><!-- /contenedor -->
+
+<script>
+// ---------------------------------------------------------------
+// CONFIGURACIÓN
+// ---------------------------------------------------------------
+// API_BASE apunta al mismo servidor Node.js que sirve este archivo.
+// Al moverse a producción no hay que cambiar nada: el archivo vive
+// en el mismo origen que los endpoints /api/*.
+const API_BASE = '';
+
+// ---------------------------------------------------------------
+// CONSTANTES DE FORMATO DE FECHA EN ESPAÑOL
+// ---------------------------------------------------------------
+const DIAS_ES   = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const MESES_ES  = ['enero','febrero','marzo','abril','mayo','junio',
+                   'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+// ---------------------------------------------------------------
+// ESTADO GLOBAL DE LA SESIÓN
+// ---------------------------------------------------------------
+// Guarda todos los datos que el vecino va eligiendo a medida que
+// avanza por los pasos. Se limpia cuando toca "Sacar otro turno".
+let estado = {
+  dni:          '',
+  nombre:       '',
+  tramite:      '',
+  serviceId:    null,
+  duracion:     30,
+  fecha:        null,   // "YYYY-MM-DD"
+  horario:      null,   // "HH:MM"
+  providerId:   null,
+  fechaHora:    null,   // "YYYY-MM-DD HH:MM:SS"
+  fechaHoraFin: null,
+};
+
+// mapaHorarioOperador: { "08:00": 4, "08:30": 5, ... }
+// Lo llenamos al consultar disponibilidad para saber a qué operador
+// asignar la cita sin que el vecino lo vea ni lo elija.
+let mapaHorarioOperador = {};
+
+// ---------------------------------------------------------------
+// FUNCIÓN: irAPaso(n)
+// ---------------------------------------------------------------
+// Oculta todos los pasos y muestra solo el indicado.
+// Actualiza la barra de progreso: el paso actual queda resaltado
+// en teal y los anteriores quedan marcados como completados.
+function irAPaso(n) {
+  // Ocultamos todos los paneles de contenido
+  document.querySelectorAll('.paso').forEach(p => p.classList.remove('visible'));
+
+  // Reseteamos todos los tabs de la barra de progreso
+  document.querySelectorAll('.paso-tab').forEach(t => {
+    t.classList.remove('activo', 'completado');
+  });
+
+  if (n <= 4) {
+    // Mostramos el panel del paso actual
+    document.getElementById('paso-' + n).classList.add('visible');
+
+    // Marcamos el tab actual como activo
+    const tabActual = document.getElementById('tab-' + n);
+    if (tabActual) tabActual.classList.add('activo');
+
+    // Marcamos los tabs anteriores como completados
+    for (let i = 1; i < n; i++) {
+      const t = document.getElementById('tab-' + i);
+      if (t) t.classList.add('completado');
+    }
+  } else {
+    // n = 5 → pantalla de éxito (no tiene tab en la barra)
+    document.getElementById('paso-exito').classList.add('visible');
+  }
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: formatFechaClave(date)
+// ---------------------------------------------------------------
+// Convierte un objeto Date a "YYYY-MM-DD" para usar como parámetro
+// en las llamadas a la API (mismo formato que usa el bot).
+function formatFechaClave(d) {
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: formatFechaTexto(fechaClave)
+// ---------------------------------------------------------------
+// Convierte "2026-04-28" a "martes 28 de abril de 2026".
+// Lo usamos en el resumen final y en la pantalla de confirmación.
+function formatFechaTexto(fechaClave) {
+  // Usamos T12:00:00 para evitar desfases de zona horaria:
+  // sin esa hora, JavaScript puede interpretar la fecha un día antes.
+  const d = new Date(fechaClave + 'T12:00:00');
+  return `${DIAS_ES[d.getDay()]} ${d.getDate()} de ${MESES_ES[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: pad(n)
+// ---------------------------------------------------------------
+// Agrega un cero a la izquierda si el número tiene un solo dígito.
+// Usada para construir strings de hora: pad(8) → "08".
+function pad(n) { return String(n).padStart(2, '0'); }
+
+// ---------------------------------------------------------------
+// FUNCIÓN: obtenerFeriados()
+// ---------------------------------------------------------------
+// Consulta la API pública argentinadatos.com y devuelve un Set
+// de strings "YYYY-MM-DD" con los feriados nacionales del año actual.
+// Si la consulta falla, devuelve un Set vacío para no bloquear el flujo.
+async function obtenerFeriados() {
+  try {
+    const anio = new Date().getFullYear();
+    const res  = await fetch(`https://api.argentinadatos.com/v1/feriados/${anio}`);
+    const data = await res.json();
+    // data es un array de { fecha: "YYYY-MM-DD", nombre: "...", tipo: "..." }
+    return new Set(data.map(f => f.fecha));
+  } catch (e) {
+    // Si la API de feriados no responde, el selector sigue funcionando
+    // pero puede mostrar feriados como días disponibles.
+    console.warn('No se pudieron cargar los feriados nacionales:', e.message);
+    return new Set();
+  }
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: proximosDiasHabiles(cantidad)
+// ---------------------------------------------------------------
+// Devuelve un array de objetos Date con los próximos N días hábiles
+// (lunes a viernes, excluyendo feriados nacionales) a partir de hoy.
+// Es async porque necesita esperar la consulta de feriados.
+async function proximosDiasHabiles(cantidad) {
+  const feriados = await obtenerFeriados();
+  const dias     = [];
+  const cursor   = new Date();
+
+  while (dias.length < cantidad) {
+    cursor.setDate(cursor.getDate() + 1);
+    const dow = cursor.getDay(); // 0 = domingo, 6 = sábado
+
+    // Descartamos fines de semana
+    if (dow === 0 || dow === 6) continue;
+
+    // Descartamos feriados nacionales
+    if (feriados.has(formatFechaClave(cursor))) continue;
+
+    // Guardamos una copia del cursor (si guardamos la referencia,
+    // todos los elementos del array apuntarían al mismo objeto).
+    dias.push(new Date(cursor));
+  }
+
+  return dias;
+}
+
+// ---------------------------------------------------------------
+// PASO 1 — Validación y avance
+// ---------------------------------------------------------------
+document.getElementById('btn-paso1').addEventListener('click', () => {
+  const dni    = document.getElementById('input-dni').value.trim();
+  const nombre = document.getElementById('input-nombre').value.trim();
+  let valido   = true;
+
+  // Validamos el DNI: solo dígitos, entre 7 y 8 caracteres
+  if (!/^\d{7,8}$/.test(dni)) {
+    document.getElementById('error-dni').classList.add('visible');
+    valido = false;
+  } else {
+    document.getElementById('error-dni').classList.remove('visible');
+  }
+
+  // Validamos el nombre: al menos 3 caracteres
+  if (nombre.length < 3) {
+    document.getElementById('error-nombre').classList.add('visible');
+    valido = false;
+  } else {
+    document.getElementById('error-nombre').classList.remove('visible');
+  }
+
+  if (!valido) return;
+
+  // Guardamos los datos y avanzamos
+  estado.dni    = dni;
+  estado.nombre = nombre;
+
+  // Cargamos los trámites mientras avanzamos de pantalla
+  cargarTramites();
+  irAPaso(2);
+});
+
+// ---------------------------------------------------------------
+// FUNCIÓN: cargarTramites()
+// ---------------------------------------------------------------
+// Consulta GET /api/servicios y renderiza las opciones de trámite.
+async function cargarTramites() {
+  const cont = document.getElementById('lista-tramites');
+  cont.innerHTML = '<div class="cargando"><span class="cargando-spinner"></span> Cargando trámites...</div>';
+
+  try {
+    const res    = await fetch(`${API_BASE}/api/servicios`);
+    const tramites = await res.json();
+
+    cont.innerHTML = '';
+
+    tramites.forEach(t => {
+      const div = document.createElement('div');
+      div.className    = 'tramite-opcion';
+      div.dataset.id   = t.id;
+      div.innerHTML = `
+        <div class="tramite-icono">
+          <svg viewBox="0 0 24 24">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tramite-nombre">${t.name}</div>
+          <div class="tramite-duracion">Duración: ${t.duration} minutos</div>
+        </div>`;
+
+      div.addEventListener('click', () => {
+        // Deseleccionamos todos y seleccionamos el clickeado
+        document.querySelectorAll('.tramite-opcion')
+                .forEach(o => o.classList.remove('seleccionado'));
+        div.classList.add('seleccionado');
+
+        // Guardamos la elección en el estado global
+        estado.tramite   = t.name;
+        estado.serviceId = t.id;
+        estado.duracion  = t.duration;
+
+        // Habilitamos el botón Continuar
+        document.getElementById('btn-paso2').disabled = false;
+      });
+
+      cont.appendChild(div);
+    });
+
+  } catch (e) {
+    cont.innerHTML = `<div class="cargando" style="color: var(--vla-error);">
+      Error al cargar los trámites. Verificá tu conexión e intentá de nuevo.
+    </div>`;
+  }
+}
+
+// ---------------------------------------------------------------
+// PASO 2 → PASO 3
+// ---------------------------------------------------------------
+document.getElementById('btn-paso2').addEventListener('click', () => {
+  cargarDias();
+  irAPaso(3);
+});
+
+// ---------------------------------------------------------------
+// FUNCIÓN: cargarDias()
+// ---------------------------------------------------------------
+// Calcula los próximos 30 días hábiles (sin feriados) y renderiza
+// la grilla de selección de día en el paso 3.
+async function cargarDias() {
+  const cont = document.getElementById('lista-dias');
+  cont.innerHTML = '<div class="cargando" style="grid-column: 1 / -1;"><span class="cargando-spinner"></span> Cargando días...</div>';
+
+  // Limpiamos la sección de horarios por si el vecino volvió atrás
+  document.getElementById('seccion-horarios').style.display = 'none';
+  document.getElementById('lista-horarios').innerHTML = '';
+  document.getElementById('aviso-sin-horarios').classList.remove('visible');
+  document.getElementById('btn-paso3').disabled = true;
+  estado.fecha = null;
+  estado.horario = null;
+
+  const dias = await proximosDiasHabiles(30);
+  cont.innerHTML = '';
+
+  dias.forEach(d => {
+    const btn = document.createElement('div');
+    btn.className = 'dia-btn';
+    btn.innerHTML = `
+      <span class="dia-nombre">${DIAS_ES[d.getDay()]}</span>
+      <span class="dia-numero">${d.getDate()}</span>
+      <span class="dia-mes">${MESES_ES[d.getMonth()]}</span>`;
+
+    btn.addEventListener('click', () => {
+      // Deseleccionamos todos los días
+      document.querySelectorAll('.dia-btn')
+              .forEach(b => b.classList.remove('seleccionado'));
+      btn.classList.add('seleccionado');
+
+      // Guardamos la fecha y reseteamos la selección de horario
+      estado.fecha   = formatFechaClave(d);
+      estado.horario = null;
+      estado.providerId = null;
+      document.getElementById('btn-paso3').disabled = true;
+
+      // Cargamos los horarios disponibles para este día
+      cargarHorarios(estado.fecha);
+    });
+
+    cont.appendChild(btn);
+  });
+}
+
+// ---------------------------------------------------------------
+// FUNCIÓN: cargarHorarios(fecha)
+// ---------------------------------------------------------------
+// Consulta GET /api/disponibilidad para el servicio y fecha elegidos
+// y renderiza la grilla de horarios disponibles.
+async function cargarHorarios(fecha) {
+  const seccion = document.getElementById('seccion-horarios');
+  const cont    = document.getElementById('lista-horarios');
+  const aviso   = document.getElementById('aviso-sin-horarios');
+
+  seccion.style.display = 'block';
+  aviso.classList.remove('visible');
+  cont.innerHTML = '<div class="cargando" style="grid-column: 1 / -1;"><span class="cargando-spinner"></span> Consultando disponibilidad...</div>';
+
+  try {
+    const res  = await fetch(`${API_BASE}/api/disponibilidad?serviceId=${estado.serviceId}&fecha=${fecha}`);
+    const data = await res.json();
+
+    mapaHorarioOperador = data.mapaHorarioOperador || {};
+    const horarios      = data.horariosLibres || [];
+
+    cont.innerHTML = '';
+
+    if (horarios.length === 0) {
+      aviso.classList.add('visible');
+      return;
+    }
+
+    horarios.forEach(h => {
+      const btn = document.createElement('div');
+      btn.className   = 'horario-btn';
+      btn.textContent = h;
+
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.horario-btn')
+                .forEach(b => b.classList.remove('seleccionado'));
+        btn.classList.add('seleccionado');
+
+        estado.horario    = h;
+        estado.providerId = mapaHorarioOperador[h];
+
+        // Calculamos la hora de fin sumando la duración del trámite
+        const [hora, min] = h.split(':').map(Number);
+        const minFin      = min + (estado.duracion || 30);
+        const horaFin     = hora + Math.floor(minFin / 60);
+        const minFinResto = minFin % 60;
+
+        estado.fechaHora    = `${fecha} ${pad(hora)}:${pad(min)}:00`;
+        estado.fechaHoraFin = `${fecha} ${pad(horaFin)}:${pad(minFinResto)}:00`;
+
+        // Habilitamos el botón Continuar
+        document.getElementById('btn-paso3').disabled = false;
+      });
+
+      cont.appendChild(btn);
+    });
+
+  } catch (e) {
+    cont.innerHTML = `<div class="cargando" style="color: var(--vla-error); grid-column: 1 / -1;">
+      Error al consultar disponibilidad. Intentá de nuevo.
+    </div>`;
+  }
+}
+
+// ---------------------------------------------------------------
+// PASO 3 → PASO 4 (resumen)
+// ---------------------------------------------------------------
+document.getElementById('btn-paso3').addEventListener('click', () => {
+  document.getElementById('resumen-turno').innerHTML = construirResumen();
+  irAPaso(4);
+});
+
+// ---------------------------------------------------------------
+// FUNCIÓN: construirResumen()
+// ---------------------------------------------------------------
+// Genera el HTML del resumen de turno a partir del estado global.
+// Se usa tanto en el paso 4 como en la pantalla de éxito.
+function construirResumen(idCita) {
+  const fechaTexto = formatFechaTexto(estado.fecha);
+  const filaId     = idCita ? `
+    <div class="resumen-fila">
+      <span class="resumen-label">N° de turno</span>
+      <span class="resumen-valor">#${idCita}</span>
+    </div>` : '';
+
+  return `
+    <div class="resumen-fila">
+      <span class="resumen-label">Nombre</span>
+      <span class="resumen-valor">${estado.nombre}</span>
+    </div>
+    <div class="resumen-fila">
+      <span class="resumen-label">DNI</span>
+      <span class="resumen-valor">${estado.dni}</span>
+    </div>
+    <div class="resumen-fila">
+      <span class="resumen-label">Trámite</span>
+      <span class="resumen-valor">${estado.tramite}</span>
+    </div>
+    <div class="resumen-fila">
+      <span class="resumen-label">Fecha</span>
+      <span class="resumen-valor">${fechaTexto}</span>
+    </div>
+    <div class="resumen-fila">
+      <span class="resumen-label">Horario</span>
+      <span class="resumen-valor">${estado.horario} hs</span>
+    </div>
+    <div class="resumen-fila">
+      <span class="resumen-label">Duración</span>
+      <span class="resumen-valor">${estado.duracion} minutos</span>
+    </div>
+    ${filaId}`;
+}
+
+// ---------------------------------------------------------------
+// CONFIRMAR TURNO → llamada POST /api/turno
+// ---------------------------------------------------------------
+document.getElementById('btn-confirmar').addEventListener('click', async () => {
+  const btn    = document.getElementById('btn-confirmar');
+  btn.disabled = true;
+  btn.textContent = 'Confirmando...';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/turno`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dni:          estado.dni,
+        nombre:       estado.nombre,
+        serviceId:    estado.serviceId,
+        providerId:   estado.providerId,
+        fechaHora:    estado.fechaHora,
+        fechaHoraFin: estado.fechaHoraFin,
+      }),
+    });
+
+    if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
+
+    const cita = await res.json();
+
+    // Mostramos el resumen en la pantalla de éxito con el N° de cita
+    document.getElementById('resumen-exito').innerHTML = construirResumen(cita.id);
+    irAPaso(5);
+
+  } catch (e) {
+    // Reactivamos el botón para que el vecino pueda reintentar
+    btn.disabled    = false;
+    btn.textContent = 'Confirmar turno';
+    alert('Hubo un problema al confirmar el turno. Es posible que el horario haya sido tomado. Por favor elegí otro horario.');
+  }
+});
+
+// ---------------------------------------------------------------
+// BOTONES DE NAVEGACIÓN "VOLVER"
+// ---------------------------------------------------------------
+document.getElementById('btn-volver-1').addEventListener('click', () => irAPaso(1));
+
+document.getElementById('btn-volver-2').addEventListener('click', () => {
+  // Limpiamos fecha y horario al volver al paso 2
+  estado.fecha = null;
+  estado.horario = null;
+  irAPaso(2);
+});
+
+document.getElementById('btn-volver-3').addEventListener('click', () => irAPaso(3));
+
+// ---------------------------------------------------------------
+// BOTÓN "SACAR OTRO TURNO" — reinicia todo desde cero
+// ---------------------------------------------------------------
+document.getElementById('btn-nuevo').addEventListener('click', () => {
+  // Limpiamos el estado global
+  estado = {
+    dni: '', nombre: '', tramite: '', serviceId: null, duracion: 30,
+    fecha: null, horario: null, providerId: null,
+    fechaHora: null, fechaHoraFin: null,
+  };
+  mapaHorarioOperador = {};
+
+  // Limpiamos los campos del paso 1
+  document.getElementById('input-dni').value    = '';
+  document.getElementById('input-nombre').value = '';
+  document.getElementById('error-dni').classList.remove('visible');
+  document.getElementById('error-nombre').classList.remove('visible');
+
+  // Reseteamos los botones deshabilitados
+  document.getElementById('btn-paso2').disabled = true;
+  document.getElementById('btn-paso3').disabled = true;
+  document.getElementById('btn-confirmar').disabled = false;
+  document.getElementById('btn-confirmar').textContent = 'Confirmar turno';
+
+  // Volvemos al paso 1
+  irAPaso(1);
+});
+</script>
+
+</body>
+</html>

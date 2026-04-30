@@ -529,6 +529,10 @@ app.use(express.json({
   }
 }));
 
+// Servimos la carpeta public/ como archivos estáticos.
+// Esto hace que selector.html sea accesible en http://localhost:3000/selector.html
+app.use(express.static(path.join(__dirname, 'public')));
+
 // ---------------------------------------------------------------
 // ENDPOINT GET /webhook — Verificación del webhook por Meta
 // ---------------------------------------------------------------
@@ -1143,7 +1147,108 @@ function gestionarTimeout(chatId) {
 }
 
 // ---------------------------------------------------------------
-// 11. FUNCIÓN PRINCIPAL: procesarMensajeEntrante(body)
+// 11. FUNCIÓN: obtenerRequisitos(tramiteNombre)
+// ---------------------------------------------------------------
+// Consulta una hoja de Google Sheets publicada como CSV y devuelve
+// el texto de requisitos asociado a un trámite. Si no lo encuentra
+// o si algo falla, devuelve null sin interrumpir el flujo principal.
+//
+// La hoja tiene dos columnas:
+//   Columna A → nombre del trámite (debe coincidir exactamente)
+//   Columna B → texto con los requisitos del trámite
+async function obtenerRequisitos(tramiteNombre) {
+
+  // Leemos la URL del CSV desde la variable de entorno.
+  // Si no está configurada, no hay nada que buscar.
+  const url = process.env.GOOGLE_SHEET_REQUISITOS_URL;
+  if (!url) {
+    return null;
+  }
+
+  // Envolvemos todo en try/catch para que cualquier fallo
+  // (red, parseo, etc.) no detenga el flujo principal.
+  try {
+    // Hacemos la solicitud GET al CSV usando el módulo https nativo.
+    // Usamos una función interna recursiva para seguir redirecciones manualmente,
+    // ya que Node.js no las sigue de forma automática y Google redirige la URL
+    // del CSV antes de entregar el contenido real.
+    const csvTexto = await new Promise((resolve, reject) => {
+
+      // hacerSolicitud(urlActual): realiza el GET y, si la respuesta es una
+      // redirección (301 o 302), se llama a sí misma con la nueva URL.
+      function hacerSolicitud(urlActual) {
+        https.get(urlActual, (respuesta) => {
+
+          // Si el servidor responde con una redirección, seguimos la nueva URL.
+          // Google Sheets puede usar 301 (movido permanentemente), 302 (encontrado)
+          // o 307 (redirección temporal) antes de entregar el CSV final.
+          if (respuesta.statusCode === 301 || respuesta.statusCode === 302 || respuesta.statusCode === 307) {
+            const nuevaUrl = respuesta.headers.location;
+
+            // Si la redirección no trae una URL de destino, no podemos continuar.
+            if (!nuevaUrl) {
+              reject(new Error(`Redirección sin header location (código ${respuesta.statusCode})`));
+              return;
+            }
+
+            // Llamamos recursivamente con la URL a la que nos redirigió el servidor.
+            hacerSolicitud(nuevaUrl);
+            return;
+          }
+
+          // Si no es una redirección, acumulamos los datos de la respuesta.
+          let datos = '';
+          respuesta.on('data', (fragmento) => { datos += fragmento; });
+          // Cuando llegaron todos los datos, resolvemos la promesa con el texto completo.
+          respuesta.on('end', () => resolve(datos));
+          // Si ocurre un error mientras leemos la respuesta, rechazamos la promesa.
+          respuesta.on('error', reject);
+
+        // Si ocurre un error al intentar conectarse, rechazamos la promesa.
+        }).on('error', reject);
+      }
+
+      // Iniciamos el proceso con la URL original de la variable de entorno.
+      hacerSolicitud(url);
+    });
+
+    // Buscamos la fila del trámite usando una expresión regular en lugar de
+    // dividir el CSV por saltos de línea. Esto es necesario porque el texto
+    // de la columna B puede tener saltos de línea internos (cuando el campo
+    // está entre comillas dobles), y un split('\n') rompería ese contenido.
+    //
+    // El patrón busca:
+    //   - El nombre exacto del trámite al inicio de una línea (^)
+    //   - Seguido de una coma y una comilla doble de apertura (,")
+    //   - Luego todo el contenido hasta la comilla doble de cierre ("$)
+    //
+    // El flag 'm' hace que ^ coincida con el inicio de cada línea del CSV.
+    // El flag 's' hace que el punto '.' también coincida con saltos de línea,
+    // permitiendo capturar campos multilínea completos.
+    const nombreEscapado = tramiteNombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patron = new RegExp(`^${nombreEscapado},"(.*?)"\\s*$`, 'ms');
+    const coincidencia = patron.exec(csvTexto);
+
+    // Si no encontramos ninguna fila que coincida, devolvemos null.
+    if (!coincidencia) {
+      return null;
+    }
+
+    // El grupo de captura (índice 1) contiene el texto del campo sin las comillas externas.
+    // En formato CSV, una comilla doble literal se escribe como dos comillas seguidas ("").
+    // Las convertimos de vuelta a una sola comilla doble.
+    const requisitos = coincidencia[1].replace(/""/g, '"');
+    return requisitos;
+
+  } catch (error) {
+    // Registramos el error pero no lo propagamos para no interrumpir el flujo.
+    logger.error('Error al obtener requisitos desde Google Sheets:', error.message);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------
+// 12. FUNCIÓN PRINCIPAL: procesarMensajeEntrante(body)
 // ---------------------------------------------------------------
 // Recibe el body completo del webhook de Meta, extrae los datos del
 // mensaje entrante y ejecuta toda la lógica conversacional.
@@ -1879,7 +1984,7 @@ async function procesarCallback(chatId, data) {
       ? 'Te esperamos. ¡Hasta pronto!'
       : 'Tu turno quedó registrado en el sistema. Te esperamos. ¡Hasta pronto!';
 
-    enviarMensaje(
+    await enviarMensaje(
       chatId,
       `${encabezadoConfirmacion}\n\n` +
       `👤 *Nombre:* ${nombre}\n` +
@@ -1890,6 +1995,15 @@ async function procesarCallback(chatId, data) {
       pieConfirmacion,
       { parse_mode: 'Markdown' }
     );
+
+    // Enviamos un segundo mensaje con los requisitos del trámite, si existen.
+    // Esto le informa al vecino qué documentación debe llevar el día del turno.
+    logger.info(`🔍 Buscando requisitos para trámite: "${tramite}"`);
+    const requisitos = await obtenerRequisitos(tramite);
+    logger.info(`🔍 Resultado obtenerRequisitos: ${requisitos === null ? 'null' : 'texto encontrado'}`);
+    if (requisitos) {
+      await enviarMensaje(chatId, requisitos);
+    }
 
     delete registrosEnProceso[chatId];
     estadosUsuarios[chatId] = 'INICIAL';
