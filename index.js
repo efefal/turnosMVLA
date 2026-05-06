@@ -128,8 +128,24 @@ async function cargarTramites() {
       console.warn('⚠️  No se encontraron trámites en Easy!Appointments.');
       return;
     }
-    TRAMITES_COMPLETOS = servicios;
-    TRAMITES = servicios.map((s) => s.name);
+    // Si TRAMITES_HABILITADOS está definida en .env, filtramos para quedarnos
+    // solo con los servicios cuyos IDs aparecen en esa lista.
+    // Esto permite habilitar o deshabilitar trámites sin tocar el código:
+    // basta con editar el .env y reiniciar el bot.
+    // Ejemplo en .env: TRAMITES_HABILITADOS=2,3
+    // Si la variable no existe o está vacía, se usan todos los servicios
+    // (comportamiento original, sin filtrado).
+    const habilitadosRaw = process.env.TRAMITES_HABILITADOS;
+    let serviciosFiltrados = servicios;
+    if (habilitadosRaw && habilitadosRaw.trim() !== '') {
+      // Convertimos el string "2,3" en el array de números [2, 3].
+      // parseInt(id, 10) convierte cada fragmento a número entero en base decimal.
+      const idsHabilitados = habilitadosRaw.split(',').map((id) => parseInt(id.trim(), 10));
+      serviciosFiltrados = servicios.filter((s) => idsHabilitados.includes(s.id));
+    }
+
+    TRAMITES_COMPLETOS = serviciosFiltrados;
+    TRAMITES = serviciosFiltrados.map((s) => s.name);
     logger.info(`✅ Trámites cargados: ${TRAMITES.join(', ')}`);
   } catch (error) {
     logger.error('❌ Error al cargar trámites desde Easy!Appointments:', error.message);
@@ -1493,7 +1509,23 @@ async function procesarMensajeEntrante(body) {
     // Pasamos al siguiente estado: elegir el trámite
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
-    // Enviamos la bienvenida con la lista de trámites disponibles.
+    // Si solo hay un trámite disponible (por ejemplo, porque TRAMITES_HABILITADOS
+    // está configurado con un único ID), lo asignamos automáticamente.
+    // No tiene sentido mostrar una lista con una sola opción: es mejor ir directo
+    // al selector de semanas y avisar al vecino qué trámite se le asignó.
+    if (TRAMITES.length === 1) {
+      registrosEnProceso[chatId].tramite = TRAMITES_COMPLETOS[0].name;
+      estadosUsuarios[chatId] = 'ESPERANDO_DIA';
+      const semanasAutoC = await proximasSemanas(30);
+      enviarLista(
+        chatId,
+        `¡Bienvenido/a, ${nombreIngresado}!\n\nVas a sacar un turno para *${TRAMITES_COMPLETOS[0].name}*.\n\n📅 Elegí una semana:`,
+        opcionesSemanas(semanasAutoC)
+      );
+      return;
+    }
+
+    // Hay más de un trámite disponible: mostramos la lista para que el vecino elija.
     // Al pie recordamos que puede escribir "Cancelar" para salir en cualquier momento.
     enviarLista(
       chatId,
@@ -1713,6 +1745,21 @@ async function procesarCallback(chatId, data) {
 
     if (indicesDisponibles.length === 0) {
       enviarMensaje(chatId, '⚠️ Ya tenés turnos activos para todos los trámites disponibles.');
+      return;
+    }
+
+    // Si solo quedó un trámite sin reservar, lo asignamos automáticamente
+    // y vamos directo al selector de semanas sin mostrar lista de selección.
+    if (indicesDisponibles.length === 1) {
+      const tramiteAutoVT = TRAMITES_COMPLETOS.find((s) => s.name === TRAMITES[indicesDisponibles[0]]);
+      registrosEnProceso[chatId].tramite = tramiteAutoVT.name;
+      estadosUsuarios[chatId] = 'ESPERANDO_DIA';
+      const semanasAutoVT = await proximasSemanas(30);
+      enviarLista(
+        chatId,
+        `¡Bienvenido/a, ${registrosEnProceso[chatId].nombre}!\n\nVas a sacar un turno para *${tramiteAutoVT.name}*.\n\n📅 Elegí una semana:`,
+        opcionesSemanas(semanasAutoVT)
+      );
       return;
     }
 
@@ -2118,7 +2165,22 @@ async function procesarCallback(chatId, data) {
       return;
     }
 
-    // Hay al menos un trámite libre: avanzamos el estado a ESPERANDO_TRAMITE
+    // Si solo queda un trámite libre, lo asignamos automáticamente
+    // y vamos directo al selector de semanas sin mostrar lista de selección.
+    if (indicesDisponibles.length === 1) {
+      const tramiteAutoE = TRAMITES_COMPLETOS.find((s) => s.name === TRAMITES[indicesDisponibles[0]]);
+      registrosEnProceso[chatId].tramite = tramiteAutoE.name;
+      estadosUsuarios[chatId] = 'ESPERANDO_DIA';
+      const semanasAutoE = await proximasSemanas(30);
+      enviarLista(
+        chatId,
+        `¡Bienvenido/a, ${registrosEnProceso[chatId].nombre}!\n\nVas a sacar un turno para *${tramiteAutoE.name}*.\n\n📅 Elegí una semana:`,
+        opcionesSemanas(semanasAutoE)
+      );
+      return;
+    }
+
+    // Hay más de un trámite libre: avanzamos el estado a ESPERANDO_TRAMITE
     // y le mostramos solo los botones de los trámites que todavía puede reservar.
     estadosUsuarios[chatId] = 'ESPERANDO_TRAMITE';
 
