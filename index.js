@@ -1,6 +1,6 @@
 // =============================================================
-// index.js — Bot de Telegram con flujo conversacional completo
-//             y persistencia real en archivo JSON
+// index.js — Bot de WhatsApp (Meta Business API v25.0)
+//             con flujo conversacional completo y Easy!Appointments
 // =============================================================
 
 // ---------------------------------------------------------------
