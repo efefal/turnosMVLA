@@ -343,29 +343,51 @@ y el valor `'web'` no existía. Se usó `'bot'` como workaround temporal.
 
 ---
 
-## Fase 6 — Cron job de recordatorios (Semana 5)
+## ✅ Fase 6 — Cron job de recordatorios (completada 2026-06-04)
 
 **Objetivo**: enviar WhatsApp automático a vecinos con turno en las próximas 24 horas.
 
-**Implementación**: archivo `cron.js` requerido desde `index.js` junto al swap final.
+**Implementación**: `cron.js` (raíz del proyecto) + llamada en `index.js` dentro del callback de `app.listen()`.
 
-**Lógica del cron** (en `cron.js`):
+### Lógica implementada
+
+**Query** (usa índice `idx_turnos_recordatorio`):
 ```sql
-SELECT t.id, t.hora_inicio, t.fecha, v.telefono, v.nombre, s.nombre AS servicio
-FROM turnos t
-JOIN vecinos v ON t.vecino_id = v.id
-JOIN servicios s ON t.servicio_id = s.id
-WHERE t.fecha = CURDATE() + INTERVAL 1 DAY
-  AND t.estado = 'agendado'
-  AND t.recordatorio_enviado = FALSE
-  AND v.telefono IS NOT NULL
+SELECT t.id, t.fecha, t.hora_inicio, v.telefono, v.nombre, s.nombre AS servicio
+FROM   turnos t
+JOIN   vecinos   v ON t.vecino_id   = v.id
+JOIN   servicios s ON t.servicio_id = s.id
+WHERE  t.fecha                = CURDATE() + INTERVAL 1 DAY
+  AND  t.estado               = 'agendado'
+  AND  t.recordatorio_enviado = FALSE
+  AND  v.telefono             IS NOT NULL
+ORDER BY t.hora_inicio ASC
 ```
 
-**Nota**: la tabla `vecinos` tiene columna `telefono` (VARCHAR, puede ser NULL si el vecino se registró solo por web). Solo enviar recordatorio si `telefono IS NOT NULL`.
+**Flujo por cada turno encontrado**:
+1. `enviarRecordatorio()` — POST a Graph API v25.0 igual que `enviarMensaje()` de `index.js`
+2. Si éxito → `UPDATE turnos SET recordatorio_enviado = TRUE WHERE id = ?`
+3. INSERT en `auditoria` (`entidad_tipo='turno'`, `accion='modificar'`, `canal='sistema'`, `usuario_id=NULL`)
+4. Si fallo de envío → no marca la fila (reintento en próxima ejecución)
 
-**Riesgo crítico**: WhatsApp solo permite mensajes proactivos via Message Templates aprobados por Meta. Iniciar la solicitud de aprobación del template antes de implementar este cron.
+**Scheduling**: `setTimeout` recursivo (sin dependencias externas).
+- Default: 08:00 hs todos los días
+- Configurable via `CRON_HORA_RECORDATORIO=N` en `.env`
+- Recalcula el tiempo restante en cada ciclo (protege contra derivas de reloj y cambio de horario de verano)
 
-**Complejidad**: Media
+**Variables de entorno nuevas** (agregar a `.env`):
+```
+CRON_HORA_MANANA=8
+CRON_HORA_TARDE=18
+```
+
+**⚠️ Pendiente antes de usar en producción**: solicitar aprobación del Message Template
+en Meta Business Manager. Hasta entonces el recordatorio solo llega a vecinos que
+hayan interactuado con el bot en las últimas 24h. Ver R4 en PLAN.md.
+Cuando el template esté aprobado: reemplazar `type: 'text'` por `type: 'template'`
+en `enviarRecordatorio()` de `cron.js`.
+
+**Complejidad**: Media ✅ completada
 
 ---
 
@@ -410,7 +432,7 @@ Las fases 4, 5 y 6 pueden desarrollarse en paralelo una vez que Fases 0-3 estén
 | 3 | Scripts CLI | Baja | ✅ Completa |
 | 4 | Panel de empleados | Alta | ✅ Completa |
 | 5 | Selector web | Media | ✅ Completa |
-| 6 | Cron recordatorios | Media | ⏳ Pendiente |
+| 6 | Cron recordatorios | Media | ✅ Completa |
 | 7 | Migración y corte | Baja | ⏳ Parcialmente avanzada |
 
 ---

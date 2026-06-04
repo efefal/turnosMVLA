@@ -2831,4 +2831,8 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   logger.info(`✅ Servidor iniciado en el puerto ${PORT}. Esperando mensajes de WhatsApp...`);
+  // Arrancar el cron de recordatorios automáticos al mismo tiempo que el servidor.
+  // El cron usa la misma conexión MySQL que motor.js y las mismas credenciales
+  // de WhatsApp que ya están cargadas en process.env.
+  require('./cron').iniciarCron();
 });
