@@ -274,7 +274,138 @@ async function obtenerDisponibilidad(serviceId, providerId, fecha) {
 }
 
 async function obtenerDisponibilidadServicio(serviceId, fecha) {
-  throw new Error('[motor] obtenerDisponibilidadServicio() aún no implementada (Fase 1)');
+  serviceId = parseInt(serviceId, 10);
+
+  // --- PASO 1: Obtener los operadores que atienden este servicio ese día ---
+  //
+  // Consultamos directamente la tabla horarios en lugar de llamar a
+  // obtenerProveedores() porque necesitamos solo los IDs — no los nombres ni
+  // la lista completa de servicios. Esto es más eficiente y preciso.
+  //
+  // La condición sobre usuarios.activo garantiza que no consultemos
+  // la disponibilidad de empleados dados de baja.
+  const [operadoresRows] = await db.query(
+    `SELECT DISTINCT h.usuario_id AS id
+     FROM horarios h
+     INNER JOIN usuarios u ON u.id = h.usuario_id AND u.activo = TRUE
+     WHERE h.servicio_id = ? AND h.activo = TRUE
+     ORDER BY h.usuario_id`,
+    [serviceId]
+  );
+  // ORDER BY garantiza que cuando dos operadores empatan en carga,
+  // el de menor ID siempre gana el slot. Sin ORDER BY, el DISTINCT
+  // puede devolver el array en diferente orden entre llamadas, haciendo
+  // el desempate no determinístico (varía según el plan de ejecución de MySQL).
+
+  // Si no hay operadores con horario para este servicio, no hay disponibilidad
+  if (operadoresRows.length === 0) {
+    logger.info(`[motor] obtenerDisponibilidadServicio: serviceId=${serviceId} sin operadores activos`);
+    return { horariosLibres: [], mapaHorarioOperador: {} };
+  }
+
+  // --- PASO 2: Consultar disponibilidad de todos los operadores en paralelo ---
+  //
+  // Promise.all lanza todas las consultas al mismo tiempo. Si hay 3 operadores,
+  // las 3 consultas viajan juntas en lugar de ir una por una — mucho más rápido.
+  //
+  // Estructura de resultado: [{ providerId, slots: ["08:00", ...] }, ...]
+  const resultados = await Promise.all(
+    operadoresRows.map(async (op) => {
+      const slots = await obtenerDisponibilidad(serviceId, op.id, fecha);
+      return { providerId: op.id, slots };
+    })
+  );
+
+  // Si todos los operadores devolvieron arrays vacíos, no hay nada que armar
+  const haySlots = resultados.some((r) => r.slots.length > 0);
+  if (!haySlots) {
+    logger.info(`[motor] obtenerDisponibilidadServicio: serviceId=${serviceId} fecha=${fecha} sin slots disponibles`);
+    return { horariosLibres: [], mapaHorarioOperador: {} };
+  }
+
+  // --- PASO 3: Contar turnos activos de cada operador en esa fecha ---
+  //
+  // Este conteo es la base del round-robin por carga real.
+  // En lugar de asignar al primero que aparezca (FIFO como hacía ea.js),
+  // asignamos al que tiene menos turnos ese día.
+  // Una sola query trae el conteo de todos los operadores juntos.
+  const operadorIds = operadoresRows.map((op) => op.id);
+  const [conteos] = await db.query(
+    `SELECT operador_id, COUNT(*) AS total_turnos
+     FROM turnos
+     WHERE fecha = ?
+       AND operador_id IN (?)
+       AND estado != 'cancelado'
+     GROUP BY operador_id`,
+    [fecha, operadorIds]
+  );
+
+  // Construimos un mapa { providerId → cantidad de turnos } para acceso O(1)
+  // Los operadores sin turnos ese día no aparecen en la query → los inicializamos en 0
+  const cargaPorOperador = {};
+  for (const op of operadoresRows) {
+    cargaPorOperador[op.id] = 0;
+  }
+  for (const fila of conteos) {
+    cargaPorOperador[fila.operador_id] = fila.total_turnos;
+  }
+
+  // --- PASO 4: Construir mapaHorarioOperador con round-robin por carga ---
+  //
+  // Para cada slot único disponible (en cualquier operador):
+  //   1. Encontrar todos los operadores que tienen ese slot libre
+  //   2. Elegir el que tiene menos turnos ese día
+  //   3. Asignarle el slot en el mapa
+  //   4. Incrementar su contador para que el SIGUIENTE slot empate se reparta
+  //      al otro operador — así se distribuye la carga de forma equitativa
+  //      aunque los datos de BD todavía no reflejen estos turnos nuevos.
+
+  // Recolectamos todos los slots únicos de todos los operadores
+  const todosLosSlots = new Set();
+  for (const resultado of resultados) {
+    for (const slot of resultado.slots) {
+      todosLosSlots.add(slot);
+    }
+  }
+
+  // Ordenamos cronológicamente antes de iterar para que el round-robin
+  // asigne siempre en el mismo orden si se llama dos veces con los mismos datos
+  const slotsOrdenados = [...todosLosSlots].sort();
+
+  const mapaHorarioOperador = {};
+
+  for (const slot of slotsOrdenados) {
+    // Operadores que tienen este slot disponible
+    const candidatos = resultados
+      .filter((r) => r.slots.includes(slot))
+      .map((r) => r.providerId);
+
+    if (candidatos.length === 0) continue;
+
+    // Elegir el candidato con menor carga actual
+    // Si empatan en carga, reduce() queda con el primero que encontró
+    // (que ya es el de menor ID por el ORDER BY del PASO 1)
+    const elegido = candidatos.reduce((minId, pId) =>
+      cargaPorOperador[pId] < cargaPorOperador[minId] ? pId : minId
+    );
+
+    mapaHorarioOperador[slot] = elegido;
+
+    // Incrementar el contador del elegido para que el próximo slot
+    // empate se distribuya a otro operador
+    cargaPorOperador[elegido]++;
+  }
+
+  // horariosLibres son las claves del mapa — ya están ordenadas porque
+  // iteramos slotsOrdenados y Object.keys() preserva el orden de inserción en V8
+  const horariosLibres = Object.keys(mapaHorarioOperador);
+
+  logger.info(
+    `[motor] obtenerDisponibilidadServicio: serviceId=${serviceId} fecha=${fecha} ` +
+    `→ ${horariosLibres.length} slots, ${operadoresRows.length} operador(es)`
+  );
+
+  return { horariosLibres, mapaHorarioOperador };
 }
 
 async function crearCita(datos) {
