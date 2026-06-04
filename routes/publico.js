@@ -272,11 +272,10 @@ router.delete('/turno/:id', async (req, res) => {
       );
 
       // usuario_id NULL porque es una cancelación de un vecino (no de un empleado).
-      // canal='bot' para acciones del vecino desde cualquier canal de autogestión
-      // (whatsapp o web). El detalle registra el origen exacto.
+      // canal='web' para acciones del vecino desde el selector web.
       await conn.query(
         `INSERT INTO auditoria (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal, ip)
-         VALUES (NULL, 'turno', ?, 'cancelar', ?, 'bot', ?)`,
+         VALUES (NULL, 'turno', ?, 'cancelar', ?, 'web', ?)`,
         [id, JSON.stringify({ motivo: motivoTrim, origen: 'selector_web' }), req.ip || null]
       );
 

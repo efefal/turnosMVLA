@@ -427,10 +427,11 @@ async function crearCita(datos) {
   // Los valores válidos en la columna canal_origen son: 'whatsapp', 'web', 'presencial'.
   const canalOrigen = datos.canal || 'whatsapp';
 
-  // La columna auditoria.canal tiene un ENUM diferente: 'bot', 'panel', 'sistema'.
-  // Las reservas por WhatsApp y web las maneja el sistema automatizado → 'bot'.
-  // Las presenciales las carga un empleado desde el panel → 'panel'.
-  const canalAuditoria = canalOrigen === 'presencial' ? 'panel' : 'bot';
+  // La columna auditoria.canal tiene un ENUM diferente: 'bot', 'panel', 'sistema', 'web'.
+  //   'bot'   → reservas desde WhatsApp (flujo conversacional)
+  //   'web'   → reservas desde el selector web público
+  //   'panel' → carga presencial realizada por un empleado
+  const canalAuditoria = { presencial: 'panel', web: 'web' }[canalOrigen] ?? 'bot';
 
   // Extraemos fecha y hora del string "YYYY-MM-DD HH:MM:SS"
   const fecha      = fechaHora.substring(0, 10);   // "YYYY-MM-DD"

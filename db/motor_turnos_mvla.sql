@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS auditoria (
   entidad_id    INT UNSIGNED  NOT NULL               COMMENT 'ID del registro afectado en su tabla correspondiente',
   accion        ENUM('crear', 'modificar', 'cancelar', 'eliminar', 'bloquear', 'desbloquear', 'login', 'logout') NOT NULL,
   detalle       JSON          NULL                   COMMENT 'Contexto adicional: valores anteriores, motivo, etc.',
-  canal         ENUM('bot', 'panel', 'sistema') NOT NULL COMMENT 'Desde dónde se realizó la acción',
+  canal         ENUM('bot', 'panel', 'sistema', 'web') NOT NULL COMMENT 'Desde dónde se realizó la acción',
   ip            VARCHAR(45)   NULL                   COMMENT 'IP desde la que se realizó la acción. NULL si fue el sistema',
   timestamp     DATETIME      NOT NULL DEFAULT NOW(),
 
