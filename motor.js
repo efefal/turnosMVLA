@@ -409,11 +409,198 @@ async function obtenerDisponibilidadServicio(serviceId, fecha) {
 }
 
 async function crearCita(datos) {
-  throw new Error('[motor] crearCita() aún no implementada (Fase 2)');
+  // Desestructuramos con valores por defecto para los campos opcionales.
+  // El DNI viene siempre en datos.dni — no necesitamos extraerlo del email ficticio.
+  const {
+    serviceId,
+    providerId,
+    nombre,
+    apellido  = '',
+    dni,
+    fechaHora,      // "YYYY-MM-DD HH:MM:SS"
+    fechaHoraFin,   // "YYYY-MM-DD HH:MM:SS"
+    notas     = '',
+  } = datos;
+
+  // El canal de origen viene en datos.canal si está definido, sino 'whatsapp'.
+  // Los valores válidos en la columna canal_origen son: 'whatsapp', 'web', 'presencial'.
+  const canalOrigen = datos.canal || 'whatsapp';
+
+  // La columna auditoria.canal tiene un ENUM diferente: 'bot', 'panel', 'sistema'.
+  // Las reservas por WhatsApp y web las maneja el sistema automatizado → 'bot'.
+  // Las presenciales las carga un empleado desde el panel → 'panel'.
+  const canalAuditoria = canalOrigen === 'presencial' ? 'panel' : 'bot';
+
+  // Extraemos fecha y hora del string "YYYY-MM-DD HH:MM:SS"
+  const fecha      = fechaHora.substring(0, 10);   // "YYYY-MM-DD"
+  const horaInicio = fechaHora.substring(11, 16);  // "HH:MM"
+  const horaFin    = fechaHoraFin.substring(11, 16); // "HH:MM"
+
+  // El nombre que guardamos en vecinos es el nombre completo.
+  // index.js pasa apellido: '' siempre, así que en la práctica es solo el nombre.
+  const nombreCompleto = apellido ? `${nombre} ${apellido}`.trim() : nombre;
+
+  // --- TRANSACCIÓN ---
+  // Usamos pool.getConnection() porque la transacción necesita vivir en la
+  // MISMA conexión de principio a fin. pool.query() podría usar conexiones
+  // distintas para cada llamada, rompiendo la transacción.
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    // --- PASO 1: UPSERT del vecino ---
+    // Si el vecino ya existe (mismo DNI), actualizamos el nombre por si cambió.
+    // El truco LAST_INSERT_ID(id) hace que insertId siempre traiga el ID correcto,
+    // tanto para inserts nuevos como para actualizaciones de duplicados.
+    const [upsertResult] = await conn.query(
+      `INSERT INTO vecinos (dni, nombre, canal_registro)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         id             = LAST_INSERT_ID(id),
+         nombre         = VALUES(nombre)`,
+      [dni, nombreCompleto, canalOrigen]
+    );
+    const vecinoId = upsertResult.insertId;
+
+    // --- PASO 2: SELECT FOR UPDATE — verificar que el slot sigue libre ---
+    // Esta es la pieza clave del anti-superposición concurrente.
+    // SELECT FOR UPDATE coloca un bloqueo exclusivo sobre las filas leídas
+    // y los gaps adyacentes, de modo que si otra transacción intenta leer
+    // el mismo slot simultáneamente, queda bloqueada hasta que esta termine.
+    //
+    // NOTA: el bloqueo es más efectivo cuando existe un índice compuesto en
+    // (operador_id, fecha, hora_inicio). Con los índices actuales (separados)
+    // la ventana de race condition es muy pequeña pero no cero. Suficiente para el PoC.
+    const [turnosExistentes] = await conn.query(
+      `SELECT id FROM turnos
+       WHERE operador_id = ?
+         AND fecha       = ?
+         AND hora_inicio = ?
+         AND estado     != 'cancelado'
+       FOR UPDATE`,
+      [providerId, fecha, horaInicio]
+    );
+
+    if (turnosExistentes.length > 0) {
+      // El slot fue tomado por otra reserva entre que el vecino eligió el horario
+      // y presionó confirmar. Hacemos rollback y avisamos con un error claro.
+      await conn.rollback();
+      throw new Error(
+        `El horario ${horaInicio} del ${fecha} ya fue reservado por otra persona. ` +
+        `Elegí otro horario.`
+      );
+    }
+
+    // --- PASO 3: INSERT del turno ---
+    const [insertResult] = await conn.query(
+      `INSERT INTO turnos
+         (vecino_id, servicio_id, operador_id, fecha, hora_inicio, hora_fin, estado, canal_origen)
+       VALUES (?, ?, ?, ?, ?, ?, 'agendado', ?)`,
+      [vecinoId, serviceId, providerId, fecha, horaInicio, horaFin, canalOrigen]
+    );
+    const turnoId = insertResult.insertId;
+
+    // --- PASO 4: INSERT en auditoría ---
+    // Registramos la creación para tener trazabilidad completa.
+    // usuario_id es NULL porque la acción la hace el sistema (bot o web), no un empleado.
+    await conn.query(
+      `INSERT INTO auditoria
+         (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal)
+       VALUES (NULL, 'turno', ?, 'crear', ?, ?)`,
+      [
+        turnoId,
+        JSON.stringify({ dni, serviceId, providerId, fecha, horaInicio, horaFin, canal: canalOrigen }),
+        canalAuditoria,
+      ]
+    );
+
+    await conn.commit();
+
+    logger.info(
+      `[motor] crearCita: turno ${turnoId} creado | DNI: ${dni} | ` +
+      `serviceId: ${serviceId} | providerId: ${providerId} | ${fecha} ${horaInicio}`
+    );
+
+    // Retornamos el objeto con todos los campos que puede necesitar el selector web.
+    // index.js solo lee cita.id (para el log del endpoint), pero res.json(cita)
+    // envía el objeto completo al cliente web, así que incluimos los campos principales.
+    return {
+      id:          turnoId,
+      start:       fechaHora,       // "YYYY-MM-DD HH:MM:SS" — formato que usa index.js
+      end:         fechaHoraFin,    // "YYYY-MM-DD HH:MM:SS"
+      serviceId:   parseInt(serviceId,  10),
+      providerId:  parseInt(providerId, 10),
+      vecinoId,
+      estado:      'agendado',
+      canal:       canalOrigen,
+    };
+
+  } catch (err) {
+    // Si algo falló dentro de la transacción y no hicimos rollback explícito arriba,
+    // lo hacemos acá para no dejar la transacción colgada.
+    await conn.rollback();
+    // Re-lanzamos el error para que index.js lo capture en su try/catch.
+    throw err;
+  } finally {
+    // SIEMPRE devolver la conexión al pool, haya habido error o no.
+    // Si no se libera, el pool se agota y el sistema se cuelga.
+    conn.release();
+  }
 }
 
+
 async function cancelarCita(appointmentId) {
-  throw new Error('[motor] cancelarCita() aún no implementada (Fase 2)');
+  appointmentId = parseInt(appointmentId, 10);
+
+  // Verificar que el turno existe y que no está ya cancelado.
+  // Lo hacemos ANTES de la transacción para dar un error descriptivo rápido.
+  const [turnos] = await db.query(
+    'SELECT id, estado FROM turnos WHERE id = ?',
+    [appointmentId]
+  );
+
+  if (turnos.length === 0) {
+    throw new Error(`No existe ningún turno con ID ${appointmentId}`);
+  }
+  if (turnos[0].estado === 'cancelado') {
+    throw new Error(`El turno ${appointmentId} ya está cancelado`);
+  }
+
+  // Usamos transacción para que el UPDATE y el INSERT en auditoría sean atómicos.
+  // Si el INSERT en auditoría falla, el UPDATE se revierte (no perdemos trazabilidad).
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    await conn.query(
+      `UPDATE turnos
+       SET estado = 'cancelado', updated_at = NOW()
+       WHERE id = ?`,
+      [appointmentId]
+    );
+
+    await conn.query(
+      `INSERT INTO auditoria
+         (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal)
+       VALUES (NULL, 'turno', ?, 'cancelar', ?, 'bot')`,
+      [
+        appointmentId,
+        JSON.stringify({ estadoAnterior: turnos[0].estado }),
+      ]
+    );
+
+    await conn.commit();
+
+    logger.info(`[motor] cancelarCita: turno ${appointmentId} cancelado`);
+
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 async function obtenerCitasDelCliente(email) {
