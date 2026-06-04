@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agenda — Panel MVLA</title>
+  <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
 
     /* Navbar */
-    .navbar { background: #1e3a5f; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
-    .nav-brand { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+    .navbar { background: #1A3C4B; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-logo { height: 34px; display: block; }
     .nav-links { display: flex; gap: 0.25rem; flex: 1; }
     .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
     .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
@@ -23,14 +24,24 @@
     .container { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.5rem; }
     .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 
-    /* Filtros */
-    .barra-filtros { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
-    .nav-fecha { display: flex; align-items: center; gap: 0.4rem; }
-    input[type="date"] { padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; cursor: pointer; }
-    input[type="date"]:focus { outline: none; border-color: #2563eb; }
-    .fecha-label { font-size: 0.85rem; color: #64748b; margin-bottom: 1rem; }
+    /* Barra superior */
+    .barra-top { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
 
-    /* Botones */
+    /* Selector de vista (control segmentado) */
+    .btn-group-vista { display: inline-flex; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+    .btn-vista { background: white; border: none; border-right: 1px solid #d1d5db; padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.8rem; font-weight: 500; color: #374151; font-family: inherit; transition: background 0.12s; }
+    .btn-vista:last-child { border-right: none; }
+    .btn-vista.activo { background: #1A3C4B; color: white; }
+    .btn-vista:hover:not(.activo) { background: #f8fafc; }
+
+    /* Navegación de fecha */
+    .nav-fecha { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+    .periodo-label { font-size: 0.85rem; color: #374151; font-weight: 500; padding: 0.35rem 0.5rem; white-space: nowrap; }
+    input[type="date"] { padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; cursor: pointer; }
+    input[type="date"]:focus { outline: none; border-color: #1A3C4B; }
+    .fecha-label { font-size: 0.85rem; color: #64748b; margin-bottom: 1rem; font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-weight: 700; color: #1A3C4B; }
+
+    /* Botones generales */
     .btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.8rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; font-family: inherit; transition: opacity 0.15s; white-space: nowrap; }
     .btn:hover:not(:disabled) { opacity: 0.85; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -38,7 +49,7 @@
     .btn-success { background: #16a34a; color: white; }
     .btn-warning { background: #d97706; color: white; }
     .btn-danger  { background: #dc2626; color: white; }
-    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary { background: #1A3C4B; color: white; }
 
     /* Stats */
     .stats { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
@@ -58,9 +69,9 @@
 
     /* Select */
     select { padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: white; }
-    select:focus { outline: none; border-color: #2563eb; }
+    select:focus { outline: none; border-color: #1A3C4B; }
 
-    /* Tabla */
+    /* ── VISTA DÍA: tabla ─────────────────────────────────────── */
     .tabla-wrapper { overflow-x: auto; border-radius: 8px; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.7rem 1rem; border-bottom: 2px solid #e2e8f0; text-align: left; white-space: nowrap; }
@@ -71,35 +82,103 @@
     .nombre-vecino { font-weight: 500; }
     .dni-vecino    { font-size: 0.8rem; color: #64748b; margin-top: 0.1rem; }
 
-    /* Badges */
+    /* Badges de estado */
     .badge { display: inline-block; padding: 0.2rem 0.65rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
     .badge-agendado { background: #dbeafe; color: #1e40af; }
     .badge-presente { background: #dcfce7; color: #15803d; }
     .badge-ausente  { background: #fee2e2; color: #b91c1c; }
     .badge-atendido { background: #f3f4f6; color: #4b5563; }
+    .badge-encargado { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
 
-    /* Modal */
-    .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
-    .modal-fondo.abierto { display: flex; }
-    .modal-caja { background: white; border-radius: 10px; padding: 1.5rem; max-width: 460px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
-    .modal-caja h3 { margin-bottom: 0.3rem; font-size: 1rem; color: #1e293b; }
-    .modal-info { color: #64748b; font-size: 0.85rem; margin-bottom: 1rem; }
-    label { display: block; font-size: 0.85rem; font-weight: 500; color: #374151; margin-bottom: 0.4rem; }
-    textarea { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; resize: vertical; }
-    textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
-    .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+    /* ── VISTA SEMANA ─────────────────────────────────────────── */
+    .tabla-semana-wrapper { overflow-x: auto; }
+    .tabla-semana {
+      width: 100%; border-collapse: collapse; table-layout: fixed;
+      min-width: 640px;
+    }
+    .tabla-semana th {
+      background: #f8fafc; color: #374151; font-weight: 600; font-size: 0.78rem;
+      padding: 0.55rem 0.3rem; border-bottom: 2px solid #e2e8f0;
+      text-align: center; white-space: nowrap;
+    }
+    .tabla-semana .col-hora { width: 52px; }
+    .tabla-semana .col-dia  { }
+    .tabla-semana td {
+      border: 1px solid #f1f5f9; vertical-align: top;
+      padding: 0.2rem; height: 42px; font-size: 0.75rem;
+    }
+    .cel-hora {
+      font-size: 0.72rem; color: #94a3b8; text-align: right;
+      padding-right: 0.5rem !important; vertical-align: middle !important;
+      background: #f8fafc; white-space: nowrap;
+    }
+    .cel-dia-hoy { background: rgba(26,60,75,.04); }
+    .turno-semana {
+      border-radius: 4px; padding: 0.2rem 0.35rem; margin-bottom: 2px;
+      font-size: 0.72rem; line-height: 1.25; overflow: hidden;
+      white-space: nowrap; text-overflow: ellipsis;
+    }
+    .turno-semana.badge-agendado { background: #dbeafe; color: #1e40af; }
+    .turno-semana.badge-presente { background: #dcfce7; color: #15803d; }
+    .turno-semana.badge-ausente  { background: #fee2e2; color: #b91c1c; }
+    .turno-semana.badge-atendido { background: #f3f4f6; color: #4b5563; }
+    .encabezado-dia-semana { font-size: 0.7rem; color: #94a3b8; display: block; font-weight: 400; }
+    .encabezado-num-semana { font-size: 0.88rem; }
+
+    /* ── VISTA MES ────────────────────────────────────────────── */
+    .vista-mes { padding: 0.75rem; }
+    .cal-header-dias {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+      gap: 3px; margin-bottom: 4px;
+    }
+    .cal-nombre-dia {
+      text-align: center; font-size: 0.72rem; font-weight: 600;
+      color: #64748b; padding: 0.3rem 0; text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
+    }
+    .cal-dia {
+      border: 1px solid #e2e8f0; border-radius: 6px;
+      padding: 0.45rem 0.5rem; min-height: 64px;
+      cursor: pointer; transition: background 0.1s; display: flex;
+      flex-direction: column; gap: 0.25rem;
+    }
+    .cal-dia:hover { background: #f1f5f9; }
+    .cal-dia.otro-mes { opacity: 0.3; pointer-events: none; }
+    .cal-dia.cal-hoy { border-color: #1A3C4B; background: rgba(26,60,75,.05); }
+    .cal-num { font-size: 0.82rem; font-weight: 600; color: #374151; }
+    .cal-hoy .cal-num { color: #1A3C4B; }
+    .cal-count {
+      display: inline-block; background: #1A3C4B; color: white;
+      border-radius: 99px; font-size: 0.65rem; font-weight: 700;
+      padding: 0.1rem 0.45rem; align-self: flex-start;
+    }
 
     /* Misc */
     .cargando { text-align: center; color: #94a3b8; padding: 3rem; font-style: italic; }
     .vacio { text-align: center; color: #94a3b8; padding: 3rem; }
     .vacio p { margin-top: 0.5rem; font-size: 0.85rem; }
-    .badge-encargado { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+
+    /* Modal cancelar */
+    .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-fondo.abierto { display: flex; }
+    .modal-caja { background: white; border-radius: 10px; padding: 1.5rem; max-width: 460px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+    .modal-caja h3 { margin-bottom: 0.3rem; font-size: 1rem; color: #1e293b; font-family: 'Trebuchet MS', Trebuchet, sans-serif; }
+    .modal-info { color: #64748b; font-size: 0.85rem; margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 500; color: #374151; margin-bottom: 0.4rem; }
+    textarea { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; resize: vertical; }
+    textarea:focus { outline: none; border-color: #1A3C4B; box-shadow: 0 0 0 3px rgba(26,60,75,.1); }
+    .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
   </style>
 </head>
 <body>
 
 <nav class="navbar">
-  <span class="nav-brand">🏛️ MVLA</span>
+  <a href="/panel/agenda.html">
+    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
+         alt="Municipalidad Villa La Angostura" class="nav-logo">
+  </a>
   <div class="nav-links">
     <a href="/panel/agenda.html" class="activo">Agenda</a>
     <a href="/panel/presencial.html">Presencial</a>
@@ -113,18 +192,50 @@
 
 <div class="container">
 
-  <div class="barra-filtros">
-    <div class="nav-fecha">
-      <button class="btn btn-ghost" onclick="diaAnterior()">◀ Anterior</button>
-      <input type="date" id="fecha-input" onchange="cargarAgenda()">
-      <button class="btn btn-ghost" onclick="diaSiguiente()">Siguiente ▶</button>
+  <!-- Barra superior: selector de vista + navegación -->
+  <div class="barra-top">
+
+    <!-- Selector de vista: Día / Semana / Mes -->
+    <div class="btn-group-vista">
+      <button class="btn-vista activo" id="btn-vista-dia"
+              onclick="cambiarVista('dia')">Día</button>
+      <button class="btn-vista" id="btn-vista-semana"
+              onclick="cambiarVista('semana')">Semana</button>
+      <button class="btn-vista" id="btn-vista-mes"
+              onclick="cambiarVista('mes')">Mes</button>
+    </div>
+
+    <!-- Navegación vista DÍA -->
+    <div class="nav-fecha" id="nav-dia">
+      <button class="btn btn-ghost" onclick="moverFecha(-1)">◀ Anterior</button>
+      <input type="date" id="fecha-input" onchange="onFechaChange()">
+      <button class="btn btn-ghost" onclick="moverFecha(+1)">Siguiente ▶</button>
       <button class="btn btn-ghost" onclick="irAHoy()">Hoy</button>
     </div>
+
+    <!-- Navegación vista SEMANA -->
+    <div class="nav-fecha" id="nav-semana" style="display:none">
+      <button class="btn btn-ghost" onclick="moverSemana(-1)">◀ Anterior</button>
+      <span class="periodo-label" id="label-semana"></span>
+      <button class="btn btn-ghost" onclick="moverSemana(+1)">Siguiente ▶</button>
+      <button class="btn btn-ghost" onclick="irASemanaActual()">Esta semana</button>
+    </div>
+
+    <!-- Navegación vista MES -->
+    <div class="nav-fecha" id="nav-mes" style="display:none">
+      <button class="btn btn-ghost" onclick="moverMes(-1)">◀ Anterior</button>
+      <span class="periodo-label" id="label-mes"></span>
+      <button class="btn btn-ghost" onclick="moverMes(+1)">Siguiente ▶</button>
+      <button class="btn btn-ghost" onclick="irAMesActual()">Este mes</button>
+    </div>
+
+    <!-- Filtro por operador (encargado) -->
     <div id="filtro-operador" style="display:none">
-      <select id="select-operador" onchange="cargarAgenda()">
+      <select id="select-operador" onchange="cargar()">
         <option value="">Todos los operadores</option>
       </select>
     </div>
+
   </div>
 
   <p class="fecha-label" id="fecha-label"></p>
@@ -163,18 +274,18 @@
 <script>
 // ─── Constantes ────────────────────────────────────────────────────────────
 const ESTADOS = {
-  agendado:    'Agendado',
-  presente:    'Presente',
-  ausente:     'Ausente',
-  atendido:    'Atendido',
-  cancelado:   'Cancelado',
-  reprogramado:'Reprogramado',
+  agendado: 'Agendado', presente: 'Presente', ausente: 'Ausente',
+  atendido: 'Atendido', cancelado: 'Cancelado', reprogramado: 'Reprogramado',
 };
+const DIAS_CORTO  = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// ─── Estado de la página ───────────────────────────────────────────────────
-let fechaActual     = new Date().toISOString().substring(0, 10);
-let turnosActuales  = [];  // cache de los turnos cargados
-let turnoACancelar  = null;
+// ─── Estado global ─────────────────────────────────────────────────────────
+let fechaActual    = new Date().toISOString().substring(0, 10);
+let vista          = 'dia';    // 'dia' | 'semana' | 'mes'
+let turnosActuales = [];
+let turnoACancelar = null;
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 function getToken() {
@@ -182,11 +293,8 @@ function getToken() {
   if (!t) { window.location.href = '/panel/login.html'; return null; }
   return t;
 }
-function getUsuario() {
-  return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}');
-}
+function getUsuario() { return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}'); }
 
-// Wrapper de fetch que agrega el JWT y redirige al login si expira
 async function apiFetch(url, opts = {}) {
   const token = getToken();
   if (!token) return null;
@@ -216,39 +324,147 @@ function esc(s) {
 function mostrarAlerta(tipo, msg) {
   const errEl = document.getElementById('alerta-error');
   const okEl  = document.getElementById('alerta-ok');
-  errEl.classList.remove('visible');
-  okEl.classList.remove('visible');
+  errEl.classList.remove('visible'); okEl.classList.remove('visible');
   if (!msg) return;
   if (tipo === 'error') { errEl.textContent = msg; errEl.classList.add('visible'); }
   else                  { okEl.textContent  = msg; okEl.classList.add('visible'); }
-  // Auto-ocultar los mensajes de éxito después de 4 segundos
   if (tipo === 'ok') setTimeout(() => okEl.classList.remove('visible'), 4000);
 }
 
-// ─── Navegación de fechas ──────────────────────────────────────────────────
-function moverFecha(dias) {
-  const [y, m, d] = fechaActual.split('-').map(Number);
-  const fecha = new Date(y, m - 1, d);
-  fecha.setDate(fecha.getDate() + dias);
-  fechaActual = fecha.toISOString().substring(0, 10);
-  document.getElementById('fecha-input').value = fechaActual;
-  cargarAgenda();
-}
-function diaAnterior()  { moverFecha(-1); }
-function diaSiguiente() { moverFecha(+1); }
-function irAHoy() {
-  fechaActual = new Date().toISOString().substring(0, 10);
-  document.getElementById('fecha-input').value = fechaActual;
-  cargarAgenda();
+// Convierte "YYYY-MM-DD" a Date local sin desfase de zona horaria
+function parseFecha(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
-function actualizarLabelFecha() {
-  const [y, m, d] = fechaActual.split('-').map(Number);
-  const label = new Date(y, m - 1, d).toLocaleDateString('es-AR', {
+// Formatea "YYYY-MM-DD" → "DD/MM"
+function formatoCorto(str) {
+  const [, m, d] = str.split('-');
+  return `${d}/${m}`;
+}
+
+// Devuelve la fecha del lunes de la semana que contiene `fechaStr`
+function lunesDeLaSemana(fechaStr) {
+  const d   = parseFecha(fechaStr);
+  const dia = d.getDay(); // 0=Dom, 1=Lun...
+  const diff = dia === 0 ? -6 : 1 - dia;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().substring(0, 10);
+}
+
+// Genera los 7 días (Lun–Dom) de la semana que empieza en `lunesStr`
+function diasDeLaSemana(lunesStr) {
+  const dias = [];
+  const d = parseFecha(lunesStr);
+  for (let i = 0; i < 7; i++) {
+    dias.push(d.toISOString().substring(0, 10));
+    d.setDate(d.getDate() + 1);
+  }
+  return dias;
+}
+
+// Genera slots de tiempo cada 30 min entre hora ini y hora fin (formato "HH:MM")
+function generarSlotsTiempo(desde = '08:00', hasta = '17:30') {
+  const slots = [];
+  let [h, m] = desde.split(':').map(Number);
+  const [hf, mf] = hasta.split(':').map(Number);
+  while (h < hf || (h === hf && m <= mf)) {
+    slots.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+    m += 30;
+    if (m >= 60) { h++; m -= 60; }
+  }
+  return slots;
+}
+
+const HOY = new Date().toISOString().substring(0, 10);
+
+// ─── Navegación — Vista DÍA ────────────────────────────────────────────────
+function moverFecha(dias) {
+  const d = parseFecha(fechaActual);
+  d.setDate(d.getDate() + dias);
+  fechaActual = d.toISOString().substring(0, 10);
+  document.getElementById('fecha-input').value = fechaActual;
+  cargarDia();
+}
+function onFechaChange() {
+  fechaActual = document.getElementById('fecha-input').value;
+  cargarDia();
+}
+function irAHoy() {
+  fechaActual = HOY;
+  document.getElementById('fecha-input').value = fechaActual;
+  cargarDia();
+}
+
+// ─── Navegación — Vista SEMANA ─────────────────────────────────────────────
+function moverSemana(semanas) {
+  const lunes = parseFecha(lunesDeLaSemana(fechaActual));
+  lunes.setDate(lunes.getDate() + semanas * 7);
+  fechaActual = lunes.toISOString().substring(0, 10);
+  cargarSemana();
+}
+function irASemanaActual() {
+  fechaActual = HOY;
+  cargarSemana();
+}
+
+// ─── Navegación — Vista MES ────────────────────────────────────────────────
+function moverMes(meses) {
+  const d = parseFecha(fechaActual + '-01'.replace(/(.*)-\d+$/, '$1-01').slice(-3));
+  // Tomamos año/mes de fechaActual y le sumamos `meses`
+  const [y, m] = fechaActual.split('-').map(Number);
+  const fecha  = new Date(y, m - 1 + meses, 1);
+  fechaActual  = fecha.toISOString().substring(0, 10).substring(0, 8) + '01';
+  cargarMes();
+}
+function irAMesActual() {
+  fechaActual = HOY;
+  cargarMes();
+}
+
+// ─── Cambiar vista ─────────────────────────────────────────────────────────
+function cambiarVista(nuevaVista) {
+  vista = nuevaVista;
+
+  // Actualizar botones del selector
+  ['dia','semana','mes'].forEach(v => {
+    document.getElementById(`btn-vista-${v}`).classList.toggle('activo', v === vista);
+  });
+
+  // Mostrar/ocultar navigaciones
+  document.getElementById('nav-dia').style.display    = vista === 'dia'    ? 'flex' : 'none';
+  document.getElementById('nav-semana').style.display = vista === 'semana' ? 'flex' : 'none';
+  document.getElementById('nav-mes').style.display    = vista === 'mes'    ? 'flex' : 'none';
+
+  cargar();
+}
+
+function cargar() {
+  if (vista === 'dia')    cargarDia();
+  else if (vista === 'semana') cargarSemana();
+  else cargarMes();
+}
+
+// ─── Helpers de label ──────────────────────────────────────────────────────
+function actualizarLabelDia() {
+  const label = parseFecha(fechaActual).toLocaleDateString('es-AR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
   document.getElementById('fecha-label').textContent =
     label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function actualizarLabelSemana(lunes, domingo) {
+  document.getElementById('label-semana').textContent =
+    `${formatoCorto(lunes)} al ${formatoCorto(domingo)}`;
+  document.getElementById('fecha-label').textContent =
+    `Semana del ${formatoCorto(lunes)} al ${formatoCorto(domingo)}`;
+}
+
+function actualizarLabelMes(año, mes) {
+  const label = `${MESES_LARGO[mes - 1]} ${año}`;
+  document.getElementById('label-mes').textContent    = label;
+  document.getElementById('fecha-label').textContent  = label;
 }
 
 // ─── Stats ─────────────────────────────────────────────────────────────────
@@ -266,7 +482,7 @@ function renderizarStats(turnos) {
     .join('');
 }
 
-// ─── Tabla ─────────────────────────────────────────────────────────────────
+// ─── Vista DÍA ─────────────────────────────────────────────────────────────
 function renderizarAcciones(t) {
   const btns = [];
   if (t.estado === 'agendado') {
@@ -281,7 +497,7 @@ function renderizarAcciones(t) {
   return `<div class="td-acciones">${btns.join('')}</div>`;
 }
 
-function renderizarTabla(turnos) {
+function renderizarTablaDia(turnos) {
   if (!turnos.length) {
     document.getElementById('tabla-container').innerHTML =
       `<div class="vacio">📅<p>No hay turnos para este día.</p></div>`;
@@ -318,9 +534,8 @@ function renderizarTabla(turnos) {
   `;
 }
 
-// ─── Cargar agenda ─────────────────────────────────────────────────────────
-async function cargarAgenda() {
-  actualizarLabelFecha();
+async function cargarDia() {
+  actualizarLabelDia();
   mostrarAlerta(null);
   document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
 
@@ -342,10 +557,190 @@ async function cargarAgenda() {
   const turnos = await res.json();
   turnosActuales = turnos;
   renderizarStats(turnos);
-  renderizarTabla(turnos);
+  renderizarTablaDia(turnos);
 }
 
-// ─── Cambiar estado ────────────────────────────────────────────────────────
+// ─── Vista SEMANA ──────────────────────────────────────────────────────────
+function renderizarSemana(turnos, dias) {
+  const lunes   = dias[0];
+  const domingo = dias[6];
+  actualizarLabelSemana(lunes, domingo);
+
+  // Agrupar turnos por fecha
+  const porFecha = {};
+  for (const t of turnos) {
+    const f = typeof t.fecha === 'string' ? t.fecha.substring(0, 10) : t.fecha;
+    if (!porFecha[f]) porFecha[f] = [];
+    porFecha[f].push(t);
+  }
+
+  // Slots de tiempo para las filas (08:00 a 17:30)
+  const slots = generarSlotsTiempo('08:00', '17:30');
+
+  // Encabezados de columnas (un día por columna)
+  const headerCols = dias.map((fecha, i) => {
+    const d   = parseFecha(fecha);
+    const num = d.getDate();
+    const mes = d.getMonth() + 1;
+    const esHoy = fecha === HOY;
+    return `
+      <th class="col-dia" style="${esHoy ? 'color:#1A3C4B' : ''}">
+        <span class="encabezado-dia-semana">${DIAS_CORTO[i]}</span>
+        <span class="encabezado-num-semana">${num}/${String(mes).padStart(2,'0')}</span>
+      </th>`;
+  }).join('');
+
+  // Filas de tiempo
+  const filas = slots.map(slot => {
+    const celdas = dias.map(fecha => {
+      const turnosDia = (porFecha[fecha] || [])
+        .filter(t => t.hora_inicio.substring(0, 5) === slot);
+      const esHoy = fecha === HOY;
+      const cards = turnosDia.map(t => `
+        <div class="turno-semana badge-${t.estado}" title="${esc(t.vecino_nombre)} — ${esc(t.servicio_nombre)}">
+          ${esc(t.hora_inicio.substring(0,5))} ${esc(t.vecino_nombre.split(' ')[0])}
+        </div>
+      `).join('');
+      return `<td${esHoy ? ' class="cel-dia-hoy"' : ''}>${cards}</td>`;
+    }).join('');
+    return `<tr><td class="cel-hora">${slot}</td>${celdas}</tr>`;
+  }).join('');
+
+  document.getElementById('tabla-container').innerHTML = `
+    <div class="tabla-semana-wrapper">
+      <table class="tabla-semana">
+        <thead>
+          <tr>
+            <th class="col-hora"></th>
+            ${headerCols}
+          </tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function cargarSemana() {
+  const lunes = lunesDeLaSemana(fechaActual);
+  const dias  = diasDeLaSemana(lunes);
+  const domingo = dias[6];
+
+  actualizarLabelSemana(lunes, domingo);
+  mostrarAlerta(null);
+  document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+
+  const operadorId = document.getElementById('select-operador')?.value || '';
+  let url = `/panel/agenda/rango?desde=${lunes}&hasta=${domingo}`;
+  if (operadorId) url += `&operadorId=${operadorId}`;
+
+  const res = await apiFetch(url);
+  if (!res) return;
+
+  if (!res.ok) {
+    const data = await res.json();
+    mostrarAlerta('error', data.error || 'No se pudo cargar la semana.');
+    document.getElementById('tabla-container').innerHTML = '';
+    renderizarStats([]);
+    return;
+  }
+
+  const turnos = await res.json();
+  turnosActuales = turnos;
+  renderizarStats(turnos);
+  renderizarSemana(turnos, dias);
+}
+
+// ─── Vista MES ─────────────────────────────────────────────────────────────
+function renderizarMes(turnos, año, mes) {
+  actualizarLabelMes(año, mes);
+
+  // Contar turnos por fecha
+  const cuentaPorFecha = {};
+  for (const t of turnos) {
+    const f = typeof t.fecha === 'string' ? t.fecha.substring(0, 10) : t.fecha;
+    cuentaPorFecha[f] = (cuentaPorFecha[f] || 0) + 1;
+  }
+
+  // Primer día del mes y lunes de esa semana
+  const primerDia = new Date(año, mes - 1, 1);
+  const diaSemana = primerDia.getDay(); // 0=Dom
+  const diff      = diaSemana === 0 ? -6 : 1 - diaSemana;
+  const primerCelda = new Date(año, mes - 1, 1 + diff);
+
+  // Generar 42 celdas (6 semanas × 7 días)
+  const headerDias = DIAS_CORTO.map(n =>
+    `<div class="cal-nombre-dia">${n}</div>`
+  ).join('');
+
+  const celdas = [];
+  const cur = new Date(primerCelda);
+  for (let i = 0; i < 42; i++) {
+    const fechaStr  = cur.toISOString().substring(0, 10);
+    const esDelMes  = cur.getMonth() + 1 === mes;
+    const esHoy     = fechaStr === HOY;
+    const cuenta    = cuentaPorFecha[fechaStr] || 0;
+    const clases    = ['cal-dia', !esDelMes ? 'otro-mes' : '', esHoy ? 'cal-hoy' : '']
+                        .filter(Boolean).join(' ');
+    const onclick   = esDelMes ? `irADiaDesdeCalendario('${fechaStr}')` : '';
+    celdas.push(`
+      <div class="${clases}" onclick="${onclick}">
+        <span class="cal-num">${cur.getDate()}</span>
+        ${cuenta > 0 ? `<span class="cal-count">${cuenta}</span>` : ''}
+      </div>
+    `);
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  document.getElementById('tabla-container').innerHTML = `
+    <div class="vista-mes">
+      <div class="cal-header-dias">${headerDias}</div>
+      <div class="cal-grid">${celdas.join('')}</div>
+    </div>
+  `;
+}
+
+async function cargarMes() {
+  const [año, mes] = fechaActual.split('-').map(Number);
+
+  actualizarLabelMes(año, mes);
+  mostrarAlerta(null);
+  document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+
+  // Rango: del 1 al último día del mes
+  const ultimoDia = new Date(año, mes, 0).getDate();
+  const desde     = `${año}-${String(mes).padStart(2,'0')}-01`;
+  const hasta     = `${año}-${String(mes).padStart(2,'0')}-${String(ultimoDia).padStart(2,'0')}`;
+
+  const operadorId = document.getElementById('select-operador')?.value || '';
+  let url = `/panel/agenda/rango?desde=${desde}&hasta=${hasta}`;
+  if (operadorId) url += `&operadorId=${operadorId}`;
+
+  const res = await apiFetch(url);
+  if (!res) return;
+
+  if (!res.ok) {
+    const data = await res.json();
+    mostrarAlerta('error', data.error || 'No se pudo cargar el mes.');
+    document.getElementById('tabla-container').innerHTML = '';
+    renderizarStats([]);
+    return;
+  }
+
+  const turnos = await res.json();
+  turnosActuales = turnos;
+  renderizarStats(turnos);
+  renderizarMes(turnos, año, mes);
+}
+
+// Desde el calendario mensual, ir a la vista día de esa fecha
+function irADiaDesdeCalendario(fecha) {
+  fechaActual = fecha;
+  cambiarVista('dia');
+  document.getElementById('fecha-input').value = fechaActual;
+}
+
+// ─── Cambiar estado de turno ────────────────────────────────────────────────
 async function cambiarEstado(id, estado) {
   mostrarAlerta(null);
   const res = await apiFetch(`/panel/turno/${id}/estado`, {
@@ -359,7 +754,7 @@ async function cambiarEstado(id, estado) {
     return;
   }
   mostrarAlerta('ok', `Estado actualizado a "${ESTADOS[estado]}".`);
-  cargarAgenda();
+  cargar();
 }
 
 // ─── Cancelar turno ────────────────────────────────────────────────────────
@@ -381,7 +776,7 @@ function cerrarModal() {
 }
 
 async function confirmarCancelacion() {
-  const motivo    = document.getElementById('motivo-input').value.trim();
+  const motivo     = document.getElementById('motivo-input').value.trim();
   const errorModal = document.getElementById('modal-error');
 
   if (motivo.length < 5) {
@@ -414,7 +809,7 @@ async function confirmarCancelacion() {
 
   cerrarModal();
   mostrarAlerta('ok', 'Turno cancelado correctamente.');
-  cargarAgenda();
+  cargar();
 }
 
 // ─── Encargado: cargar dropdown de operadores ──────────────────────────────
@@ -425,7 +820,7 @@ async function cargarOperadores() {
   const select = document.getElementById('select-operador');
   operadores.forEach(op => {
     const opt = document.createElement('option');
-    opt.value = op.id;
+    opt.value       = op.id;
     opt.textContent = op.nombre;
     select.appendChild(opt);
   });
@@ -446,10 +841,9 @@ async function cargarOperadores() {
   }
 
   document.getElementById('fecha-input').value = fechaActual;
-  actualizarLabelFecha();
-  await cargarAgenda();
+  actualizarLabelDia();
+  await cargarDia();
 
-  // Cerrar modal al hacer clic fuera de la caja
   document.getElementById('modal-fondo').addEventListener('click', (e) => {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
   });

@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Carga presencial — Panel MVLA</title>
+  <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
 
     /* Navbar */
-    .navbar { background: #1e3a5f; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
-    .nav-brand { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+    .navbar { background: #1A3C4B; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-logo { height: 34px; display: block; }
     .nav-links { display: flex; gap: 0.25rem; flex: 1; }
     .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
     .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
@@ -23,7 +24,7 @@
     .container { max-width: 640px; margin: 0 auto; padding: 2rem 1.5rem; }
     .card { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 2rem; }
 
-    /* Stepper */
+    /* Stepper (2 pasos) */
     .stepper { display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 2rem; }
     .step { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; flex: 1; position: relative; }
     .step-circulo {
@@ -32,42 +33,79 @@
       justify-content: center; font-weight: 700; font-size: 0.85rem; z-index: 1;
       transition: all 0.25s;
     }
-    .step.activo .step-circulo   { border-color: #2563eb; background: #2563eb; color: white; }
+    .step.activo .step-circulo   { border-color: #1A3C4B; background: #1A3C4B; color: white; }
     .step.completo .step-circulo { border-color: #16a34a; background: #16a34a; color: white; }
     .step-label { font-size: 0.75rem; color: #94a3b8; text-align: center; line-height: 1.2; }
-    .step.activo  .step-label { color: #2563eb; font-weight: 600; }
+    .step.activo  .step-label { color: #1A3C4B; font-weight: 600; }
     .step.completo .step-label { color: #16a34a; }
     .step-linea { flex: 1; height: 2px; background: #e2e8f0; margin-top: -20px; position: relative; z-index: 0; }
     .step-linea.completa { background: #16a34a; }
 
+    /* Headings de paso */
+    .paso-titulo {
+      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #1A3C4B;
+      margin-bottom: 1.25rem;
+    }
+
     /* Forms */
     .form-grupo { margin-bottom: 1.25rem; }
+    .form-fila { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.4rem; }
     input, select { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #d1d5db; border-radius: 7px; font-size: 0.9rem; font-family: inherit; background: white; transition: border-color 0.15s, box-shadow 0.15s; }
-    input:focus, select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    input:focus, select:focus { outline: none; border-color: #1A3C4B; box-shadow: 0 0 0 3px rgba(26,60,75,.12); }
     input[type="date"] { cursor: pointer; }
+    input:disabled, input[readonly] { background: #f8fafc; color: #475569; }
     .hint { font-size: 0.78rem; color: #94a3b8; margin-top: 0.35rem; }
+
+    /* Fila DNI + botón buscar */
+    .dni-row { display: flex; gap: 0.5rem; }
+    .dni-row input { flex: 1; }
+    .btn-buscar {
+      padding: 0.6rem 1rem; background: #1A3C4B; color: white; border: none;
+      border-radius: 7px; font-size: 0.875rem; font-weight: 600; font-family: inherit;
+      cursor: pointer; white-space: nowrap; transition: opacity 0.15s; flex-shrink: 0;
+    }
+    .btn-buscar:hover:not(:disabled) { opacity: 0.88; }
+    .btn-buscar:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Chip de estado vecino */
+    .vecino-chip {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.85rem; border-radius: 99px; font-size: 0.8rem; font-weight: 600;
+      margin-bottom: 1.25rem;
+    }
+    .chip-existente { background: #dcfce7; color: #15803d; }
+    .chip-nuevo     { background: #dbeafe; color: #1e40af; }
 
     /* Botones */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem 1.25rem; border: none; border-radius: 7px; cursor: pointer; font-size: 0.9rem; font-weight: 600; font-family: inherit; transition: opacity 0.15s; }
     .btn:hover:not(:disabled) { opacity: 0.87; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary { background: #1A3C4B; color: white; }
     .btn-ghost   { background: white; color: #374151; border: 1px solid #d1d5db; }
-    .btn-success { background: #16a34a; color: white; }
     .btn-full    { width: 100%; }
     .botones-nav { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
     .botones-nav .btn-primary { flex: 1; }
 
     /* Slots de horario */
-    .slots-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 0.5rem; }
+    .slots-titulo { font-size: 0.85rem; color: #475569; margin-bottom: 0.75rem; }
+    .slots-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
     .slot-btn {
       padding: 0.6rem 0; border: 2px solid #e2e8f0; border-radius: 7px;
       background: white; cursor: pointer; font-size: 0.9rem; font-weight: 600;
       font-family: inherit; color: #374151; transition: all 0.15s; text-align: center;
     }
-    .slot-btn:hover { border-color: #2563eb; color: #2563eb; }
-    .slot-btn.seleccionado { border-color: #2563eb; background: #eff6ff; color: #2563eb; }
+    .slot-btn:hover { border-color: #1A3C4B; color: #1A3C4B; }
+    .slot-btn.seleccionado { border-color: #1A3C4B; background: #FEEEC2; color: #1A3C4B; }
+
+    /* Area de slots con estados */
+    .slots-area { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #f1f5f9; }
+    .slots-placeholder { color: #94a3b8; font-size: 0.875rem; font-style: italic; }
+    .slots-cargando    { color: #94a3b8; font-size: 0.875rem; font-style: italic; }
+    .slots-vacio       { background: #fef3c7; border: 1px solid #fde68a; border-radius: 7px; padding: 0.75rem 1rem; font-size: 0.875rem; color: #92400e; }
 
     /* Alertas */
     .alerta { padding: 0.75rem 1rem; border-radius: 7px; font-size: 0.875rem; margin-bottom: 1.25rem; display: none; }
@@ -78,7 +116,7 @@
     /* Pantalla de éxito */
     .exito { text-align: center; padding: 1rem 0; }
     .exito-icono  { font-size: 3rem; margin-bottom: 0.75rem; display: block; }
-    .exito h2     { font-size: 1.25rem; color: #15803d; margin-bottom: 0.5rem; }
+    .exito h2     { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-size: 1.25rem; color: #15803d; margin-bottom: 0.5rem; }
     .exito-detalle { background: #f8fafc; border-radius: 8px; padding: 1rem; margin: 1rem 0; text-align: left; }
     .exito-detalle p { font-size: 0.875rem; color: #475569; margin-bottom: 0.3rem; }
     .exito-detalle p span { font-weight: 600; color: #1e293b; }
@@ -89,7 +127,10 @@
 <body>
 
 <nav class="navbar">
-  <span class="nav-brand">🏛️ MVLA</span>
+  <a href="/panel/agenda.html">
+    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
+         alt="Municipalidad Villa La Angostura" class="nav-logo">
+  </a>
   <div class="nav-links">
     <a href="/panel/agenda.html">Agenda</a>
     <a href="/panel/presencial.html" class="activo">Presencial</a>
@@ -104,7 +145,7 @@
 <div class="container">
   <div class="card">
 
-    <!-- Stepper -->
+    <!-- Stepper: 2 pasos -->
     <div class="stepper" id="stepper">
       <div class="step activo" id="step-ind-1">
         <div class="step-circulo">1</div>
@@ -113,73 +154,89 @@
       <div class="step-linea" id="linea-1"></div>
       <div class="step" id="step-ind-2">
         <div class="step-circulo">2</div>
-        <div class="step-label">Trámite y<br>fecha</div>
-      </div>
-      <div class="step-linea" id="linea-2"></div>
-      <div class="step" id="step-ind-3">
-        <div class="step-circulo">3</div>
-        <div class="step-label">Horario</div>
+        <div class="step-label">Turno</div>
       </div>
     </div>
 
     <!-- ── Paso 1: datos del vecino ─────────────────────────────── -->
     <div id="paso-1">
-      <h2 style="font-size:1.1rem;margin-bottom:1.25rem;color:#1e3a5f">Datos del vecino</h2>
+      <p class="paso-titulo">Datos del vecino</p>
 
       <div class="alerta alerta-error" id="error-1"></div>
 
+      <!-- DNI con botón buscar -->
       <div class="form-grupo">
         <label for="dni">Número de DNI</label>
-        <input type="text" id="dni" placeholder="Ej: 28456789"
-               inputmode="numeric" maxlength="10">
+        <div class="dni-row">
+          <input type="text" id="dni" placeholder="Ej: 28456789"
+                 inputmode="numeric" maxlength="10"
+                 onkeydown="if(event.key==='Enter'){buscarVecino();}">
+          <button class="btn-buscar" id="btn-buscar" onclick="buscarVecino()">
+            Buscar
+          </button>
+        </div>
       </div>
-      <div class="form-grupo">
-        <label for="nombre">Nombre y apellido</label>
-        <input type="text" id="nombre" placeholder="Ej: María González">
-        <p class="hint">Tal como aparece en el documento.</p>
+
+      <!-- Resultado de búsqueda (oculto hasta hacer la búsqueda) -->
+      <div id="resultado-busqueda" style="display:none">
+
+        <div class="vecino-chip" id="chip-vecino"></div>
+
+        <div class="form-grupo">
+          <label for="nombre">Nombre y apellido</label>
+          <input type="text" id="nombre" placeholder="Ej: María González">
+          <p class="hint" id="hint-nombre"></p>
+        </div>
+
+        <div class="form-grupo">
+          <label for="telefono">
+            Teléfono (WhatsApp) <span style="color:#dc2626">*</span>
+          </label>
+          <input type="tel" id="telefono" placeholder="Ej: 2944123456" inputmode="numeric">
+          <p class="hint">Sin código de país ni prefijo 0. Se usa para recordatorios automáticos.</p>
+        </div>
+
       </div>
 
       <div class="botones-nav" style="justify-content:flex-end">
-        <button class="btn btn-primary" onclick="irPaso2()">Siguiente →</button>
+        <button class="btn btn-primary" id="btn-siguiente-1"
+                onclick="irPaso2()" disabled>
+          Siguiente →
+        </button>
       </div>
     </div>
 
-    <!-- ── Paso 2: trámite y fecha ─────────────────────────────── -->
+    <!-- ── Paso 2: trámite, fecha y horario (todo en una sola pantalla) ── -->
     <div id="paso-2" style="display:none">
-      <h2 style="font-size:1.1rem;margin-bottom:1.25rem;color:#1e3a5f">Trámite y fecha</h2>
+      <p class="paso-titulo">Turno</p>
 
       <div class="alerta alerta-error" id="error-2"></div>
 
-      <div class="form-grupo">
-        <label for="servicio">Trámite</label>
-        <select id="servicio">
-          <option value="">— Seleccioná un trámite —</option>
-        </select>
+      <!-- Trámite y fecha en dos columnas -->
+      <div class="form-fila">
+        <div class="form-grupo" style="margin-bottom:0">
+          <label for="servicio">Trámite</label>
+          <select id="servicio" onchange="actualizarSlots()">
+            <option value="">— Seleccioná —</option>
+          </select>
+        </div>
+        <div class="form-grupo" style="margin-bottom:0">
+          <label for="fecha">Fecha</label>
+          <input type="date" id="fecha" onchange="actualizarSlots()">
+        </div>
       </div>
-      <div class="form-grupo">
-        <label for="fecha">Fecha del turno</label>
-        <input type="date" id="fecha">
-        <p class="hint">Solo días hábiles con operadores disponibles.</p>
+
+      <!-- Área de horarios disponibles -->
+      <div class="slots-area" id="slots-area">
+        <p class="slots-placeholder">
+          Seleccioná trámite y fecha para ver los horarios disponibles.
+        </p>
       </div>
 
       <div class="botones-nav">
         <button class="btn btn-ghost" onclick="irPaso1()">← Volver</button>
-        <button class="btn btn-primary" onclick="irPaso3()">Ver horarios →</button>
-      </div>
-    </div>
-
-    <!-- ── Paso 3: elegir horario ──────────────────────────────── -->
-    <div id="paso-3" style="display:none">
-      <h2 style="font-size:1.1rem;margin-bottom:0.35rem;color:#1e3a5f">Elegir horario</h2>
-      <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.25rem" id="subtitulo-3"></p>
-
-      <div class="alerta alerta-error" id="error-3"></div>
-
-      <div id="contenido-slots"><div class="cargando">Cargando horarios disponibles...</div></div>
-
-      <div class="botones-nav" id="botones-paso3" style="display:none">
-        <button class="btn btn-ghost" onclick="irPaso2()">← Volver</button>
-        <button class="btn btn-primary" id="btn-confirmar" onclick="confirmarTurno()" disabled>
+        <button class="btn btn-primary" id="btn-confirmar"
+                onclick="confirmarTurno()" disabled>
           Confirmar turno
         </button>
       </div>
@@ -208,7 +265,7 @@
         <button class="btn btn-primary btn-full" style="margin-top:1.5rem"
                 onclick="reiniciar()">Registrar otro turno</button>
         <a href="/panel/agenda.html"
-           style="display:block;text-align:center;margin-top:0.75rem;font-size:0.85rem;color:#2563eb;text-decoration:none">
+           style="display:block;text-align:center;margin-top:0.75rem;font-size:0.85rem;color:#1A3C4B;text-decoration:none">
           Ver agenda del día →
         </a>
       </div>
@@ -241,8 +298,12 @@ async function cerrarSesion() {
 }
 
 // ─── Estado del formulario ─────────────────────────────────────────────────
-const datos = { dni: '', nombre: '', serviceId: null, servicioNombre: '', fecha: '', horario: '' };
+const datos = {
+  dni: '', nombre: '', telefono: '',
+  serviceId: null, servicioNombre: '', fecha: '', horario: '',
+};
 let serviciosDisponibles = [];
+let vecinoEncontrado = false; // true si el vecino ya existe en la BD
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -261,27 +322,92 @@ function formatearFechaBonita(iso) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-// ─── Stepper visual ────────────────────────────────────────────────────────
+// ─── Stepper visual (2 pasos) ──────────────────────────────────────────────
 function actualizarStepper(pasoActual) {
-  [1,2,3].forEach(n => {
-    const ind  = document.getElementById(`step-ind-${n}`);
-    ind.classList.remove('activo','completo');
-    if (n < pasoActual)       ind.classList.add('completo');
+  [1, 2].forEach(n => {
+    const ind = document.getElementById(`step-ind-${n}`);
+    ind.classList.remove('activo', 'completo');
+    if (n < pasoActual)        ind.classList.add('completo');
     else if (n === pasoActual) ind.classList.add('activo');
   });
-  [1,2].forEach(n => {
-    document.getElementById(`linea-${n}`)
-      .classList.toggle('completa', n < pasoActual);
-  });
+  document.getElementById('linea-1').classList.toggle('completa', 1 < pasoActual);
 }
 
 function mostrarPaso(n) {
-  [1,2,3,'exito'].forEach(p => {
+  ['1', '2', 'exito'].forEach(p => {
     const el = document.getElementById(`paso-${p}`);
     if (el) el.style.display = 'none';
   });
   document.getElementById(`paso-${n}`).style.display = 'block';
-  if (n !== 'exito') actualizarStepper(n);
+  if (n !== 'exito') actualizarStepper(Number(n));
+}
+
+// ─── M2: búsqueda por DNI ──────────────────────────────────────────────────
+async function buscarVecino() {
+  mostrarError(1, '');
+  const dni = document.getElementById('dni').value.trim();
+
+  if (!/^\d{6,10}$/.test(dni)) {
+    mostrarError(1, 'El DNI debe tener entre 6 y 10 dígitos numéricos.');
+    document.getElementById('dni').focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-buscar');
+  btn.disabled    = true;
+  btn.textContent = 'Buscando...';
+
+  try {
+    const res = await apiFetch(`/panel/vecino/${dni}`);
+    if (!res) return;
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarError(1, data.error || 'No se pudo buscar el vecino.');
+      return;
+    }
+
+    // Mostrar el resultado de la búsqueda
+    document.getElementById('resultado-busqueda').style.display = 'block';
+
+    const nombreInput    = document.getElementById('nombre');
+    const telefonoInput  = document.getElementById('telefono');
+    const chip           = document.getElementById('chip-vecino');
+    const hintNombre     = document.getElementById('hint-nombre');
+
+    if (data.existe) {
+      // Vecino registrado: pre-completar nombre (readonly) y teléfono (editable)
+      vecinoEncontrado = true;
+      chip.className     = 'vecino-chip chip-existente';
+      chip.textContent   = '✓ Vecino registrado en el sistema';
+      nombreInput.value    = data.nombre;
+      nombreInput.readOnly = true;
+      hintNombre.textContent = 'Nombre registrado. Si hay un error, corregilo manualmente.';
+      // Permitir corrección del nombre si es necesario
+      nombreInput.removeAttribute('readonly');
+      nombreInput.readOnly = true;
+
+      telefonoInput.value = data.telefono || '';
+    } else {
+      // Vecino nuevo: campos vacíos y editables
+      vecinoEncontrado = false;
+      chip.className     = 'vecino-chip chip-nuevo';
+      chip.textContent   = '+ Vecino nuevo — completar los datos';
+      nombreInput.value    = '';
+      nombreInput.readOnly = false;
+      hintNombre.textContent = 'Tal como aparece en el documento.';
+      telefonoInput.value  = '';
+    }
+
+    datos.dni = dni;
+    document.getElementById('btn-siguiente-1').disabled = false;
+    nombreInput.focus();
+
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Buscar';
+  }
 }
 
 // ─── Paso 1 → 2 ────────────────────────────────────────────────────────────
@@ -291,13 +417,13 @@ function irPaso1() {
 }
 
 function irPaso2() {
-  const dni    = document.getElementById('dni').value.trim();
-  const nombre = document.getElementById('nombre').value.trim();
   mostrarError(1, '');
 
-  if (!/^\d{6,10}$/.test(dni)) {
-    mostrarError(1, 'El DNI debe tener entre 6 y 10 dígitos numéricos.');
-    document.getElementById('dni').focus();
+  const nombre    = document.getElementById('nombre').value.trim();
+  const telefono  = document.getElementById('telefono').value.trim();
+
+  if (!datos.dni) {
+    mostrarError(1, 'Buscá el DNI antes de continuar.');
     return;
   }
   if (nombre.length < 3) {
@@ -305,58 +431,77 @@ function irPaso2() {
     document.getElementById('nombre').focus();
     return;
   }
-  datos.dni    = dni;
-  datos.nombre = nombre;
+  if (!telefono) {
+    mostrarError(1, 'El teléfono es obligatorio para los recordatorios automáticos.');
+    document.getElementById('telefono').focus();
+    return;
+  }
+
+  datos.nombre   = nombre;
+  datos.telefono = telefono;
+  datos.horario  = '';
+
   mostrarPaso(2);
+  document.getElementById('btn-confirmar').disabled = true;
+
+  // Si ya hay trámite y fecha seleccionados, cargar slots automáticamente
+  if (document.getElementById('servicio').value && document.getElementById('fecha').value) {
+    actualizarSlots();
+  }
 }
 
-// ─── Paso 2 → 3 ────────────────────────────────────────────────────────────
-async function irPaso3() {
-  mostrarError(2, '');
+// ─── M3: actualización automática de slots al cambiar trámite o fecha ─────
+async function actualizarSlots() {
   const serviceId = document.getElementById('servicio').value;
   const fecha     = document.getElementById('fecha').value;
 
-  if (!serviceId) { mostrarError(2, 'Seleccioná un trámite.'); return; }
-  if (!fecha)     { mostrarError(2, 'Seleccioná una fecha.'); return; }
+  // Resetear horario seleccionado y deshabilitar confirmar
+  datos.horario = '';
+  document.getElementById('btn-confirmar').disabled = true;
 
-  const hoy = new Date().toISOString().substring(0,10);
-  if (fecha < hoy) { mostrarError(2, 'La fecha no puede ser anterior a hoy.'); return; }
+  const slotsArea = document.getElementById('slots-area');
 
+  // Si falta alguno de los dos, mostrar mensaje placeholder
+  if (!serviceId || !fecha) {
+    slotsArea.innerHTML = '<p class="slots-placeholder">Seleccioná trámite y fecha para ver los horarios disponibles.</p>';
+    return;
+  }
+
+  const hoy = new Date().toISOString().substring(0, 10);
+  if (fecha < hoy) {
+    slotsArea.innerHTML = '<p class="slots-placeholder">La fecha no puede ser anterior a hoy.</p>';
+    return;
+  }
+
+  // Guardar el servicio en datos para usarlo al confirmar
   datos.serviceId      = parseInt(serviceId, 10);
   datos.servicioNombre = serviciosDisponibles.find(s => s.id === datos.serviceId)?.nombre || '';
   datos.fecha          = fecha;
-  datos.horario        = '';
 
-  mostrarPaso(3);
-  document.getElementById('subtitulo-3').textContent =
-    `${datos.servicioNombre} — ${formatearFechaBonita(fecha)}`;
-  document.getElementById('contenido-slots').innerHTML = '<div class="cargando">Cargando horarios...</div>';
-  document.getElementById('botones-paso3').style.display = 'none';
-  document.getElementById('btn-confirmar').disabled = true;
+  slotsArea.innerHTML = '<p class="slots-cargando">Cargando horarios disponibles...</p>';
 
   const res = await apiFetch(`/panel/disponibilidad?serviceId=${serviceId}&fecha=${fecha}`);
   if (!res) return;
   const disponibilidad = await res.json();
 
   if (!res.ok) {
-    document.getElementById('contenido-slots').innerHTML =
-      `<p style="color:#dc2626;font-size:.85rem">${esc(disponibilidad.error)}</p>`;
+    slotsArea.innerHTML = `<p style="color:#dc2626;font-size:.85rem">${esc(disponibilidad.error)}</p>`;
     return;
   }
 
   const slots = disponibilidad.horariosLibres || [];
-  document.getElementById('botones-paso3').style.display = 'flex';
 
   if (slots.length === 0) {
-    document.getElementById('contenido-slots').innerHTML =
-      '<div class="cargando">No hay horarios disponibles para esta fecha.<br>Probá con otro día.</div>';
+    slotsArea.innerHTML = `
+      <div class="slots-vacio">
+        No hay horarios disponibles para el día seleccionado.<br>
+        <strong>Probá con otra fecha.</strong>
+      </div>`;
     return;
   }
 
-  document.getElementById('contenido-slots').innerHTML = `
-    <p style="font-size:.85rem;color:#475569;margin-bottom:.75rem">
-      Seleccioná un horario disponible:
-    </p>
+  slotsArea.innerHTML = `
+    <p class="slots-titulo">Seleccioná un horario disponible:</p>
     <div class="slots-grid">
       ${slots.map(h => `
         <button class="slot-btn" data-hora="${h}" onclick="seleccionarSlot('${h}')">
@@ -377,8 +522,11 @@ function seleccionarSlot(hora) {
 
 // ─── Confirmar turno ───────────────────────────────────────────────────────
 async function confirmarTurno() {
-  mostrarError(3, '');
-  if (!datos.horario) { mostrarError(3, 'Seleccioná un horario antes de confirmar.'); return; }
+  mostrarError(2, '');
+  if (!datos.horario) {
+    mostrarError(2, 'Seleccioná un horario antes de confirmar.');
+    return;
+  }
 
   const btn = document.getElementById('btn-confirmar');
   btn.disabled    = true;
@@ -389,6 +537,7 @@ async function confirmarTurno() {
     body: JSON.stringify({
       dni:       datos.dni,
       nombre:    datos.nombre,
+      telefono:  datos.telefono,
       serviceId: datos.serviceId,
       fecha:     datos.fecha,
       horario:   datos.horario,
@@ -402,7 +551,7 @@ async function confirmarTurno() {
   const cita = await res.json();
 
   if (!res.ok) {
-    mostrarError(3, cita.error || 'No se pudo registrar el turno. Intentá de nuevo.');
+    mostrarError(2, cita.error || 'No se pudo registrar el turno. Intentá de nuevo.');
     return;
   }
 
@@ -432,13 +581,23 @@ async function confirmarTurno() {
 
 // ─── Reiniciar formulario ──────────────────────────────────────────────────
 function reiniciar() {
-  datos.dni = ''; datos.nombre = ''; datos.serviceId = null;
-  datos.servicioNombre = ''; datos.fecha = ''; datos.horario = '';
-  document.getElementById('dni').value    = '';
-  document.getElementById('nombre').value = '';
+  datos.dni = ''; datos.nombre = ''; datos.telefono = '';
+  datos.serviceId = null; datos.servicioNombre = ''; datos.fecha = ''; datos.horario = '';
+  vecinoEncontrado = false;
+
+  document.getElementById('dni').value     = '';
+  document.getElementById('nombre').value  = '';
+  document.getElementById('nombre').readOnly = false;
+  document.getElementById('telefono').value = '';
   document.getElementById('servicio').value = '';
-  document.getElementById('fecha').value = '';
+  document.getElementById('fecha').value    = '';
+  document.getElementById('resultado-busqueda').style.display = 'none';
+  document.getElementById('btn-siguiente-1').disabled = true;
+  document.getElementById('slots-area').innerHTML =
+    '<p class="slots-placeholder">Seleccioná trámite y fecha para ver los horarios disponibles.</p>';
   document.getElementById('stepper').style.display = 'flex';
+  mostrarError(1, '');
+  mostrarError(2, '');
   mostrarPaso(1);
 }
 
@@ -449,10 +608,10 @@ function reiniciar() {
 
   document.getElementById('nav-nombre').textContent = getUsuario().nombre;
 
-  // Establecer fecha mínima como hoy
+  // Fecha mínima = hoy
   document.getElementById('fecha').min = new Date().toISOString().substring(0, 10);
 
-  // Cargar servicios disponibles para el dropdown
+  // Cargar servicios para el dropdown
   const res = await apiFetch('/panel/servicios');
   if (!res || !res.ok) {
     mostrarError(2, 'No se pudieron cargar los trámites. Recargá la página.');

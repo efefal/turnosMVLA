@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bloqueos — Panel MVLA</title>
+  <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
 
     /* Navbar */
-    .navbar { background: #1e3a5f; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
-    .nav-brand { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+    .navbar { background: #1A3C4B; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-logo { height: 34px; display: block; }
     .nav-links { display: flex; gap: 0.25rem; flex: 1; }
     .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
     .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
@@ -22,7 +23,16 @@
     /* Layout */
     .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
     .card { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 1.5rem; margin-bottom: 1.5rem; }
-    .card-titulo { font-size: 1rem; font-weight: 700; color: #1e3a5f; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; }
+    .card-titulo {
+      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #1A3C4B;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
 
     /* Tabla */
     .tabla-wrapper { overflow-x: auto; }
@@ -52,7 +62,7 @@
     label { display: block; font-size: 0.85rem; font-weight: 500; color: #374151; margin-bottom: 0.4rem; }
     label .opcional { font-weight: 400; color: #9ca3af; font-size: 0.8rem; }
     input, select, textarea { width: 100%; padding: 0.55rem 0.8rem; border: 1px solid #d1d5db; border-radius: 7px; font-size: 0.875rem; font-family: inherit; background: white; transition: border-color 0.15s; }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #1A3C4B; box-shadow: 0 0 0 3px rgba(26,60,75,.12); }
     input[type="time"], input[type="date"] { cursor: pointer; }
     .hint { font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem; }
     textarea { resize: vertical; min-height: 80px; }
@@ -62,7 +72,7 @@
     .btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.5rem 1rem; border: none; border-radius: 7px; cursor: pointer; font-size: 0.875rem; font-weight: 600; font-family: inherit; transition: opacity 0.15s; }
     .btn:hover:not(:disabled) { opacity: 0.85; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary { background: #1A3C4B; color: white; }
     .btn-danger  { background: #dc2626; color: white; padding: 0.3rem 0.65rem; font-size: 0.8rem; }
     .btn-ghost   { background: white; color: #374151; border: 1px solid #d1d5db; }
     .btn-full    { width: 100%; }
@@ -79,14 +89,17 @@
       transition: all 0.15s; color: #475569; margin: 0;
     }
     .tipo-opcion input[type="radio"]:checked + label {
-      border-color: #2563eb; background: #eff6ff; color: #2563eb;
+      border-color: #1A3C4B; background: rgba(26,60,75,.07); color: #1A3C4B;
     }
   </style>
 </head>
 <body>
 
 <nav class="navbar">
-  <span class="nav-brand">🏛️ MVLA</span>
+  <a href="/panel/agenda.html">
+    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
+         alt="Municipalidad Villa La Angostura" class="nav-logo">
+  </a>
   <div class="nav-links">
     <a href="/panel/agenda.html">Agenda</a>
     <a href="/panel/presencial.html">Presencial</a>
@@ -248,13 +261,6 @@ function formatPeriodo(b) {
   return ini === fin ? ini : `${ini} al ${fin}`;
 }
 
-function formatHoras(b) {
-  if (!b.hora_inicio) return 'Día completo';
-  const hi = b.hora_inicio.substring(0,5);
-  const hf = b.hora_fin ? b.hora_fin.substring(0,5) : '?';
-  return `${hi} — ${hf}`;
-}
-
 // ─── Lista de bloqueos ─────────────────────────────────────────────────────
 async function cargarBloqueos() {
   mostrarAlertaLista(null);
@@ -275,7 +281,6 @@ async function cargarBloqueos() {
   }
 
   const filas = data.map(b => {
-    // Un operador no puede eliminar bloqueos de oficina ni los de otro operador
     const puedeEliminar = usuario.rol === 'encargado' ||
       (b.tipo === 'individual' && b.operador_nombre === usuario.nombre);
 
@@ -354,7 +359,6 @@ async function crearBloqueo() {
   const horaFin     = document.getElementById('hora-fin').value;
   const motivo      = document.getElementById('motivo').value.trim();
 
-  // Validaciones
   if (tipo === 'individual' && !operadorId) {
     mostrarAlertaForm('error', 'Seleccioná el operador a bloquear.'); return;
   }
@@ -369,15 +373,13 @@ async function crearBloqueo() {
   }
   if (motivo.length < 5) { mostrarAlertaForm('error', 'El motivo es obligatorio (mínimo 5 caracteres).'); return; }
 
-  // Determinar área
-  const usuario = getUsuario();
-  const area_id = usuario.areaIds.length === 1
+  const usuario   = getUsuario();
+  const area_id   = usuario.areaIds.length === 1
     ? usuario.areaIds[0]
     : (areaEl.value || usuario.areaIds[0]);
 
   const body = {
-    tipo, area_id,
-    motivo,
+    tipo, area_id, motivo,
     fecha_inicio: fechaInicio,
     fecha_fin:    fechaFin,
     hora_inicio:  horaInicio || null,
@@ -399,7 +401,6 @@ async function crearBloqueo() {
 
   if (!res.ok) { mostrarAlertaForm('error', data.error || 'No se pudo crear el bloqueo.'); return; }
 
-  // Limpiar formulario
   document.getElementById('tipo-individual').checked = true;
   document.getElementById('sel-operador').value  = '';
   document.getElementById('fecha-inicio').value  = '';
@@ -421,14 +422,12 @@ async function crearBloqueo() {
   const usuario = getUsuario();
   document.getElementById('nav-nombre').textContent = usuario.nombre;
 
-  // Si no es encargado, ocultar opción "Oficina"
   if (usuario.rol !== 'encargado') {
     document.getElementById('opcion-oficina').style.display = 'none';
     document.getElementById('hint-tipo').textContent =
       'Podés bloquear días de tu propia agenda (ej: licencia, capacitación).';
   }
 
-  // Si tiene más de un área, mostrar el selector de área
   if (usuario.areaIds?.length > 1 && usuario.areas) {
     const grupoArea = document.getElementById('grupo-area');
     const selArea   = document.getElementById('sel-area');
@@ -441,7 +440,6 @@ async function crearBloqueo() {
     });
   }
 
-  // Cargar operadores para el dropdown del formulario
   const resOp = await apiFetch('/panel/operadores');
   if (resOp && resOp.ok) {
     const operadores = await resOp.json();
@@ -452,14 +450,12 @@ async function crearBloqueo() {
       opt.textContent = op.nombre;
       sel.appendChild(opt);
     });
-    // Si no es encargado, preseleccionar al propio usuario y deshabilitar
     if (usuario.rol !== 'encargado') {
       sel.value    = usuario.id;
       sel.disabled = true;
     }
   }
 
-  // Fecha mínima de inicio = hoy
   const hoy = new Date().toISOString().substring(0, 10);
   document.getElementById('fecha-inicio').min = hoy;
   document.getElementById('fecha-fin').min    = hoy;

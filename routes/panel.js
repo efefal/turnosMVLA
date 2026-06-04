@@ -49,8 +49,103 @@ async function auditar(usuarioId, entidadTipo, entidadId, accion, detalle, ip) {
 
 
 // =============================================================================
+// VECINOS
+// =============================================================================
+
+// GET /panel/vecino/:dni
+// Busca un vecino por DNI. El formulario presencial lo usa para pre-completar
+// el nombre y el teléfono cuando el vecino ya está registrado en el sistema.
+// Devuelve { existe: true, nombre, telefono } o { existe: false }.
+router.get('/vecino/:dni', async (req, res) => {
+  const { dni } = req.params;
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT nombre, telefono FROM vecinos WHERE dni = ?',
+      [dni]
+    );
+
+    if (rows.length === 0) {
+      return res.json({ existe: false });
+    }
+
+    res.json({
+      existe:   true,
+      nombre:   rows[0].nombre,
+      telefono: rows[0].telefono || '',
+    });
+  } catch (err) {
+    logger.error('[panel] Error al buscar vecino por DNI:', err);
+    res.status(500).json({ error: 'No se pudo buscar el vecino.' });
+  }
+});
+
+
+// =============================================================================
 // AGENDA
 // =============================================================================
+
+// GET /panel/agenda/rango?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&operadorId=N
+// Devuelve turnos de un rango de fechas en una sola llamada.
+// Las vistas "semana" y "mes" de agenda.html usan este endpoint para evitar
+// hacer 7 o 31 llamadas individuales al endpoint /agenda.
+//
+// NOTA: esta ruta DEBE ir ANTES de GET /agenda, de lo contrario Express intenta
+// hacer coincidir la palabra "rango" con el parámetro :fecha — no hay problema
+// técnico (son paths distintos) pero el orden explícito documenta la intención.
+router.get('/agenda/rango', async (req, res) => {
+  const { desde, hasta } = req.query;
+  const operadorId = req.query.operadorId ? parseInt(req.query.operadorId, 10) : null;
+
+  if (!desde || !hasta) {
+    return res.status(400).json({ error: 'Los parámetros desde y hasta son obligatorios.' });
+  }
+
+  try {
+    const { areaIds } = req.usuario;
+
+    const condiciones = ['t.fecha >= ?', 't.fecha <= ?', "t.estado != 'cancelado'"];
+    const params      = [desde, hasta];
+
+    if (areaIds.length > 0) {
+      condiciones.push(`s.area_id IN (${areaIds.map(() => '?').join(',')})`);
+      params.push(...areaIds);
+    }
+
+    if (!esEncargado(req)) {
+      condiciones.push('t.operador_id = ?');
+      params.push(req.usuario.id);
+    } else if (operadorId) {
+      condiciones.push('t.operador_id = ?');
+      params.push(operadorId);
+    }
+
+    const [turnos] = await pool.query(`
+      SELECT
+        t.id,
+        t.fecha,
+        t.hora_inicio,
+        t.hora_fin,
+        t.estado,
+        v.nombre AS vecino_nombre,
+        v.dni    AS vecino_dni,
+        s.nombre AS servicio_nombre,
+        u.nombre AS operador_nombre
+      FROM turnos t
+      JOIN vecinos   v ON t.vecino_id   = v.id
+      JOIN servicios s ON t.servicio_id = s.id
+      JOIN usuarios  u ON t.operador_id = u.id
+      WHERE ${condiciones.join(' AND ')}
+      ORDER BY t.fecha ASC, t.hora_inicio ASC
+    `, params);
+
+    res.json(turnos);
+  } catch (err) {
+    logger.error('[panel] Error al obtener agenda por rango:', err);
+    res.status(500).json({ error: 'No se pudo obtener la agenda.' });
+  }
+});
+
 
 // GET /panel/agenda?fecha=YYYY-MM-DD&operadorId=N
 // Devuelve los turnos del día con datos de vecino, servicio y operador.
@@ -404,7 +499,7 @@ router.delete('/turnos/masivo', async (req, res) => {
 // exactamente igual que el bot de WhatsApp y el selector web.
 // Canal de origen: 'presencial'. El canal en auditoría es 'panel' (lo maneja motor.js).
 router.post('/turno', async (req, res) => {
-  const { dni, nombre, serviceId, fecha, horario } = req.body;
+  const { dni, nombre, telefono, serviceId, fecha, horario } = req.body;
 
   if (!dni || !nombre || !serviceId || !fecha || !horario) {
     return res.status(400).json({
@@ -443,7 +538,7 @@ router.post('/turno', async (req, res) => {
     // crearCita() con canal 'presencial' activa canal_origen='presencial'
     // y registra auditoría con canal='panel' (manejo interno de motor.js)
     const cita = await motor.crearCita({
-      dni, nombre,
+      dni, nombre, telefono: telefono || null,
       serviceId: serviceIdNum,
       providerId,
       fechaHora,

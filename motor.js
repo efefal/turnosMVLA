@@ -417,9 +417,10 @@ async function crearCita(datos) {
     nombre,
     apellido  = '',
     dni,
-    fechaHora,      // "YYYY-MM-DD HH:MM:SS"
-    fechaHoraFin,   // "YYYY-MM-DD HH:MM:SS"
+    fechaHora,        // "YYYY-MM-DD HH:MM:SS"
+    fechaHoraFin,     // "YYYY-MM-DD HH:MM:SS"
     notas     = '',
+    telefono  = null, // opcional — se guarda en vecinos para recordatorios WhatsApp
   } = datos;
 
   // El canal de origen viene en datos.canal si está definido, sino 'whatsapp'.
@@ -454,12 +455,13 @@ async function crearCita(datos) {
     // El truco LAST_INSERT_ID(id) hace que insertId siempre traiga el ID correcto,
     // tanto para inserts nuevos como para actualizaciones de duplicados.
     const [upsertResult] = await conn.query(
-      `INSERT INTO vecinos (dni, nombre, canal_registro)
-       VALUES (?, ?, ?)
+      `INSERT INTO vecinos (dni, nombre, telefono, canal_registro)
+       VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
-         id             = LAST_INSERT_ID(id),
-         nombre         = VALUES(nombre)`,
-      [dni, nombreCompleto, canalOrigen]
+         id       = LAST_INSERT_ID(id),
+         nombre   = VALUES(nombre),
+         telefono = IF(VALUES(telefono) IS NOT NULL, VALUES(telefono), telefono)`,
+      [dni, nombreCompleto, telefono || null, canalOrigen]
     );
     const vecinoId = upsertResult.insertId;
 
