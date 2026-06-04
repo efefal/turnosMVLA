@@ -204,70 +204,81 @@ Archivos en `public/panel/`:
 
 ---
 
-## Modificaciones pendientes antes de Fase 5
+## ✅ Modificaciones pre-Fase 5 (completadas 2026-06-04)
 
-Estas mejoras al panel quedaron identificadas durante el desarrollo de la Fase 4.
-No son bloqueantes para la Fase 5, pero deben resolverse antes de dar acceso
-a los empleados municipales reales.
+Estas mejoras al panel quedaron identificadas durante el desarrollo de la Fase 4
+y fueron implementadas y verificadas en el navegador el 2026-06-04.
 
-### M1 — Identidad visual municipal
-Adaptar las 4 pantallas del panel (login, agenda, presencial, bloqueos) a los
-colores, logo y tipografía oficiales de la Municipalidad de Villa La Angostura.
+### ✅ M1 — Identidad visual municipal (2026-06-04)
+- Logo horizontal (`Logo_mvla_2024__1_color_h.jpg`) en el navbar de las 4 páginas
+- Favicon con escudo (`escudo_vla_web.png`) en todas las páginas
+- Color institucional `#1A3C4B` en navbar, botones primarios, bordes de foco y pasos activos
+- Acento crema `#FEEEC2` como fondo del slot seleccionado en presencial
+- Trebuchet MS Bold en títulos y encabezados
+- **Archivos modificados**: `login.html`, `agenda.html`, `presencial.html`, `bloqueos.html`
 
-**Pendiente recibir**: logo en formato SVG o PNG, colores hex corporativos, tipografía.
+### ✅ M2 — Presencial paso 1: búsqueda por DNI (2026-06-04)
+- `GET /panel/vecino/:dni` en `routes/panel.js` — devuelve `{ existe, nombre, telefono }`
+- Paso 1 arranca con solo el campo DNI + botón "Buscar"
+- Vecino existente → chip verde "Vecino registrado" + nombre pre-completado + teléfono pre-completado
+- Vecino nuevo → chip azul "Vecino nuevo" + campos vacíos y editables
+- Teléfono obligatorio para avanzar (se usa para recordatorios automáticos)
+- `motor.js`: `crearCita()` ahora acepta `telefono` y lo incluye en el UPSERT de `vecinos`
+- `routes/panel.js`: `POST /panel/turno` extrae `telefono` del body y lo pasa a `crearCita()`
 
-**Impacto**: solo CSS y el elemento `<img>` del logo en el navbar. Sin cambios de lógica.
+### ✅ M3 — Presencial: wizard de 3 pasos → 2 pasos (2026-06-04)
+- Stepper reducido a "Vecino" (paso 1) + "Turno" (paso 2)
+- Paso 2 tiene trámite + fecha en dos columnas y horarios debajo en la misma pantalla
+- Slots se recargan automáticamente al cambiar trámite o fecha (sin cambiar de paso)
+- Mensaje en amarillo si no hay disponibilidad para la fecha elegida
+- Botón "Confirmar turno" deshabilitado hasta que se seleccione un horario
+- **Impacto**: solo `presencial.html`. El backend ya soportaba este flujo.
 
-**Archivos a modificar**: `public/panel/login.html`, `agenda.html`, `presencial.html`, `bloqueos.html`
+### ✅ M4 — Agenda: vistas semana y mes (2026-06-04)
+- `GET /panel/agenda/rango?desde=YYYY-MM-DD&hasta=YYYY-MM-DD` en `routes/panel.js`
+- Selector de vista segmentado (control de 3 botones): Día / Semana / Mes
+- **Vista semana**: grilla Lun–Dom × franjas 08:00–17:30 cada 30 min; hoy resaltado
+- **Vista mes**: calendario con badge del conteo de turnos por día; hoy resaltado con borde `#1A3C4B`
+- Clic en un día del calendario mensual navega directamente a la vista día de esa fecha
+- Cada vista tiene su propia navegación (◀ Anterior / Siguiente ▶ + botón de "hoy/esta semana/este mes")
 
-### M2 — Presencial paso 1: búsqueda por DNI con pre-completado
-Cambiar el flujo del primer paso de `presencial.html`:
+---
 
-1. Mostrar solo el campo DNI inicialmente.
-2. Al salir del campo (evento `blur`) o al presionar un botón "Buscar":
-   - Llamar a un nuevo endpoint `GET /panel/vecino/:dni`
-   - Si el vecino existe en la BD → pre-completar nombre (campo de solo lectura, editable si se necesita corregir)
-   - Si no existe → mostrar campos de nombre y **teléfono** (teléfono obligatorio para el cron de recordatorios)
-3. El teléfono se guarda en la tabla `vecinos` al crear el turno (ya lo hace `crearCita()` vía UPSERT, solo falta pasarlo en el body).
+## Correcciones pendientes post-M1-M4
 
-**Backend necesario**: `GET /panel/vecino/:dni` en `routes/panel.js` — busca en tabla `vecinos` por DNI,
-devuelve `{ id, nombre, telefono }` o 404.
+Estas correcciones fueron identificadas durante la implementación de M1–M4.
+Deben resolverse antes de habilitar el acceso a empleados municipales reales.
 
-**Impacto en `crearCita()`**: agregar campo `telefono` al UPSERT de vecinos en `motor.js`.
+### C1 — Bug crítico anti-abuso en presencial
+`POST /panel/turno` no verifica si el vecino ya tiene un turno activo para el mismo
+servicio. Si se carga dos veces el mismo vecino con el mismo trámite, se crean dos
+turnos sin error, dejando un slot doble en la agenda.
 
-### M3 — Presencial: fusionar pasos 2 y 3 en una sola pantalla
-Reemplazar el wizard de 3 pasos por uno de 2:
+**Backend** (`routes/panel.js`, antes del `crearCita()`):
+```sql
+SELECT id FROM turnos
+WHERE vecino_id = (SELECT id FROM vecinos WHERE dni = ?)
+  AND servicio_id = ?
+  AND estado = 'agendado'
+  AND fecha >= CURDATE()
+LIMIT 1
+```
+Si existe → devolver `409` con `{ error: 'Este vecino ya tiene un turno activo para este trámite.' }`.
 
-- **Paso 1**: DNI y nombre (con búsqueda del M2)
-- **Paso 2**: trámite + fecha + horarios disponibles en la misma pantalla
+**Frontend** (`presencial.html`): el error `409` de `confirmarTurno()` ya se muestra en `error-2`,
+así que no requiere cambio de UI — solo verificar que el mensaje llegue correctamente.
 
-Comportamiento del paso 2:
-- Al cambiar servicio o fecha → llamar automáticamente a `GET /panel/disponibilidad`
-  y actualizar la grilla de slots sin cambiar de paso.
-- Si no hay slots disponibles → mostrar mensaje inline ("No hay horarios para este día").
-- El botón "Confirmar" se habilita solo cuando hay un horario seleccionado.
+### C2 — UX pantalla de éxito presencial
+Dos mejoras menores de presentación:
 
-**Impacto**: solo frontend (`presencial.html`). El backend ya soporta este flujo.
+1. **Ícono de éxito**: reemplazar el emoji `✅` de la pantalla de éxito por un SVG
+   circular en color `#1A3C4B` (sin dependencia de fuentes de sistema para emojis).
+2. **Validación de teléfono**: el mensaje de error "El teléfono es obligatorio..."
+   no debe aparecer al mostrar el resultado de la búsqueda, sino únicamente al
+   intentar avanzar al paso 2 sin haberlo completado. Revisitar el flujo de
+   `buscarVecino()` para asegurarse de que no emita errores prematuros.
 
-### M4 — Agenda: agregar vistas de semana y mes
-Agregar un selector de vista en `agenda.html` con tres opciones:
-
-| Vista | Descripción |
-|---|---|
-| Día | La vista actual: tabla de turnos de una fecha específica |
-| Semana | Columnas = días (lun–vie), filas = franjas horarias cada 30 min |
-| Mes | Calendario mensual con indicador de cantidad de turnos por día |
-
-**Navegación**:
-- Vista día: ◀ Anterior / Siguiente ▶ (ya implementado)
-- Vista semana: ◀ Semana anterior / Semana siguiente ▶
-- Vista mes: ◀ Mes anterior / Mes siguiente ▶
-
-**Backend**: `GET /panel/agenda` ya acepta `fecha` como parámetro. Para semana y mes
-llamar con múltiples fechas en paralelo (`Promise.all`) o agregar un endpoint
-`GET /panel/agenda/rango?desde=YYYY-MM-DD&hasta=YYYY-MM-DD`.
-
-**Impacto**: principalmente frontend. Si se agrega el endpoint de rango, también `routes/panel.js`.
+**Impacto**: solo `presencial.html`.
 
 ---
 
