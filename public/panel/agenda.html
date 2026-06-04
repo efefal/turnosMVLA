@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agenda — Panel MVLA</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
+
+    /* Navbar */
+    .navbar { background: #1e3a5f; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-brand { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+    .nav-links { display: flex; gap: 0.25rem; flex: 1; }
+    .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
+    .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
+    .nav-user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+    .nav-user span { color: rgba(255,255,255,.85); }
+    .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
+    .btn-logout:hover { background: rgba(255,255,255,.2); }
+
+    /* Layout */
+    .container { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+    /* Filtros */
+    .barra-filtros { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .nav-fecha { display: flex; align-items: center; gap: 0.4rem; }
+    input[type="date"] { padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; cursor: pointer; }
+    input[type="date"]:focus { outline: none; border-color: #2563eb; }
+    .fecha-label { font-size: 0.85rem; color: #64748b; margin-bottom: 1rem; }
+
+    /* Botones */
+    .btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.8rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; font-family: inherit; transition: opacity 0.15s; white-space: nowrap; }
+    .btn:hover:not(:disabled) { opacity: 0.85; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-ghost   { background: white; color: #374151; border: 1px solid #d1d5db; }
+    .btn-success { background: #16a34a; color: white; }
+    .btn-warning { background: #d97706; color: white; }
+    .btn-danger  { background: #dc2626; color: white; }
+    .btn-primary { background: #2563eb; color: white; }
+
+    /* Stats */
+    .stats { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .stat-chip { background: white; border: 1px solid #e2e8f0; border-radius: 99px; padding: 0.3rem 0.85rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; }
+    .stat-chip strong { font-weight: 700; }
+    .chip-total    { border-color: #cbd5e1; }
+    .chip-agendado { border-color: #93c5fd; color: #1e40af; }
+    .chip-presente { border-color: #86efac; color: #15803d; }
+    .chip-atendido { border-color: #d1d5db; color: #4b5563; }
+    .chip-ausente  { border-color: #fca5a5; color: #b91c1c; }
+
+    /* Alerta */
+    .alerta { padding: 0.7rem 1rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
+    .alerta.visible { display: block; }
+    .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .alerta-ok    { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+
+    /* Select */
+    select { padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: white; }
+    select:focus { outline: none; border-color: #2563eb; }
+
+    /* Tabla */
+    .tabla-wrapper { overflow-x: auto; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.7rem 1rem; border-bottom: 2px solid #e2e8f0; text-align: left; white-space: nowrap; }
+    td { padding: 0.85rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    .td-acciones { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .nombre-vecino { font-weight: 500; }
+    .dni-vecino    { font-size: 0.8rem; color: #64748b; margin-top: 0.1rem; }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 0.2rem 0.65rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
+    .badge-agendado { background: #dbeafe; color: #1e40af; }
+    .badge-presente { background: #dcfce7; color: #15803d; }
+    .badge-ausente  { background: #fee2e2; color: #b91c1c; }
+    .badge-atendido { background: #f3f4f6; color: #4b5563; }
+
+    /* Modal */
+    .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-fondo.abierto { display: flex; }
+    .modal-caja { background: white; border-radius: 10px; padding: 1.5rem; max-width: 460px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+    .modal-caja h3 { margin-bottom: 0.3rem; font-size: 1rem; color: #1e293b; }
+    .modal-info { color: #64748b; font-size: 0.85rem; margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 500; color: #374151; margin-bottom: 0.4rem; }
+    textarea { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; resize: vertical; }
+    textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+
+    /* Misc */
+    .cargando { text-align: center; color: #94a3b8; padding: 3rem; font-style: italic; }
+    .vacio { text-align: center; color: #94a3b8; padding: 3rem; }
+    .vacio p { margin-top: 0.5rem; font-size: 0.85rem; }
+    .badge-encargado { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="nav-brand">🏛️ MVLA</span>
+  <div class="nav-links">
+    <a href="/panel/agenda.html" class="activo">Agenda</a>
+    <a href="/panel/presencial.html">Presencial</a>
+    <a href="/panel/bloqueos.html">Bloqueos</a>
+  </div>
+  <div class="nav-user">
+    <span id="nav-nombre"></span>
+    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</nav>
+
+<div class="container">
+
+  <div class="barra-filtros">
+    <div class="nav-fecha">
+      <button class="btn btn-ghost" onclick="diaAnterior()">◀ Anterior</button>
+      <input type="date" id="fecha-input" onchange="cargarAgenda()">
+      <button class="btn btn-ghost" onclick="diaSiguiente()">Siguiente ▶</button>
+      <button class="btn btn-ghost" onclick="irAHoy()">Hoy</button>
+    </div>
+    <div id="filtro-operador" style="display:none">
+      <select id="select-operador" onchange="cargarAgenda()">
+        <option value="">Todos los operadores</option>
+      </select>
+    </div>
+  </div>
+
+  <p class="fecha-label" id="fecha-label"></p>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="alerta alerta-error" id="alerta-error"></div>
+  <div class="alerta alerta-ok"    id="alerta-ok"></div>
+
+  <div class="card">
+    <div class="tabla-wrapper">
+      <div id="tabla-container"><div class="cargando">Cargando agenda...</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal cancelar -->
+<div class="modal-fondo" id="modal-fondo">
+  <div class="modal-caja">
+    <h3>Cancelar turno</h3>
+    <p class="modal-info" id="modal-info"></p>
+    <div>
+      <label for="motivo-input">Motivo de cancelación</label>
+      <textarea id="motivo-input" rows="3"
+        placeholder="Describí el motivo de la cancelación..."></textarea>
+    </div>
+    <div class="alerta alerta-error" id="modal-error" style="margin-top:.75rem"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost"  onclick="cerrarModal()">Volver</button>
+      <button class="btn btn-danger" id="btn-confirmar" onclick="confirmarCancelacion()">Confirmar cancelación</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Constantes ────────────────────────────────────────────────────────────
+const ESTADOS = {
+  agendado:    'Agendado',
+  presente:    'Presente',
+  ausente:     'Ausente',
+  atendido:    'Atendido',
+  cancelado:   'Cancelado',
+  reprogramado:'Reprogramado',
+};
+
+// ─── Estado de la página ───────────────────────────────────────────────────
+let fechaActual     = new Date().toISOString().substring(0, 10);
+let turnosActuales  = [];  // cache de los turnos cargados
+let turnoACancelar  = null;
+
+// ─── Auth ──────────────────────────────────────────────────────────────────
+function getToken() {
+  const t = sessionStorage.getItem('panel_token');
+  if (!t) { window.location.href = '/panel/login.html'; return null; }
+  return t;
+}
+function getUsuario() {
+  return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}');
+}
+
+// Wrapper de fetch que agrega el JWT y redirige al login si expira
+async function apiFetch(url, opts = {}) {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers },
+  });
+  if (res.status === 401) {
+    sessionStorage.clear();
+    window.location.href = '/panel/login.html';
+    return null;
+  }
+  return res;
+}
+
+async function cerrarSesion() {
+  try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
+  sessionStorage.clear();
+  window.location.href = '/panel/login.html';
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function mostrarAlerta(tipo, msg) {
+  const errEl = document.getElementById('alerta-error');
+  const okEl  = document.getElementById('alerta-ok');
+  errEl.classList.remove('visible');
+  okEl.classList.remove('visible');
+  if (!msg) return;
+  if (tipo === 'error') { errEl.textContent = msg; errEl.classList.add('visible'); }
+  else                  { okEl.textContent  = msg; okEl.classList.add('visible'); }
+  // Auto-ocultar los mensajes de éxito después de 4 segundos
+  if (tipo === 'ok') setTimeout(() => okEl.classList.remove('visible'), 4000);
+}
+
+// ─── Navegación de fechas ──────────────────────────────────────────────────
+function moverFecha(dias) {
+  const [y, m, d] = fechaActual.split('-').map(Number);
+  const fecha = new Date(y, m - 1, d);
+  fecha.setDate(fecha.getDate() + dias);
+  fechaActual = fecha.toISOString().substring(0, 10);
+  document.getElementById('fecha-input').value = fechaActual;
+  cargarAgenda();
+}
+function diaAnterior()  { moverFecha(-1); }
+function diaSiguiente() { moverFecha(+1); }
+function irAHoy() {
+  fechaActual = new Date().toISOString().substring(0, 10);
+  document.getElementById('fecha-input').value = fechaActual;
+  cargarAgenda();
+}
+
+function actualizarLabelFecha() {
+  const [y, m, d] = fechaActual.split('-').map(Number);
+  const label = new Date(y, m - 1, d).toLocaleDateString('es-AR', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  document.getElementById('fecha-label').textContent =
+    label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+// ─── Stats ─────────────────────────────────────────────────────────────────
+function renderizarStats(turnos) {
+  const contar = (e) => turnos.filter(t => t.estado === e).length;
+  const chips = [
+    { cls: 'chip-total',    label: 'Total',     val: turnos.length },
+    { cls: 'chip-agendado', label: 'Agendados', val: contar('agendado') },
+    { cls: 'chip-presente', label: 'Presentes', val: contar('presente') },
+    { cls: 'chip-atendido', label: 'Atendidos', val: contar('atendido') },
+    { cls: 'chip-ausente',  label: 'Ausentes',  val: contar('ausente')  },
+  ];
+  document.getElementById('stats').innerHTML = chips
+    .map(c => `<div class="stat-chip ${c.cls}"><strong>${c.val}</strong> ${c.label}</div>`)
+    .join('');
+}
+
+// ─── Tabla ─────────────────────────────────────────────────────────────────
+function renderizarAcciones(t) {
+  const btns = [];
+  if (t.estado === 'agendado') {
+    btns.push(`<button class="btn btn-success" onclick="cambiarEstado(${t.id},'presente')">Presente</button>`);
+    btns.push(`<button class="btn btn-warning" onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>`);
+    btns.push(`<button class="btn btn-danger"  onclick="abrirCancelar(${t.id})">Cancelar</button>`);
+  } else if (t.estado === 'presente') {
+    btns.push(`<button class="btn btn-ghost"   onclick="cambiarEstado(${t.id},'atendido')">Atendido</button>`);
+    btns.push(`<button class="btn btn-warning" onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>`);
+  }
+  if (!btns.length) return '<span style="color:#94a3b8;font-size:.8rem">—</span>';
+  return `<div class="td-acciones">${btns.join('')}</div>`;
+}
+
+function renderizarTabla(turnos) {
+  if (!turnos.length) {
+    document.getElementById('tabla-container').innerHTML =
+      `<div class="vacio">📅<p>No hay turnos para este día.</p></div>`;
+    return;
+  }
+  const filas = turnos.map(t => `
+    <tr>
+      <td style="font-weight:600;white-space:nowrap">${esc(t.hora_inicio.substring(0,5))}</td>
+      <td>
+        <div class="nombre-vecino">${esc(t.vecino_nombre)}</div>
+        <div class="dni-vecino">DNI ${esc(t.vecino_dni)}</div>
+      </td>
+      <td>${esc(t.servicio_nombre)}</td>
+      <td>${esc(t.operador_nombre)}</td>
+      <td><span class="badge badge-${t.estado}">${ESTADOS[t.estado] || t.estado}</span></td>
+      <td>${renderizarAcciones(t)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('tabla-container').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Hora</th>
+          <th>Vecino</th>
+          <th>Trámite</th>
+          <th>Operador</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>${filas}</tbody>
+    </table>
+  `;
+}
+
+// ─── Cargar agenda ─────────────────────────────────────────────────────────
+async function cargarAgenda() {
+  actualizarLabelFecha();
+  mostrarAlerta(null);
+  document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+
+  const operadorId = document.getElementById('select-operador')?.value || '';
+  let url = `/panel/agenda?fecha=${fechaActual}`;
+  if (operadorId) url += `&operadorId=${operadorId}`;
+
+  const res = await apiFetch(url);
+  if (!res) return;
+
+  if (!res.ok) {
+    const data = await res.json();
+    mostrarAlerta('error', data.error || 'No se pudo cargar la agenda.');
+    document.getElementById('tabla-container').innerHTML = '';
+    renderizarStats([]);
+    return;
+  }
+
+  const turnos = await res.json();
+  turnosActuales = turnos;
+  renderizarStats(turnos);
+  renderizarTabla(turnos);
+}
+
+// ─── Cambiar estado ────────────────────────────────────────────────────────
+async function cambiarEstado(id, estado) {
+  mostrarAlerta(null);
+  const res = await apiFetch(`/panel/turno/${id}/estado`, {
+    method: 'PATCH',
+    body: JSON.stringify({ estado }),
+  });
+  if (!res) return;
+  const data = await res.json();
+  if (!res.ok) {
+    mostrarAlerta('error', data.error || 'No se pudo cambiar el estado.');
+    return;
+  }
+  mostrarAlerta('ok', `Estado actualizado a "${ESTADOS[estado]}".`);
+  cargarAgenda();
+}
+
+// ─── Cancelar turno ────────────────────────────────────────────────────────
+function abrirCancelar(id) {
+  const t = turnosActuales.find(x => x.id === id);
+  turnoACancelar = id;
+  document.getElementById('modal-info').textContent =
+    `${esc(t.vecino_nombre)} (DNI ${t.vecino_dni}) — ${t.hora_inicio.substring(0,5)} hs`;
+  document.getElementById('motivo-input').value = '';
+  document.getElementById('modal-error').classList.remove('visible');
+  document.getElementById('modal-error').style.display = 'none';
+  document.getElementById('btn-confirmar').disabled = false;
+  document.getElementById('modal-fondo').classList.add('abierto');
+}
+
+function cerrarModal() {
+  document.getElementById('modal-fondo').classList.remove('abierto');
+  turnoACancelar = null;
+}
+
+async function confirmarCancelacion() {
+  const motivo    = document.getElementById('motivo-input').value.trim();
+  const errorModal = document.getElementById('modal-error');
+
+  if (motivo.length < 5) {
+    errorModal.textContent = 'El motivo es obligatorio (mínimo 5 caracteres).';
+    errorModal.style.display = 'block';
+    return;
+  }
+  errorModal.style.display = 'none';
+
+  const btn = document.getElementById('btn-confirmar');
+  btn.disabled    = true;
+  btn.textContent = 'Cancelando...';
+
+  const res = await apiFetch(`/panel/turno/${turnoACancelar}`, {
+    method: 'DELETE',
+    body:   JSON.stringify({ motivo }),
+  });
+
+  btn.disabled    = false;
+  btn.textContent = 'Confirmar cancelación';
+
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) {
+    errorModal.textContent = data.error || 'No se pudo cancelar el turno.';
+    errorModal.style.display = 'block';
+    return;
+  }
+
+  cerrarModal();
+  mostrarAlerta('ok', 'Turno cancelado correctamente.');
+  cargarAgenda();
+}
+
+// ─── Encargado: cargar dropdown de operadores ──────────────────────────────
+async function cargarOperadores() {
+  const res = await apiFetch('/panel/operadores');
+  if (!res || !res.ok) return;
+  const operadores = await res.json();
+  const select = document.getElementById('select-operador');
+  operadores.forEach(op => {
+    const opt = document.createElement('option');
+    opt.value = op.id;
+    opt.textContent = op.nombre;
+    select.appendChild(opt);
+  });
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+(async function init() {
+  const token = getToken();
+  if (!token) return;
+
+  const usuario = getUsuario();
+  const nombreEl = document.getElementById('nav-nombre');
+  nombreEl.innerHTML = esc(usuario.nombre);
+  if (usuario.rol === 'encargado') {
+    nombreEl.innerHTML += ' <span class="badge-encargado">Encargado</span>';
+    document.getElementById('filtro-operador').style.display = 'flex';
+    await cargarOperadores();
+  }
+
+  document.getElementById('fecha-input').value = fechaActual;
+  actualizarLabelFecha();
+  await cargarAgenda();
+
+  // Cerrar modal al hacer clic fuera de la caja
+  document.getElementById('modal-fondo').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('modal-fondo')) cerrarModal();
+  });
+})();
+</script>
+</body>
+</html>

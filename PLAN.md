@@ -154,44 +154,53 @@ Ejecutada contra BD real con datos de Fase 3. Fecha de prueba: 2026-06-08 (lunes
 
 ---
 
-## Fase 4 — Panel de empleados (Semana 3–4)
+## ✅ Fase 4 — Panel de empleados (completada 2026-06-04)
 
 **Objetivo**: frontend HTML/JS + rutas Express protegidas con JWT.
 
-### Backend (rutas Express)
+### Backend (rutas Express) ✅
 
 Archivo: `routes/panel.js` — montado en `index.js` como `app.use('/panel', require('./routes/panel'))`
 Middleware: `middleware/auth.js` — verifica JWT en header `Authorization: Bearer <token>`
 
-**Rutas de autenticación** (`routes/auth.js`):
-- `POST /panel/login` — valida email+password (bcrypt.compare), devuelve JWT (exp: 8h)
-- `POST /panel/logout` — invalida sesión (si se implementa lista negra de tokens)
+**Rutas de autenticación** (`routes/auth.js`) ✅:
+- `POST /panel/login` — valida email+password (bcrypt.compare), devuelve JWT (exp: 8h), registra en auditoría
+- `POST /panel/logout` — registra en auditoría, el cliente borra el token (stateless JWT)
 
-**Rutas del panel** (todas requieren JWT):
-- `GET /panel/agenda?fecha=YYYY-MM-DD` — turnos del día con vecino, servicio y operador
-- `POST /panel/turno` — carga presencial (canal: 'presencial'), misma lógica anti-overlap que motor.js
-- `PATCH /panel/turno/:id/estado` — marcar presente / ausente / atendido
-- `DELETE /panel/turno/:id` — cancelar con motivo obligatorio
-- `GET /panel/bloqueos` — bloqueos activos del área
+**Rutas del panel** (todas requieren JWT) ✅:
+- `GET /panel/agenda?fecha=YYYY-MM-DD&operadorId=N` — turnos del día con vecino, servicio y operador
+- `POST /panel/turno` — carga presencial (canal: 'presencial'), usa motor.obtenerDisponibilidadServicio()
+- `PATCH /panel/turno/:id/estado` — marcar presente / ausente / atendido (con validación de transición)
+- `DELETE /panel/turno/:id` — cancelar con motivo obligatorio (transacción + auditoría canal='panel')
+- `DELETE /panel/turnos/masivo` — cancelar por fecha/operadorId/servicioId (solo encargados)
+- `GET /panel/disponibilidad` — slots para el formulario presencial (usa motor.js directo)
+- `GET /panel/bloqueos` — bloqueos vigentes del área
 - `POST /panel/bloqueos` — crear bloqueo individual u oficina
 - `DELETE /panel/bloqueos/:id` — eliminar bloqueo
+- `GET/PATCH /panel/servicios/:id/mensaje` — mensaje post-confirmación (PATCH solo encargados)
+- `GET /panel/operadores` y `GET /panel/servicios` — dropdowns auxiliares para el frontend
 
-**Permisos por rol**:
-- `operador`: solo puede ver y operar su propia agenda, cargar turnos presenciales
-- `encargado`: todo lo anterior + bloqueos de oficina + ver agenda de otros operadores
+**Permisos por rol** (campo `rol` en el JWT — el más alto entre todas las áreas del usuario):
+- `operador`: ve y opera su propia agenda, carga presencial, bloqueos individuales propios
+- `encargado`: todo lo anterior + cancelación masiva + bloqueos de oficina + agenda de otros operadores
 
-### Frontend (vanilla JS)
+**Tests**: `test-panel.js` — 19/19 verdes con Node.js fetch nativo
+
+### Frontend (vanilla JS) ✅
 
 Archivos en `public/panel/`:
-- `login.html` — formulario email+password, guarda JWT en localStorage
-- `agenda.html` — tabla de turnos del día/semana, filtro por operador (encargado), botones de acción inline
-- `presencial.html` — formulario de carga presencial
-- `bloqueos.html` — CRUD de bloqueos
+- `login.html` — formulario email+password, guarda JWT en **sessionStorage** (se borra al cerrar el navegador)
+- `agenda.html` — tabla de turnos con stats en chips, filtro por operador (encargado), botones de acción inline, modal de cancelación con motivo
+- `presencial.html` — wizard de 3 pasos: vecino → trámite y fecha → grilla de slots → pantalla de éxito con mensaje del servicio
+- `bloqueos.html` — lista de bloqueos vigentes + formulario de creación con selector individual/oficina
 
-**Nota sobre autenticación**: los usuarios (empleados) ya están en la tabla `usuarios` con `password_hash` bcrypt. El login verifica con `bcrypt.compare()`. JWT firmado con `JWT_SECRET` del .env.
+**Nota de implementación**:
+- JWT usa `sessionStorage` (no localStorage): la sesión expira al cerrar el navegador, además de la expiración de 8h del token
+- `apiFetch()` maneja automáticamente el 401 redirigiendo a login (token expirado en medio de la sesión)
+- `DELETE /panel/turno/:id` hace la transacción directamente (no usa `motor.cancelarCita()` para poder registrar `canal='panel'` y el ID del empleado en auditoría)
+- Verificado en el navegador: login → agenda con datos reales → presencial (turno creado) → bloqueos (bloqueo creado y eliminado)
 
-**Complejidad total**: Alta
-**Riesgo**: Priorizar flujos críticos (agenda del día, carga presencial, cancelación) sobre funcionalidades secundarias.
+**Complejidad total**: Alta ✅ completada
 
 ---
 
@@ -281,7 +290,7 @@ Las fases 4, 5 y 6 pueden desarrollarse en paralelo una vez que Fases 0-3 estén
 | 1 | motor.js lecturas | Alta | ✅ Completa |
 | 2 | motor.js escrituras | Alta | ✅ Completa |
 | 3 | Scripts CLI | Baja | ✅ Completa |
-| 4 | Panel de empleados | Alta | ⏳ Pendiente |
+| 4 | Panel de empleados | Alta | ✅ Completa |
 | 5 | Selector web | Media | ⏳ Pendiente |
 | 6 | Cron recordatorios | Media | ⏳ Pendiente |
 | 7 | Migración y corte | Baja | ⏳ Parcialmente avanzada |

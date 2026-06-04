@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel — Iniciar sesión</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      background: #1e3a5f;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 400px;
+    }
+    .encabezado {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .encabezado .icono {
+      font-size: 2.5rem;
+      display: block;
+      margin-bottom: 0.75rem;
+    }
+    .encabezado h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1e3a5f;
+      line-height: 1.3;
+    }
+    .encabezado p {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-top: 0.3rem;
+    }
+    .form-grupo { margin-bottom: 1.1rem; }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 0.4rem;
+    }
+    input {
+      width: 100%;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #d1d5db;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+    .error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 0.7rem 0.9rem;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .btn-ingresar {
+      width: 100%;
+      padding: 0.65rem;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-ingresar:hover:not(:disabled) { opacity: 0.88; }
+    .btn-ingresar:disabled { opacity: 0.5; cursor: not-allowed; }
+    .pie {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.78rem;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="encabezado">
+    <span class="icono">🏛️</span>
+    <h1>Municipalidad de<br>Villa La Angostura</h1>
+    <p>Panel de empleados — Sistema de turnos</p>
+  </div>
+
+  <form id="form-login">
+    <div class="form-grupo">
+      <label for="email">Correo electrónico</label>
+      <input type="email" id="email" autocomplete="email"
+             placeholder="nombre@municipio.gob.ar" required>
+    </div>
+    <div class="form-grupo">
+      <label for="password">Contraseña</label>
+      <input type="password" id="password" autocomplete="current-password"
+             placeholder="••••••••" required>
+    </div>
+
+    <div class="error" id="error"></div>
+
+    <button type="submit" class="btn-ingresar" id="btn-submit">
+      Iniciar sesión
+    </button>
+  </form>
+
+  <p class="pie">La sesión se cerrará al cerrar el navegador.</p>
+</div>
+
+<script>
+  // Si ya hay sesión activa, ir directo a la agenda
+  if (sessionStorage.getItem('panel_token')) {
+    window.location.href = '/panel/agenda.html';
+  }
+
+  const form    = document.getElementById('form-login');
+  const errorEl = document.getElementById('error');
+  const btn     = document.getElementById('btn-submit');
+
+  function mostrarError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.style.display = 'none';
+    btn.disabled    = true;
+    btn.textContent = 'Ingresando...';
+
+    const email    = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+      const res  = await fetch('/panel/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        mostrarError(data.error || 'No se pudo iniciar sesión.');
+        btn.disabled    = false;
+        btn.textContent = 'Iniciar sesión';
+        return;
+      }
+
+      // sessionStorage se borra automáticamente al cerrar el navegador
+      sessionStorage.setItem('panel_token',   data.token);
+      sessionStorage.setItem('panel_usuario', JSON.stringify(data.usuario));
+
+      window.location.href = '/panel/agenda.html';
+
+    } catch {
+      mostrarError('No se pudo conectar al servidor. Verificá que el sistema esté en funcionamiento.');
+      btn.disabled    = false;
+      btn.textContent = 'Iniciar sesión';
+    }
+  });
+</script>
+</body>
+</html>

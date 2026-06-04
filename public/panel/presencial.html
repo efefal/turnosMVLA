@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Carga presencial — Panel MVLA</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
+
+    /* Navbar */
+    .navbar { background: #1e3a5f; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-brand { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+    .nav-links { display: flex; gap: 0.25rem; flex: 1; }
+    .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
+    .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
+    .nav-user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+    .nav-user span { color: rgba(255,255,255,.85); }
+    .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
+    .btn-logout:hover { background: rgba(255,255,255,.2); }
+
+    /* Layout */
+    .container { max-width: 640px; margin: 0 auto; padding: 2rem 1.5rem; }
+    .card { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 2rem; }
+
+    /* Stepper */
+    .stepper { display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 2rem; }
+    .step { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; flex: 1; position: relative; }
+    .step-circulo {
+      width: 32px; height: 32px; border-radius: 50%; border: 2px solid #d1d5db;
+      background: white; color: #94a3b8; display: flex; align-items: center;
+      justify-content: center; font-weight: 700; font-size: 0.85rem; z-index: 1;
+      transition: all 0.25s;
+    }
+    .step.activo .step-circulo   { border-color: #2563eb; background: #2563eb; color: white; }
+    .step.completo .step-circulo { border-color: #16a34a; background: #16a34a; color: white; }
+    .step-label { font-size: 0.75rem; color: #94a3b8; text-align: center; line-height: 1.2; }
+    .step.activo  .step-label { color: #2563eb; font-weight: 600; }
+    .step.completo .step-label { color: #16a34a; }
+    .step-linea { flex: 1; height: 2px; background: #e2e8f0; margin-top: -20px; position: relative; z-index: 0; }
+    .step-linea.completa { background: #16a34a; }
+
+    /* Forms */
+    .form-grupo { margin-bottom: 1.25rem; }
+    label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.4rem; }
+    input, select { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #d1d5db; border-radius: 7px; font-size: 0.9rem; font-family: inherit; background: white; transition: border-color 0.15s, box-shadow 0.15s; }
+    input:focus, select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    input[type="date"] { cursor: pointer; }
+    .hint { font-size: 0.78rem; color: #94a3b8; margin-top: 0.35rem; }
+
+    /* Botones */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem 1.25rem; border: none; border-radius: 7px; cursor: pointer; font-size: 0.9rem; font-weight: 600; font-family: inherit; transition: opacity 0.15s; }
+    .btn:hover:not(:disabled) { opacity: 0.87; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-ghost   { background: white; color: #374151; border: 1px solid #d1d5db; }
+    .btn-success { background: #16a34a; color: white; }
+    .btn-full    { width: 100%; }
+    .botones-nav { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+    .botones-nav .btn-primary { flex: 1; }
+
+    /* Slots de horario */
+    .slots-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 0.5rem; }
+    .slot-btn {
+      padding: 0.6rem 0; border: 2px solid #e2e8f0; border-radius: 7px;
+      background: white; cursor: pointer; font-size: 0.9rem; font-weight: 600;
+      font-family: inherit; color: #374151; transition: all 0.15s; text-align: center;
+    }
+    .slot-btn:hover { border-color: #2563eb; color: #2563eb; }
+    .slot-btn.seleccionado { border-color: #2563eb; background: #eff6ff; color: #2563eb; }
+
+    /* Alertas */
+    .alerta { padding: 0.75rem 1rem; border-radius: 7px; font-size: 0.875rem; margin-bottom: 1.25rem; display: none; }
+    .alerta.visible { display: block; }
+    .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .alerta-ok    { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+
+    /* Pantalla de éxito */
+    .exito { text-align: center; padding: 1rem 0; }
+    .exito-icono  { font-size: 3rem; margin-bottom: 0.75rem; display: block; }
+    .exito h2     { font-size: 1.25rem; color: #15803d; margin-bottom: 0.5rem; }
+    .exito-detalle { background: #f8fafc; border-radius: 8px; padding: 1rem; margin: 1rem 0; text-align: left; }
+    .exito-detalle p { font-size: 0.875rem; color: #475569; margin-bottom: 0.3rem; }
+    .exito-detalle p span { font-weight: 600; color: #1e293b; }
+    .exito-mensaje { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 7px; padding: 0.9rem 1rem; font-size: 0.85rem; color: #1e40af; margin-top: 1rem; line-height: 1.5; }
+    .cargando { text-align: center; color: #94a3b8; padding: 1.5rem; font-style: italic; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="nav-brand">🏛️ MVLA</span>
+  <div class="nav-links">
+    <a href="/panel/agenda.html">Agenda</a>
+    <a href="/panel/presencial.html" class="activo">Presencial</a>
+    <a href="/panel/bloqueos.html">Bloqueos</a>
+  </div>
+  <div class="nav-user">
+    <span id="nav-nombre"></span>
+    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="card">
+
+    <!-- Stepper -->
+    <div class="stepper" id="stepper">
+      <div class="step activo" id="step-ind-1">
+        <div class="step-circulo">1</div>
+        <div class="step-label">Vecino</div>
+      </div>
+      <div class="step-linea" id="linea-1"></div>
+      <div class="step" id="step-ind-2">
+        <div class="step-circulo">2</div>
+        <div class="step-label">Trámite y<br>fecha</div>
+      </div>
+      <div class="step-linea" id="linea-2"></div>
+      <div class="step" id="step-ind-3">
+        <div class="step-circulo">3</div>
+        <div class="step-label">Horario</div>
+      </div>
+    </div>
+
+    <!-- ── Paso 1: datos del vecino ─────────────────────────────── -->
+    <div id="paso-1">
+      <h2 style="font-size:1.1rem;margin-bottom:1.25rem;color:#1e3a5f">Datos del vecino</h2>
+
+      <div class="alerta alerta-error" id="error-1"></div>
+
+      <div class="form-grupo">
+        <label for="dni">Número de DNI</label>
+        <input type="text" id="dni" placeholder="Ej: 28456789"
+               inputmode="numeric" maxlength="10">
+      </div>
+      <div class="form-grupo">
+        <label for="nombre">Nombre y apellido</label>
+        <input type="text" id="nombre" placeholder="Ej: María González">
+        <p class="hint">Tal como aparece en el documento.</p>
+      </div>
+
+      <div class="botones-nav" style="justify-content:flex-end">
+        <button class="btn btn-primary" onclick="irPaso2()">Siguiente →</button>
+      </div>
+    </div>
+
+    <!-- ── Paso 2: trámite y fecha ─────────────────────────────── -->
+    <div id="paso-2" style="display:none">
+      <h2 style="font-size:1.1rem;margin-bottom:1.25rem;color:#1e3a5f">Trámite y fecha</h2>
+
+      <div class="alerta alerta-error" id="error-2"></div>
+
+      <div class="form-grupo">
+        <label for="servicio">Trámite</label>
+        <select id="servicio">
+          <option value="">— Seleccioná un trámite —</option>
+        </select>
+      </div>
+      <div class="form-grupo">
+        <label for="fecha">Fecha del turno</label>
+        <input type="date" id="fecha">
+        <p class="hint">Solo días hábiles con operadores disponibles.</p>
+      </div>
+
+      <div class="botones-nav">
+        <button class="btn btn-ghost" onclick="irPaso1()">← Volver</button>
+        <button class="btn btn-primary" onclick="irPaso3()">Ver horarios →</button>
+      </div>
+    </div>
+
+    <!-- ── Paso 3: elegir horario ──────────────────────────────── -->
+    <div id="paso-3" style="display:none">
+      <h2 style="font-size:1.1rem;margin-bottom:0.35rem;color:#1e3a5f">Elegir horario</h2>
+      <p style="font-size:0.85rem;color:#64748b;margin-bottom:1.25rem" id="subtitulo-3"></p>
+
+      <div class="alerta alerta-error" id="error-3"></div>
+
+      <div id="contenido-slots"><div class="cargando">Cargando horarios disponibles...</div></div>
+
+      <div class="botones-nav" id="botones-paso3" style="display:none">
+        <button class="btn btn-ghost" onclick="irPaso2()">← Volver</button>
+        <button class="btn btn-primary" id="btn-confirmar" onclick="confirmarTurno()" disabled>
+          Confirmar turno
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Pantalla de éxito ───────────────────────────────────── -->
+    <div id="paso-exito" style="display:none">
+      <div class="exito">
+        <span class="exito-icono">✅</span>
+        <h2>Turno registrado</h2>
+        <p style="font-size:0.875rem;color:#64748b;margin-bottom:1rem">
+          El turno fue cargado correctamente en el sistema.
+        </p>
+
+        <div class="exito-detalle">
+          <p>Vecino: <span id="ex-vecino"></span></p>
+          <p>DNI: <span id="ex-dni"></span></p>
+          <p>Trámite: <span id="ex-tramite"></span></p>
+          <p>Fecha: <span id="ex-fecha"></span></p>
+          <p>Hora: <span id="ex-hora"></span></p>
+          <p>Operador: <span id="ex-operador">asignado automáticamente</span></p>
+        </div>
+
+        <div class="exito-mensaje" id="ex-mensaje" style="display:none"></div>
+
+        <button class="btn btn-primary btn-full" style="margin-top:1.5rem"
+                onclick="reiniciar()">Registrar otro turno</button>
+        <a href="/panel/agenda.html"
+           style="display:block;text-align:center;margin-top:0.75rem;font-size:0.85rem;color:#2563eb;text-decoration:none">
+          Ver agenda del día →
+        </a>
+      </div>
+    </div>
+
+  </div><!-- .card -->
+</div>
+
+<script>
+// ─── Auth ──────────────────────────────────────────────────────────────────
+function getToken() {
+  const t = sessionStorage.getItem('panel_token');
+  if (!t) { window.location.href = '/panel/login.html'; return null; }
+  return t;
+}
+function getUsuario() { return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}'); }
+async function apiFetch(url, opts = {}) {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers },
+  });
+  if (res.status === 401) { sessionStorage.clear(); window.location.href = '/panel/login.html'; return null; }
+  return res;
+}
+async function cerrarSesion() {
+  try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
+  sessionStorage.clear(); window.location.href = '/panel/login.html';
+}
+
+// ─── Estado del formulario ─────────────────────────────────────────────────
+const datos = { dni: '', nombre: '', serviceId: null, servicioNombre: '', fecha: '', horario: '' };
+let serviciosDisponibles = [];
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function mostrarError(paso, msg) {
+  const el = document.getElementById(`error-${paso}`);
+  el.textContent = msg;
+  el.classList.toggle('visible', !!msg);
+}
+
+function formatearFechaBonita(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const s = new Date(y, m-1, d).toLocaleDateString('es-AR', {
+    weekday:'long', day:'numeric', month:'long', year:'numeric'
+  });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// ─── Stepper visual ────────────────────────────────────────────────────────
+function actualizarStepper(pasoActual) {
+  [1,2,3].forEach(n => {
+    const ind  = document.getElementById(`step-ind-${n}`);
+    ind.classList.remove('activo','completo');
+    if (n < pasoActual)       ind.classList.add('completo');
+    else if (n === pasoActual) ind.classList.add('activo');
+  });
+  [1,2].forEach(n => {
+    document.getElementById(`linea-${n}`)
+      .classList.toggle('completa', n < pasoActual);
+  });
+}
+
+function mostrarPaso(n) {
+  [1,2,3,'exito'].forEach(p => {
+    const el = document.getElementById(`paso-${p}`);
+    if (el) el.style.display = 'none';
+  });
+  document.getElementById(`paso-${n}`).style.display = 'block';
+  if (n !== 'exito') actualizarStepper(n);
+}
+
+// ─── Paso 1 → 2 ────────────────────────────────────────────────────────────
+function irPaso1() {
+  mostrarError(1, '');
+  mostrarPaso(1);
+}
+
+function irPaso2() {
+  const dni    = document.getElementById('dni').value.trim();
+  const nombre = document.getElementById('nombre').value.trim();
+  mostrarError(1, '');
+
+  if (!/^\d{6,10}$/.test(dni)) {
+    mostrarError(1, 'El DNI debe tener entre 6 y 10 dígitos numéricos.');
+    document.getElementById('dni').focus();
+    return;
+  }
+  if (nombre.length < 3) {
+    mostrarError(1, 'Ingresá el nombre y apellido del vecino.');
+    document.getElementById('nombre').focus();
+    return;
+  }
+  datos.dni    = dni;
+  datos.nombre = nombre;
+  mostrarPaso(2);
+}
+
+// ─── Paso 2 → 3 ────────────────────────────────────────────────────────────
+async function irPaso3() {
+  mostrarError(2, '');
+  const serviceId = document.getElementById('servicio').value;
+  const fecha     = document.getElementById('fecha').value;
+
+  if (!serviceId) { mostrarError(2, 'Seleccioná un trámite.'); return; }
+  if (!fecha)     { mostrarError(2, 'Seleccioná una fecha.'); return; }
+
+  const hoy = new Date().toISOString().substring(0,10);
+  if (fecha < hoy) { mostrarError(2, 'La fecha no puede ser anterior a hoy.'); return; }
+
+  datos.serviceId      = parseInt(serviceId, 10);
+  datos.servicioNombre = serviciosDisponibles.find(s => s.id === datos.serviceId)?.nombre || '';
+  datos.fecha          = fecha;
+  datos.horario        = '';
+
+  mostrarPaso(3);
+  document.getElementById('subtitulo-3').textContent =
+    `${datos.servicioNombre} — ${formatearFechaBonita(fecha)}`;
+  document.getElementById('contenido-slots').innerHTML = '<div class="cargando">Cargando horarios...</div>';
+  document.getElementById('botones-paso3').style.display = 'none';
+  document.getElementById('btn-confirmar').disabled = true;
+
+  const res = await apiFetch(`/panel/disponibilidad?serviceId=${serviceId}&fecha=${fecha}`);
+  if (!res) return;
+  const disponibilidad = await res.json();
+
+  if (!res.ok) {
+    document.getElementById('contenido-slots').innerHTML =
+      `<p style="color:#dc2626;font-size:.85rem">${esc(disponibilidad.error)}</p>`;
+    return;
+  }
+
+  const slots = disponibilidad.horariosLibres || [];
+  document.getElementById('botones-paso3').style.display = 'flex';
+
+  if (slots.length === 0) {
+    document.getElementById('contenido-slots').innerHTML =
+      '<div class="cargando">No hay horarios disponibles para esta fecha.<br>Probá con otro día.</div>';
+    return;
+  }
+
+  document.getElementById('contenido-slots').innerHTML = `
+    <p style="font-size:.85rem;color:#475569;margin-bottom:.75rem">
+      Seleccioná un horario disponible:
+    </p>
+    <div class="slots-grid">
+      ${slots.map(h => `
+        <button class="slot-btn" data-hora="${h}" onclick="seleccionarSlot('${h}')">
+          ${h}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function seleccionarSlot(hora) {
+  datos.horario = hora;
+  document.querySelectorAll('.slot-btn').forEach(btn => {
+    btn.classList.toggle('seleccionado', btn.dataset.hora === hora);
+  });
+  document.getElementById('btn-confirmar').disabled = false;
+}
+
+// ─── Confirmar turno ───────────────────────────────────────────────────────
+async function confirmarTurno() {
+  mostrarError(3, '');
+  if (!datos.horario) { mostrarError(3, 'Seleccioná un horario antes de confirmar.'); return; }
+
+  const btn = document.getElementById('btn-confirmar');
+  btn.disabled    = true;
+  btn.textContent = 'Registrando...';
+
+  const res = await apiFetch('/panel/turno', {
+    method: 'POST',
+    body: JSON.stringify({
+      dni:       datos.dni,
+      nombre:    datos.nombre,
+      serviceId: datos.serviceId,
+      fecha:     datos.fecha,
+      horario:   datos.horario,
+    }),
+  });
+
+  btn.disabled    = false;
+  btn.textContent = 'Confirmar turno';
+
+  if (!res) return;
+  const cita = await res.json();
+
+  if (!res.ok) {
+    mostrarError(3, cita.error || 'No se pudo registrar el turno. Intentá de nuevo.');
+    return;
+  }
+
+  // Mostrar pantalla de éxito
+  document.getElementById('ex-vecino').textContent  = datos.nombre;
+  document.getElementById('ex-dni').textContent     = datos.dni;
+  document.getElementById('ex-tramite').textContent = datos.servicioNombre;
+  document.getElementById('ex-fecha').textContent   = formatearFechaBonita(datos.fecha);
+  document.getElementById('ex-hora').textContent    = datos.horario + ' hs';
+
+  // Intentar traer el mensaje de confirmación del servicio
+  try {
+    const msgRes = await apiFetch(`/panel/servicios/${datos.serviceId}/mensaje`);
+    if (msgRes && msgRes.ok) {
+      const srv = await msgRes.json();
+      if (srv.mensaje_confirmacion) {
+        const el = document.getElementById('ex-mensaje');
+        el.textContent = srv.mensaje_confirmacion;
+        el.style.display = 'block';
+      }
+    }
+  } catch {}
+
+  document.getElementById('stepper').style.display = 'none';
+  mostrarPaso('exito');
+}
+
+// ─── Reiniciar formulario ──────────────────────────────────────────────────
+function reiniciar() {
+  datos.dni = ''; datos.nombre = ''; datos.serviceId = null;
+  datos.servicioNombre = ''; datos.fecha = ''; datos.horario = '';
+  document.getElementById('dni').value    = '';
+  document.getElementById('nombre').value = '';
+  document.getElementById('servicio').value = '';
+  document.getElementById('fecha').value = '';
+  document.getElementById('stepper').style.display = 'flex';
+  mostrarPaso(1);
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+(async function init() {
+  const token = getToken();
+  if (!token) return;
+
+  document.getElementById('nav-nombre').textContent = getUsuario().nombre;
+
+  // Establecer fecha mínima como hoy
+  document.getElementById('fecha').min = new Date().toISOString().substring(0, 10);
+
+  // Cargar servicios disponibles para el dropdown
+  const res = await apiFetch('/panel/servicios');
+  if (!res || !res.ok) {
+    mostrarError(2, 'No se pudieron cargar los trámites. Recargá la página.');
+    return;
+  }
+  serviciosDisponibles = await res.json();
+  const select = document.getElementById('servicio');
+  serviciosDisponibles.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value       = s.id;
+    opt.textContent = s.nombre;
+    select.appendChild(opt);
+  });
+
+  mostrarPaso(1);
+})();
+</script>
+</body>
+</html>

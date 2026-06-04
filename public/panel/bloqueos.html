@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloqueos — Panel MVLA</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
+
+    /* Navbar */
+    .navbar { background: #1e3a5f; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-brand { font-weight: 700; font-size: 1rem; white-space: nowrap; }
+    .nav-links { display: flex; gap: 0.25rem; flex: 1; }
+    .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
+    .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
+    .nav-user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+    .nav-user span { color: rgba(255,255,255,.85); }
+    .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
+    .btn-logout:hover { background: rgba(255,255,255,.2); }
+
+    /* Layout */
+    .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    .card { background: white; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .card-titulo { font-size: 1rem; font-weight: 700; color: #1e3a5f; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; }
+
+    /* Tabla */
+    .tabla-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.7rem 1rem; border-bottom: 2px solid #e2e8f0; text-align: left; white-space: nowrap; }
+    td { padding: 0.85rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 0.875rem; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    .vacio { text-align: center; color: #94a3b8; padding: 2.5rem; }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 0.2rem 0.65rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
+    .badge-individual { background: #ede9fe; color: #5b21b6; }
+    .badge-oficina    { background: #fef3c7; color: #92400e; }
+    .badge-dia-completo { background: #f3f4f6; color: #374151; font-size: 0.7rem; }
+
+    /* Alertas */
+    .alerta { padding: 0.7rem 1rem; border-radius: 7px; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
+    .alerta.visible { display: block; }
+    .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .alerta-ok    { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+
+    /* Formulario */
+    .form-fila { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-grupo { margin-bottom: 1rem; }
+    .form-grupo:last-child { margin-bottom: 0; }
+    label { display: block; font-size: 0.85rem; font-weight: 500; color: #374151; margin-bottom: 0.4rem; }
+    label .opcional { font-weight: 400; color: #9ca3af; font-size: 0.8rem; }
+    input, select, textarea { width: 100%; padding: 0.55rem 0.8rem; border: 1px solid #d1d5db; border-radius: 7px; font-size: 0.875rem; font-family: inherit; background: white; transition: border-color 0.15s; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    input[type="time"], input[type="date"] { cursor: pointer; }
+    .hint { font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem; }
+    textarea { resize: vertical; min-height: 80px; }
+    .separador { border: none; border-top: 1px solid #f1f5f9; margin: 1rem 0; }
+
+    /* Botones */
+    .btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.5rem 1rem; border: none; border-radius: 7px; cursor: pointer; font-size: 0.875rem; font-weight: 600; font-family: inherit; transition: opacity 0.15s; }
+    .btn:hover:not(:disabled) { opacity: 0.85; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-danger  { background: #dc2626; color: white; padding: 0.3rem 0.65rem; font-size: 0.8rem; }
+    .btn-ghost   { background: white; color: #374151; border: 1px solid #d1d5db; }
+    .btn-full    { width: 100%; }
+    .cargando    { text-align: center; color: #94a3b8; padding: 2rem; font-style: italic; }
+
+    /* Tipo selector */
+    .tipo-opciones { display: flex; gap: 0.75rem; }
+    .tipo-opcion { flex: 1; }
+    .tipo-opcion input[type="radio"] { display: none; }
+    .tipo-opcion label {
+      display: flex; align-items: center; justify-content: center;
+      padding: 0.6rem; border: 2px solid #e2e8f0; border-radius: 7px;
+      cursor: pointer; font-weight: 600; font-size: 0.9rem; text-align: center;
+      transition: all 0.15s; color: #475569; margin: 0;
+    }
+    .tipo-opcion input[type="radio"]:checked + label {
+      border-color: #2563eb; background: #eff6ff; color: #2563eb;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="nav-brand">🏛️ MVLA</span>
+  <div class="nav-links">
+    <a href="/panel/agenda.html">Agenda</a>
+    <a href="/panel/presencial.html">Presencial</a>
+    <a href="/panel/bloqueos.html" class="activo">Bloqueos</a>
+  </div>
+  <div class="nav-user">
+    <span id="nav-nombre"></span>
+    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- Lista de bloqueos activos -->
+  <div class="card">
+    <div class="card-titulo">
+      <span>Bloqueos vigentes</span>
+      <button class="btn btn-ghost" onclick="cargarBloqueos()">↻ Actualizar</button>
+    </div>
+
+    <div class="alerta alerta-error" id="error-lista"></div>
+    <div class="alerta alerta-ok"    id="ok-lista"></div>
+
+    <div class="tabla-wrapper">
+      <div id="tabla-bloqueos"><div class="cargando">Cargando bloqueos...</div></div>
+    </div>
+  </div>
+
+  <!-- Formulario nuevo bloqueo -->
+  <div class="card">
+    <div class="card-titulo">Nuevo bloqueo</div>
+
+    <div class="alerta alerta-error" id="error-form"></div>
+    <div class="alerta alerta-ok"    id="ok-form"></div>
+
+    <!-- Tipo -->
+    <div class="form-grupo">
+      <label>Tipo de bloqueo</label>
+      <div class="tipo-opciones">
+        <div class="tipo-opcion">
+          <input type="radio" name="tipo" id="tipo-individual" value="individual" checked onchange="onTipoChange()">
+          <label for="tipo-individual">👤 Individual</label>
+        </div>
+        <div class="tipo-opcion" id="opcion-oficina">
+          <input type="radio" name="tipo" id="tipo-oficina" value="oficina" onchange="onTipoChange()">
+          <label for="tipo-oficina">🏢 Oficina completa</label>
+        </div>
+      </div>
+      <p class="hint" id="hint-tipo">
+        Individual: bloquea a un operador específico. Oficina: bloquea toda el área.
+      </p>
+    </div>
+
+    <!-- Operador (solo si individual) -->
+    <div class="form-grupo" id="grupo-operador">
+      <label for="sel-operador">Operador afectado</label>
+      <select id="sel-operador">
+        <option value="">— Seleccioná un operador —</option>
+      </select>
+    </div>
+
+    <!-- Área (solo si el usuario tiene más de una) -->
+    <div class="form-grupo" id="grupo-area" style="display:none">
+      <label for="sel-area">Área</label>
+      <select id="sel-area"></select>
+    </div>
+
+    <hr class="separador">
+
+    <!-- Fechas -->
+    <div class="form-fila">
+      <div class="form-grupo">
+        <label for="fecha-inicio">Fecha inicio</label>
+        <input type="date" id="fecha-inicio">
+      </div>
+      <div class="form-grupo">
+        <label for="fecha-fin">Fecha fin</label>
+        <input type="date" id="fecha-fin">
+      </div>
+    </div>
+
+    <!-- Horas (opcionales) -->
+    <div class="form-fila">
+      <div class="form-grupo">
+        <label for="hora-inicio">
+          Hora inicio <span class="opcional">(opcional)</span>
+        </label>
+        <input type="time" id="hora-inicio" step="1800">
+        <p class="hint">Dejá vacío para bloquear el día completo.</p>
+      </div>
+      <div class="form-grupo">
+        <label for="hora-fin">
+          Hora fin <span class="opcional">(opcional)</span>
+        </label>
+        <input type="time" id="hora-fin" step="1800">
+      </div>
+    </div>
+
+    <!-- Motivo -->
+    <div class="form-grupo">
+      <label for="motivo">Motivo <span style="color:#dc2626">*</span></label>
+      <textarea id="motivo" placeholder="Ej: Licencia médica, Capacitación, Corte de luz..."></textarea>
+    </div>
+
+    <button class="btn btn-primary btn-full" id="btn-crear" onclick="crearBloqueo()">
+      Crear bloqueo
+    </button>
+  </div>
+
+</div>
+
+<script>
+// ─── Auth ──────────────────────────────────────────────────────────────────
+function getToken() {
+  const t = sessionStorage.getItem('panel_token');
+  if (!t) { window.location.href = '/panel/login.html'; return null; }
+  return t;
+}
+function getUsuario() { return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}'); }
+async function apiFetch(url, opts = {}) {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers },
+  });
+  if (res.status === 401) { sessionStorage.clear(); window.location.href = '/panel/login.html'; return null; }
+  return res;
+}
+async function cerrarSesion() {
+  try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
+  sessionStorage.clear(); window.location.href = '/panel/login.html';
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function mostrarAlertaLista(tipo, msg) {
+  const errEl = document.getElementById('error-lista');
+  const okEl  = document.getElementById('ok-lista');
+  errEl.classList.remove('visible'); okEl.classList.remove('visible');
+  if (!msg) return;
+  if (tipo === 'error') { errEl.textContent = msg; errEl.classList.add('visible'); }
+  else { okEl.textContent = msg; okEl.classList.add('visible'); setTimeout(() => okEl.classList.remove('visible'), 4000); }
+}
+
+function mostrarAlertaForm(tipo, msg) {
+  const errEl = document.getElementById('error-form');
+  const okEl  = document.getElementById('ok-form');
+  errEl.classList.remove('visible'); okEl.classList.remove('visible');
+  if (!msg) return;
+  if (tipo === 'error') { errEl.textContent = msg; errEl.classList.add('visible'); }
+  else { okEl.textContent = msg; okEl.classList.add('visible'); setTimeout(() => okEl.classList.remove('visible'), 4000); }
+}
+
+function formatPeriodo(b) {
+  const ini = b.fecha_inicio.substring(0,10);
+  const fin = b.fecha_fin.substring(0,10);
+  return ini === fin ? ini : `${ini} al ${fin}`;
+}
+
+function formatHoras(b) {
+  if (!b.hora_inicio) return 'Día completo';
+  const hi = b.hora_inicio.substring(0,5);
+  const hf = b.hora_fin ? b.hora_fin.substring(0,5) : '?';
+  return `${hi} — ${hf}`;
+}
+
+// ─── Lista de bloqueos ─────────────────────────────────────────────────────
+async function cargarBloqueos() {
+  mostrarAlertaLista(null);
+  document.getElementById('tabla-bloqueos').innerHTML = '<div class="cargando">Cargando...</div>';
+
+  const res = await apiFetch('/panel/bloqueos');
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) { mostrarAlertaLista('error', data.error || 'Error al cargar bloqueos.'); return; }
+
+  const usuario = getUsuario();
+
+  if (!data.length) {
+    document.getElementById('tabla-bloqueos').innerHTML =
+      '<div class="vacio">No hay bloqueos vigentes en tu área.</div>';
+    return;
+  }
+
+  const filas = data.map(b => {
+    // Un operador no puede eliminar bloqueos de oficina ni los de otro operador
+    const puedeEliminar = usuario.rol === 'encargado' ||
+      (b.tipo === 'individual' && b.operador_nombre === usuario.nombre);
+
+    return `
+      <tr>
+        <td><span class="badge badge-${b.tipo}">${b.tipo === 'individual' ? 'Individual' : 'Oficina'}</span></td>
+        <td>${b.tipo === 'individual' ? esc(b.operador_nombre || '—') : '<em style="color:#64748b">Toda el área</em>'}</td>
+        <td>${esc(b.area_nombre)}</td>
+        <td style="white-space:nowrap">${formatPeriodo(b)}</td>
+        <td>
+          ${b.hora_inicio
+            ? `${b.hora_inicio.substring(0,5)} — ${(b.hora_fin||'').substring(0,5)}`
+            : '<span class="badge badge-dia-completo">Día completo</span>'}
+        </td>
+        <td>${esc(b.motivo)}</td>
+        <td>${esc(b.creado_por_nombre)}</td>
+        <td>
+          ${puedeEliminar
+            ? `<button class="btn btn-danger" onclick="eliminarBloqueo(${b.id})">Eliminar</button>`
+            : '<span style="color:#94a3b8;font-size:.8rem">—</span>'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('tabla-bloqueos').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Operador</th>
+          <th>Área</th>
+          <th>Período</th>
+          <th>Horario</th>
+          <th>Motivo</th>
+          <th>Creado por</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>${filas}</tbody>
+    </table>
+  `;
+}
+
+// ─── Eliminar bloqueo ──────────────────────────────────────────────────────
+async function eliminarBloqueo(id) {
+  if (!confirm('¿Eliminás este bloqueo?')) return;
+  mostrarAlertaLista(null);
+
+  const res = await apiFetch(`/panel/bloqueos/${id}`, { method: 'DELETE' });
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) { mostrarAlertaLista('error', data.error || 'No se pudo eliminar el bloqueo.'); return; }
+  mostrarAlertaLista('ok', 'Bloqueo eliminado correctamente.');
+  cargarBloqueos();
+}
+
+// ─── Tipo change ───────────────────────────────────────────────────────────
+function onTipoChange() {
+  const tipo = document.querySelector('input[name="tipo"]:checked')?.value;
+  document.getElementById('grupo-operador').style.display =
+    tipo === 'individual' ? 'block' : 'none';
+}
+
+// ─── Crear bloqueo ─────────────────────────────────────────────────────────
+async function crearBloqueo() {
+  mostrarAlertaForm(null);
+
+  const tipo        = document.querySelector('input[name="tipo"]:checked')?.value;
+  const operadorId  = document.getElementById('sel-operador').value;
+  const areaEl      = document.getElementById('sel-area');
+  const fechaInicio = document.getElementById('fecha-inicio').value;
+  const fechaFin    = document.getElementById('fecha-fin').value;
+  const horaInicio  = document.getElementById('hora-inicio').value;
+  const horaFin     = document.getElementById('hora-fin').value;
+  const motivo      = document.getElementById('motivo').value.trim();
+
+  // Validaciones
+  if (tipo === 'individual' && !operadorId) {
+    mostrarAlertaForm('error', 'Seleccioná el operador a bloquear.'); return;
+  }
+  if (!fechaInicio) { mostrarAlertaForm('error', 'Indicá la fecha de inicio.'); return; }
+  if (!fechaFin)    { mostrarAlertaForm('error', 'Indicá la fecha de fin.'); return; }
+  if (fechaFin < fechaInicio) { mostrarAlertaForm('error', 'La fecha de fin no puede ser anterior a la de inicio.'); return; }
+  if ((horaInicio && !horaFin) || (!horaInicio && horaFin)) {
+    mostrarAlertaForm('error', 'Si indicás hora de inicio, también debés indicar hora de fin (y viceversa).'); return;
+  }
+  if (horaInicio && horaFin && horaFin <= horaInicio) {
+    mostrarAlertaForm('error', 'La hora de fin debe ser posterior a la hora de inicio.'); return;
+  }
+  if (motivo.length < 5) { mostrarAlertaForm('error', 'El motivo es obligatorio (mínimo 5 caracteres).'); return; }
+
+  // Determinar área
+  const usuario = getUsuario();
+  const area_id = usuario.areaIds.length === 1
+    ? usuario.areaIds[0]
+    : (areaEl.value || usuario.areaIds[0]);
+
+  const body = {
+    tipo, area_id,
+    motivo,
+    fecha_inicio: fechaInicio,
+    fecha_fin:    fechaFin,
+    hora_inicio:  horaInicio || null,
+    hora_fin:     horaFin    || null,
+  };
+  if (tipo === 'individual') body.usuario_id = parseInt(operadorId, 10);
+
+  const btn = document.getElementById('btn-crear');
+  btn.disabled    = true;
+  btn.textContent = 'Creando...';
+
+  const res = await apiFetch('/panel/bloqueos', { method: 'POST', body: JSON.stringify(body) });
+
+  btn.disabled    = false;
+  btn.textContent = 'Crear bloqueo';
+
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) { mostrarAlertaForm('error', data.error || 'No se pudo crear el bloqueo.'); return; }
+
+  // Limpiar formulario
+  document.getElementById('tipo-individual').checked = true;
+  document.getElementById('sel-operador').value  = '';
+  document.getElementById('fecha-inicio').value  = '';
+  document.getElementById('fecha-fin').value     = '';
+  document.getElementById('hora-inicio').value   = '';
+  document.getElementById('hora-fin').value      = '';
+  document.getElementById('motivo').value        = '';
+  onTipoChange();
+
+  mostrarAlertaForm('ok', 'Bloqueo creado correctamente.');
+  cargarBloqueos();
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+(async function init() {
+  const token = getToken();
+  if (!token) return;
+
+  const usuario = getUsuario();
+  document.getElementById('nav-nombre').textContent = usuario.nombre;
+
+  // Si no es encargado, ocultar opción "Oficina"
+  if (usuario.rol !== 'encargado') {
+    document.getElementById('opcion-oficina').style.display = 'none';
+    document.getElementById('hint-tipo').textContent =
+      'Podés bloquear días de tu propia agenda (ej: licencia, capacitación).';
+  }
+
+  // Si tiene más de un área, mostrar el selector de área
+  if (usuario.areaIds?.length > 1 && usuario.areas) {
+    const grupoArea = document.getElementById('grupo-area');
+    const selArea   = document.getElementById('sel-area');
+    grupoArea.style.display = 'block';
+    usuario.areas.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value       = a.area_id;
+      opt.textContent = a.area_nombre;
+      selArea.appendChild(opt);
+    });
+  }
+
+  // Cargar operadores para el dropdown del formulario
+  const resOp = await apiFetch('/panel/operadores');
+  if (resOp && resOp.ok) {
+    const operadores = await resOp.json();
+    const sel = document.getElementById('sel-operador');
+    operadores.forEach(op => {
+      const opt = document.createElement('option');
+      opt.value       = op.id;
+      opt.textContent = op.nombre;
+      sel.appendChild(opt);
+    });
+    // Si no es encargado, preseleccionar al propio usuario y deshabilitar
+    if (usuario.rol !== 'encargado') {
+      sel.value    = usuario.id;
+      sel.disabled = true;
+    }
+  }
+
+  // Fecha mínima de inicio = hoy
+  const hoy = new Date().toISOString().substring(0, 10);
+  document.getElementById('fecha-inicio').min = hoy;
+  document.getElementById('fecha-fin').min    = hoy;
+
+  onTipoChange();
+  await cargarBloqueos();
+})();
+</script>
+</body>
+</html>
