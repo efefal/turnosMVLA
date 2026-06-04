@@ -22,6 +22,44 @@
 const db     = require('./db');
 const logger = require('./logger');
 
+
+// =============================================================================
+// FUNCIONES AUXILIARES INTERNAS (no se exportan)
+// =============================================================================
+
+// Convierte "HH:MM" o "HH:MM:SS" a minutos desde medianoche.
+// Se usa para comparar horas como números en lugar de strings.
+// Ejemplo: "08:30" → 510
+function horaAMinutos(horaStr) {
+  const partes = horaStr.split(':');
+  return parseInt(partes[0], 10) * 60 + parseInt(partes[1], 10);
+}
+
+// Convierte minutos desde medianoche a "HH:MM".
+// Inversa de horaAMinutos(). Ejemplo: 510 → "08:30"
+function minutosAHora(minutos) {
+  const hh = String(Math.floor(minutos / 60)).padStart(2, '0');
+  const mm = String(minutos % 60).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+// Genera todos los slots de atención entre hora_inicio y hora_fin,
+// con un intervalo de duracionMin minutos entre cada uno.
+// El último slot incluido es el que termina exactamente en hora_fin,
+// no el que empieza en hora_fin.
+// Ejemplo: "08:00", "13:00", 30 → ["08:00", "08:30", ..., "12:30"]
+function generarSlots(horaInicioStr, horaFinStr, duracionMin) {
+  const inicio = horaAMinutos(horaInicioStr);
+  const fin    = horaAMinutos(horaFinStr);
+  const slots  = [];
+  // La condición es t + duracion <= fin para que el último slot
+  // no se extienda más allá del horario de cierre del operador
+  for (let t = inicio; t + duracionMin <= fin; t += duracionMin) {
+    slots.push(minutosAHora(t));
+  }
+  return slots;
+}
+
 // =============================================================================
 // FUNCIÓN 1: obtenerServicios()
 // =============================================================================
@@ -115,7 +153,124 @@ async function obtenerProveedores() {
 // fácil detectar si se las llama antes de estar implementadas.
 
 async function obtenerDisponibilidad(serviceId, providerId, fecha) {
-  throw new Error('[motor] obtenerDisponibilidad() aún no implementada (Fase 1)');
+  serviceId  = parseInt(serviceId, 10);
+  providerId = parseInt(providerId, 10);
+
+  // --- PASO 1: Verificar feriado ---
+  // La tabla feriados contiene tanto nacionales (de api.argentinadatos.com)
+  // como locales (cargados a mano). Un solo SELECT alcanza para ambos casos.
+  const [esFeriado] = await db.query(
+    'SELECT 1 FROM feriados WHERE fecha = ? LIMIT 1',
+    [fecha]
+  );
+  if (esFeriado.length > 0) {
+    logger.info(`[motor] obtenerDisponibilidad: ${fecha} es feriado → sin slots`);
+    return [];
+  }
+
+  // --- PASO 2: Calcular dia_semana ---
+  // La BD usa 1=lunes...7=domingo. JavaScript usa 0=domingo...6=sábado.
+  // Usamos T12:00:00 para fijar la hora al mediodía: así la conversión de
+  // string a Date no cambia de día por el desfase horario de Argentina (UTC-3).
+  const diaSemanaJS = new Date(`${fecha}T12:00:00`).getDay();
+  const diaSemanaDB = diaSemanaJS === 0 ? 7 : diaSemanaJS;
+
+  // --- PASOS 3 y 4: Horario del operador + duración del servicio (en paralelo) ---
+  // Las dos queries son independientes entre sí, así que las lanzamos juntas
+  // para no esperar una antes de la otra.
+  const [[horarios], [servicios]] = await Promise.all([
+    db.query(
+      `SELECT hora_inicio, hora_fin
+       FROM horarios
+       WHERE usuario_id = ? AND servicio_id = ? AND dia_semana = ? AND activo = TRUE`,
+      [providerId, serviceId, diaSemanaDB]
+    ),
+    db.query(
+      'SELECT duracion_min, area_id FROM servicios WHERE id = ?',
+      [serviceId]
+    ),
+  ]);
+
+  // Si el operador no tiene horario ese día, o el servicio no existe, no hay slots
+  if (horarios.length === 0 || servicios.length === 0) return [];
+
+  const { hora_inicio: hIni, hora_fin: hFin } = horarios[0];
+  const { duracion_min: duracion, area_id: areaId } = servicios[0];
+
+  // --- PASO 4: Generar todos los slots posibles del horario ---
+  let slotsDisponibles = generarSlots(hIni, hFin, duracion);
+
+  // Si no hay slots (horario de 0 minutos o duración mayor al bloque), terminamos
+  if (slotsDisponibles.length === 0) return [];
+
+  // --- PASOS 5 y 6: Turnos ocupados + bloqueos (en paralelo) ---
+  // Tampoco dependen entre sí, así que van juntas.
+  const [[turnosOcupados], [bloqueos]] = await Promise.all([
+    // Turnos ya reservados por este operador en esta fecha
+    db.query(
+      `SELECT hora_inicio, hora_fin
+       FROM turnos
+       WHERE operador_id = ? AND fecha = ? AND estado != 'cancelado'`,
+      [providerId, fecha]
+    ),
+    // Bloqueos individuales del operador + bloqueos de oficina del área.
+    // servicio_id IS NULL significa que el bloqueo afecta todos los servicios del área.
+    db.query(
+      `SELECT tipo, hora_inicio, hora_fin
+       FROM bloqueos
+       WHERE area_id = ?
+         AND fecha_inicio <= ? AND fecha_fin >= ?
+         AND (
+           (tipo = 'individual' AND usuario_id = ?)
+           OR tipo = 'oficina'
+         )
+         AND (servicio_id = ? OR servicio_id IS NULL)`,
+      [areaId, fecha, fecha, providerId, serviceId]
+    ),
+  ]);
+
+  // --- Restar turnos ocupados ---
+  // Un slot se elimina si se superpone con cualquier turno existente.
+  // Fórmula de superposición: A empieza antes de que B termine,
+  // Y A termina después de que B empiece.
+  if (turnosOcupados.length > 0) {
+    slotsDisponibles = slotsDisponibles.filter((slot) => {
+      const slotIni = horaAMinutos(slot);
+      const slotFin = slotIni + duracion;
+      return !turnosOcupados.some((t) => {
+        const tIni = horaAMinutos(t.hora_inicio);
+        const tFin = horaAMinutos(t.hora_fin);
+        return slotIni < tFin && slotFin > tIni;
+      });
+    });
+  }
+
+  // --- Restar bloqueos ---
+  for (const bloqueo of bloqueos) {
+    // Si no quedan slots, no tiene sentido seguir evaluando bloqueos
+    if (slotsDisponibles.length === 0) break;
+
+    if (bloqueo.hora_inicio === null) {
+      // Bloqueo de día completo → eliminar todos los slots de un saque
+      slotsDisponibles = [];
+    } else {
+      // Bloqueo parcial → eliminar solo los slots que se superpongan con él.
+      // Misma fórmula que para turnos: slot_inicio < bloqueo_fin AND slot_fin > bloqueo_inicio
+      const bIni = horaAMinutos(bloqueo.hora_inicio);
+      const bFin = horaAMinutos(bloqueo.hora_fin);
+      slotsDisponibles = slotsDisponibles.filter((slot) => {
+        const slotIni = horaAMinutos(slot);
+        const slotFin = slotIni + duracion;
+        return !(slotIni < bFin && slotFin > bIni);
+      });
+    }
+  }
+
+  logger.info(
+    `[motor] obtenerDisponibilidad: serviceId=${serviceId} providerId=${providerId} ` +
+    `fecha=${fecha} → ${slotsDisponibles.length} slots libres`
+  );
+  return slotsDisponibles;
 }
 
 async function obtenerDisponibilidadServicio(serviceId, fecha) {
