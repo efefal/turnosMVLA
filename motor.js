@@ -604,7 +604,70 @@ async function cancelarCita(appointmentId) {
 }
 
 async function obtenerCitasDelCliente(email) {
-  throw new Error('[motor] obtenerCitasDelCliente() aún no implementada (Fase 2)');
+  // --- PASO 1: Extraer el DNI del email ficticio ---
+  // El formato siempre es "dni_XXXXXX@municipio.local".
+  // Usamos regex para ser robustos ante variaciones de mayúsculas o espacios inesperados.
+  const match = email.match(/^dni_(.+)@municipio\.local$/i);
+  if (!match) {
+    // Esto no debería ocurrir nunca en producción: todos los llamadores en index.js
+    // construyen el email con `dni_${dni}@municipio.local`. Lo lanzamos igual para
+    // que un error de programación futuro sea fácil de detectar.
+    throw new Error(`[motor] obtenerCitasDelCliente: formato de email no reconocido: "${email}"`);
+  }
+  const dni = match[1];
+
+  // --- PASO 2: Buscar el vecino por DNI ---
+  // Si el vecino no existe, devolvemos vacío con nombreCliente=null.
+  // index.js interpreta eso como "vecino nuevo" → pasa al estado ESPERANDO_NOMBRE.
+  // No lanzamos error porque es un caso válido y esperado.
+  const [vecinos] = await db.query(
+    'SELECT id, nombre FROM vecinos WHERE dni = ?',
+    [dni]
+  );
+
+  if (vecinos.length === 0) {
+    logger.info(`[motor] obtenerCitasDelCliente: DNI ${dni} no registrado → vecino nuevo`);
+    return { citas: [], nombreCliente: null };
+  }
+
+  const vecino = vecinos[0];
+
+  // --- PASO 3: Obtener turnos agendados del vecino ---
+  // Solo devolvemos los que están en estado 'agendado'.
+  // index.js filtra los futuros con esCitaFutura() después de recibir este array,
+  // pero ya excluimos cancelados, presentes, ausentes y atendidos desde la query.
+  // ORDER BY para que la lista de turnos llegue ordenada cronológicamente.
+  const [turnos] = await db.query(
+    `SELECT t.id, t.fecha, t.hora_inicio, t.hora_fin, t.servicio_id
+     FROM turnos t
+     WHERE t.vecino_id = ? AND t.estado = 'agendado'
+     ORDER BY t.fecha ASC, t.hora_inicio ASC`,
+    [vecino.id]
+  );
+
+  // --- PASO 4: Mapear al formato que espera index.js ---
+  // Campos críticos del contrato:
+  //
+  //   cita.id        → integer (para igualdad estricta con parseInt en callbacks)
+  //   cita.start     → "YYYY-MM-DD HH:MM:SS" (para esCitaFutura, substring y startsWith)
+  //   cita.serviceId → integer (para igualdad estricta === con TRAMITES_COMPLETOS[].id)
+  //
+  // Con dateStrings:true en db.js, t.fecha llega como "YYYY-MM-DD" y
+  // t.hora_inicio como "HH:MM:SS", así que la concatenación da el formato exacto.
+  const citas = turnos.map((t) => ({
+    id:        t.id,                                   // INT de MySQL → number en JS ✓
+    start:     `${t.fecha} ${t.hora_inicio}`,          // "YYYY-MM-DD HH:MM:SS" ✓
+    end:       `${t.fecha} ${t.hora_fin}`,             // mismo formato, por coherencia
+    serviceId: t.servicio_id,                          // INT de MySQL → number en JS ✓
+  }));
+
+  logger.info(
+    `[motor] obtenerCitasDelCliente: DNI ${dni} → ${citas.length} turno(s) agendado(s)`
+  );
+
+  // nombreCliente es el nombre completo del vecino tal como está en la tabla.
+  // index.js lo usa para saludar al vecino y como fallback en el menú de gestión.
+  return { citas, nombreCliente: vecino.nombre };
 }
 
 
