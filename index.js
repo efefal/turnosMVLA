@@ -2712,7 +2712,17 @@ async function procesarCallback(chatId, data) {
 }
 
 // ---------------------------------------------------------------
-// 13. ENDPOINTS PROXY HACIA EASY!APPOINTMENTS
+// ---------------------------------------------------------------
+// 13. RUTAS DEL PANEL DE EMPLEADOS
+// ---------------------------------------------------------------
+// El panel tiene su propio router en routes/panel.js.
+// Todas las rutas bajo /panel/* están protegidas con JWT (middleware/auth.js).
+// Las rutas de autenticación (login/logout) están en routes/auth.js.
+app.use('/panel', require('./routes/auth'));
+app.use('/panel', require('./routes/panel'));
+
+// ---------------------------------------------------------------
+// 13b. ENDPOINTS PROXY HACIA EASY!APPOINTMENTS
 // ---------------------------------------------------------------
 // Estos tres endpoints actúan como un intermediario seguro entre
 // el frontend (o cualquier cliente) y la API de Easy!Appointments.
