@@ -370,10 +370,10 @@ ORDER BY t.hora_inicio ASC
 3. INSERT en `auditoria` (`entidad_tipo='turno'`, `accion='modificar'`, `canal='sistema'`, `usuario_id=NULL`)
 4. Si fallo de envío → no marca la fila (reintento en próxima ejecución)
 
-**Scheduling**: `setTimeout` recursivo (sin dependencias externas).
-- Default: 08:00 hs todos los días
-- Configurable via `CRON_HORA_RECORDATORIO=N` en `.env`
-- Recalcula el tiempo restante en cada ciclo (protege contra derivas de reloj y cambio de horario de verano)
+**Scheduling**: dos bucles `setTimeout` recursivos e independientes (sin dependencias externas).
+- El cron dispara **dos veces por día**: pasada de mañana (`CRON_HORA_MANANA`, default `8`) y pasada de tarde (`CRON_HORA_TARDE`, default `18`).
+- Cada bucle recalcula el tiempo restante en cada ciclo (protege contra derivas de reloj y cambios de horario de verano/invierno).
+- **Anti-duplicado garantizado por BD**: la query incluye `AND t.recordatorio_enviado = FALSE`. Si la pasada de las 08:00 procesó un turno y marcó `recordatorio_enviado = TRUE`, la de las 18:00 no lo encuentra y lo omite. No hay lógica de deduplicación en el código: la columna es la única fuente de verdad.
 
 **Variables de entorno nuevas** (agregar a `.env`):
 ```
