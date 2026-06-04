@@ -2721,9 +2721,16 @@ async function procesarCallback(chatId, data) {
 app.use('/panel', require('./routes/auth'));
 app.use('/panel', require('./routes/panel'));
 
+// Endpoints públicos del selector web (Fase 5). Usan motor.js y toman
+// precedencia sobre los endpoints heredados de Easy!Appointments de abajo.
+app.use('/api', require('./routes/publico'));
+
 // ---------------------------------------------------------------
-// 13b. ENDPOINTS PROXY HACIA EASY!APPOINTMENTS
+// 13b. ENDPOINTS PROXY HACIA EASY!APPOINTMENTS (heredados — ya no activos)
 // ---------------------------------------------------------------
+// Estos endpoints son alcanzados solo si routes/publico.js no manejó la ruta,
+// lo que no ocurre para /api/servicios, /api/disponibilidad ni /api/turno.
+// Se mantienen para documentar la versión anterior y se eliminarán en el corte.
 // Estos tres endpoints actúan como un intermediario seguro entre
 // el frontend (o cualquier cliente) y la API de Easy!Appointments.
 // Así la clave de la API nunca queda expuesta en el navegador.

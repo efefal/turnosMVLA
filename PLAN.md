@@ -282,24 +282,45 @@ Dos mejoras menores de presentación:
 
 ---
 
-## Fase 5 — Selector web (Semana 4)
+## ✅ Fase 5 — Selector web (completada 2026-06-04)
 
-**Objetivo**: actualizar `public/selector.html` para que funcione con el nuevo motor.
+**Objetivo**: reescribir `public/selector.html` con flujo de 5 pasos usando motor.js.
 
-**Nuevo endpoint necesario**: `GET /api/vecino/:dni` — devuelve vecino y sus turnos activos (o 404 si no existe)
+### Backend — `routes/publico.js` (nuevo) ✅
+Montado en `index.js` como `app.use('/api', require('./routes/publico'))` antes de los
+endpoints heredados de EA, que quedan como dead code hasta el corte definitivo.
 
-**Flujo del selector**:
-1. Ingresar DNI → llamar a `/api/vecino/:dni`
-   - Si tiene turno activo: mostrar turno + botones "Cancelar" / "Cambiar fecha-horario"
-   - Si no tiene: ir al paso 2
-2. Seleccionar servicio → `/api/servicios`
-3. Seleccionar fecha (excluyendo feriados y sin disponibilidad)
-4. Seleccionar horario → `/api/disponibilidad?serviceId=X&fecha=Y`
-5. Confirmar → `POST /api/turno`
+Endpoints implementados (sin JWT, acceso público):
+- `GET /api/vecino/:dni` — vecino + sus turnos activos futuros
+- `GET /api/servicios` — servicios desde motor.js
+- `GET /api/servicios/:id/mensaje` — mensaje de confirmación del servicio
+- `GET /api/disponibilidad?serviceId=N&fecha=YYYY-MM-DD` — horarios via motor.js
+- `POST /api/turno` — crea turno con canal='web', verifica anti-duplicado
+- `DELETE /api/turno/:id` — cancela con motivo, canal='bot' en auditoría
 
-**Nota**: el endpoint `/api/turno` (POST) ya existe en index.js y llama a `ea.crearCita()`. Tras el corte llamará a `motor.crearCita()` automáticamente.
+**Bug encontrado y corregido**: `auditoria.canal` es `ENUM('bot','panel','sistema')`;
+el valor `'web'` no es válido. Cancelaciones del vecino usan `'bot'` con `origen: 'selector_web'` en el detalle JSON.
 
-**Complejidad**: Media
+### Frontend — `public/selector.html` (reescrito) ✅
+Flujo de 5 pasos con identidad visual municipal (#1A3C4B, #FEEEC2):
+
+1. **Identificación**: DNI → si tiene turno activo muestra tarjetas con cancel/modificar; si no, auto-avanza al paso 2
+2. **Trámite**: cards de servicios
+3. **Fecha y hora**: `<input type="date">` + grilla de slots que se recarga automáticamente al cambiar la fecha
+4. **Datos**: nombre + teléfono (pre-completados si el vecino ya existe en BD)
+5. **Confirmación**: resumen → `POST /api/turno` → pantalla de éxito con SVG + N° de turno + mensaje del servicio
+
+**Cancelar turno**: formulario inline con motivo obligatorio → `DELETE /api/turno/:id`
+**Modificar fecha/hora**: cancela el turno actual con motivo automático → salta al paso 3 con el mismo servicio pre-seleccionado; datos del vecino pre-completados en paso 4
+
+### Verificación end-to-end ✅
+- DNI nuevo → 5 pasos completos → turno #35 creado
+- DNI con turno activo → tarjeta con opciones
+- Cancelar → `{ ok: true }` + log "[publico] Turno 34 cancelado desde selector web"
+- Modificar → cancela #35 → nuevo turno #36 en fecha/horario diferente
+- Mensaje del servicio mostrado en pantalla de éxito
+
+**Complejidad**: Media ✅ completada
 
 ---
 
@@ -369,7 +390,7 @@ Las fases 4, 5 y 6 pueden desarrollarse en paralelo una vez que Fases 0-3 estén
 | 2 | motor.js escrituras | Alta | ✅ Completa |
 | 3 | Scripts CLI | Baja | ✅ Completa |
 | 4 | Panel de empleados | Alta | ✅ Completa |
-| 5 | Selector web | Media | ⏳ Pendiente |
+| 5 | Selector web | Media | ✅ Completa |
 | 6 | Cron recordatorios | Media | ⏳ Pendiente |
 | 7 | Migración y corte | Baja | ⏳ Parcialmente avanzada |
 
