@@ -510,6 +510,23 @@ router.post('/turno', async (req, res) => {
   try {
     const serviceIdNum = parseInt(serviceId, 10);
 
+    // Verificar si el vecino ya tiene un turno activo para este trámite.
+    // Sin esta guarda, cargar dos veces el mismo vecino y trámite genera un doble turno silencioso.
+    const [turnosActivos] = await pool.query(`
+      SELECT id FROM turnos
+      WHERE vecino_id = (SELECT id FROM vecinos WHERE dni = ?)
+        AND servicio_id = ?
+        AND estado = 'agendado'
+        AND fecha >= CURDATE()
+      LIMIT 1
+    `, [dni, serviceIdNum]);
+
+    if (turnosActivos.length > 0) {
+      return res.status(409).json({
+        error: 'Este vecino ya tiene un turno activo para este trámite.'
+      });
+    }
+
     // Obtener la disponibilidad para saber qué operador corresponde al slot (round-robin)
     const disponibilidad = await motor.obtenerDisponibilidadServicio(serviceIdNum, fecha);
     const providerId     = disponibilidad.mapaHorarioOperador[horario];

@@ -115,7 +115,7 @@
 
     /* Pantalla de éxito */
     .exito { text-align: center; padding: 1rem 0; }
-    .exito-icono  { font-size: 3rem; margin-bottom: 0.75rem; display: block; }
+    .exito-icono  { margin-bottom: 0.75rem; display: flex; justify-content: center; }
     .exito h2     { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-size: 1.25rem; color: #15803d; margin-bottom: 0.5rem; }
     .exito-detalle { background: #f8fafc; border-radius: 8px; padding: 1rem; margin: 1rem 0; text-align: left; }
     .exito-detalle p { font-size: 0.875rem; color: #475569; margin-bottom: 0.3rem; }
@@ -245,7 +245,12 @@
     <!-- ── Pantalla de éxito ───────────────────────────────────── -->
     <div id="paso-exito" style="display:none">
       <div class="exito">
-        <span class="exito-icono">✅</span>
+        <span class="exito-icono">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="28" cy="28" r="28" fill="#1A3C4B"/>
+            <path d="M16 28L24 37L40 19" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
         <h2>Turno registrado</h2>
         <p style="font-size:0.875rem;color:#64748b;margin-bottom:1rem">
           El turno fue cargado correctamente en el sistema.
@@ -382,11 +387,8 @@ async function buscarVecino() {
       chip.className     = 'vecino-chip chip-existente';
       chip.textContent   = '✓ Vecino registrado en el sistema';
       nombreInput.value    = data.nombre;
-      nombreInput.readOnly = true;
-      hintNombre.textContent = 'Nombre registrado. Si hay un error, corregilo manualmente.';
-      // Permitir corrección del nombre si es necesario
-      nombreInput.removeAttribute('readonly');
-      nombreInput.readOnly = true;
+      nombreInput.readOnly = false;
+      hintNombre.textContent = 'Nombre registrado. Podés corregirlo si es necesario.';
 
       telefonoInput.value = data.telefono || '';
     } else {
@@ -401,6 +403,8 @@ async function buscarVecino() {
     }
 
     datos.dni = dni;
+    // Limpiar cualquier error que haya quedado de intentos anteriores de avanzar
+    mostrarError(1, '');
     document.getElementById('btn-siguiente-1').disabled = false;
     nombreInput.focus();
 
