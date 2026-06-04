@@ -204,6 +204,73 @@ Archivos en `public/panel/`:
 
 ---
 
+## Modificaciones pendientes antes de Fase 5
+
+Estas mejoras al panel quedaron identificadas durante el desarrollo de la Fase 4.
+No son bloqueantes para la Fase 5, pero deben resolverse antes de dar acceso
+a los empleados municipales reales.
+
+### M1 — Identidad visual municipal
+Adaptar las 4 pantallas del panel (login, agenda, presencial, bloqueos) a los
+colores, logo y tipografía oficiales de la Municipalidad de Villa La Angostura.
+
+**Pendiente recibir**: logo en formato SVG o PNG, colores hex corporativos, tipografía.
+
+**Impacto**: solo CSS y el elemento `<img>` del logo en el navbar. Sin cambios de lógica.
+
+**Archivos a modificar**: `public/panel/login.html`, `agenda.html`, `presencial.html`, `bloqueos.html`
+
+### M2 — Presencial paso 1: búsqueda por DNI con pre-completado
+Cambiar el flujo del primer paso de `presencial.html`:
+
+1. Mostrar solo el campo DNI inicialmente.
+2. Al salir del campo (evento `blur`) o al presionar un botón "Buscar":
+   - Llamar a un nuevo endpoint `GET /panel/vecino/:dni`
+   - Si el vecino existe en la BD → pre-completar nombre (campo de solo lectura, editable si se necesita corregir)
+   - Si no existe → mostrar campos de nombre y **teléfono** (teléfono obligatorio para el cron de recordatorios)
+3. El teléfono se guarda en la tabla `vecinos` al crear el turno (ya lo hace `crearCita()` vía UPSERT, solo falta pasarlo en el body).
+
+**Backend necesario**: `GET /panel/vecino/:dni` en `routes/panel.js` — busca en tabla `vecinos` por DNI,
+devuelve `{ id, nombre, telefono }` o 404.
+
+**Impacto en `crearCita()`**: agregar campo `telefono` al UPSERT de vecinos en `motor.js`.
+
+### M3 — Presencial: fusionar pasos 2 y 3 en una sola pantalla
+Reemplazar el wizard de 3 pasos por uno de 2:
+
+- **Paso 1**: DNI y nombre (con búsqueda del M2)
+- **Paso 2**: trámite + fecha + horarios disponibles en la misma pantalla
+
+Comportamiento del paso 2:
+- Al cambiar servicio o fecha → llamar automáticamente a `GET /panel/disponibilidad`
+  y actualizar la grilla de slots sin cambiar de paso.
+- Si no hay slots disponibles → mostrar mensaje inline ("No hay horarios para este día").
+- El botón "Confirmar" se habilita solo cuando hay un horario seleccionado.
+
+**Impacto**: solo frontend (`presencial.html`). El backend ya soporta este flujo.
+
+### M4 — Agenda: agregar vistas de semana y mes
+Agregar un selector de vista en `agenda.html` con tres opciones:
+
+| Vista | Descripción |
+|---|---|
+| Día | La vista actual: tabla de turnos de una fecha específica |
+| Semana | Columnas = días (lun–vie), filas = franjas horarias cada 30 min |
+| Mes | Calendario mensual con indicador de cantidad de turnos por día |
+
+**Navegación**:
+- Vista día: ◀ Anterior / Siguiente ▶ (ya implementado)
+- Vista semana: ◀ Semana anterior / Semana siguiente ▶
+- Vista mes: ◀ Mes anterior / Mes siguiente ▶
+
+**Backend**: `GET /panel/agenda` ya acepta `fecha` como parámetro. Para semana y mes
+llamar con múltiples fechas en paralelo (`Promise.all`) o agregar un endpoint
+`GET /panel/agenda/rango?desde=YYYY-MM-DD&hasta=YYYY-MM-DD`.
+
+**Impacto**: principalmente frontend. Si se agrega el endpoint de rango, también `routes/panel.js`.
+
+---
+
 ## Fase 5 — Selector web (Semana 4)
 
 **Objetivo**: actualizar `public/selector.html` para que funcione con el nuevo motor.
