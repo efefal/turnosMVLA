@@ -296,10 +296,7 @@ Endpoints implementados (sin JWT, acceso público):
 - `GET /api/servicios/:id/mensaje` — mensaje de confirmación del servicio
 - `GET /api/disponibilidad?serviceId=N&fecha=YYYY-MM-DD` — horarios via motor.js
 - `POST /api/turno` — crea turno con canal='web', verifica anti-duplicado
-- `DELETE /api/turno/:id` — cancela con motivo, canal='bot' en auditoría
-
-**Bug encontrado y corregido**: `auditoria.canal` es `ENUM('bot','panel','sistema')`;
-el valor `'web'` no es válido. Cancelaciones del vecino usan `'bot'` con `origen: 'selector_web'` en el detalle JSON.
+- `DELETE /api/turno/:id` — cancela con motivo, canal='web' en auditoría
 
 ### Frontend — `public/selector.html` (reescrito) ✅
 Flujo de 5 pasos con identidad visual municipal (#1A3C4B, #FEEEC2):
@@ -321,6 +318,28 @@ Flujo de 5 pasos con identidad visual municipal (#1A3C4B, #FEEEC2):
 - Mensaje del servicio mostrado en pantalla de éxito
 
 **Complejidad**: Media ✅ completada
+
+### ✅ Corrección post-Fase 5 — ENUM canal en auditoría (2026-06-04)
+
+Durante la verificación end-to-end del selector web se detectó que el INSERT en
+`DELETE /api/turno/:id` fallaba porque `auditoria.canal` era `ENUM('bot','panel','sistema')`
+y el valor `'web'` no existía. Se usó `'bot'` como workaround temporal.
+
+**Corrección definitiva aplicada**:
+
+1. `ALTER TABLE auditoria MODIFY COLUMN canal ENUM('bot','panel','sistema','web') NOT NULL;`
+   — ejecutado en la BD local `motor_turnos`.
+
+2. `db/motor_turnos_mvla.sql` — ENUM actualizado para que el despliegue en producción
+   incluya `'web'` desde el principio.
+
+3. `routes/publico.js` — `DELETE /api/turno/:id` ahora usa `canal='web'`
+   (elimina el workaround `'bot'`).
+
+4. `motor.js` — `crearCita()` actualizado: el mapa `{ presencial: 'panel', web: 'web' }`
+   reemplaza la lógica anterior que usaba `'bot'` para todos los canales no presenciales.
+   Los turnos creados desde el selector web quedan auditados como `'web'`;
+   los de WhatsApp siguen como `'bot'`.
 
 ---
 
