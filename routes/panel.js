@@ -227,15 +227,26 @@ router.get('/agenda', async (req, res) => {
 // CALENDARIO — feriados y bloqueos (para agenda.html)
 // =============================================================================
 
-// GET /panel/feriados-bloqueos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
-// Devuelve los días con feriado o bloqueo de oficina de día completo en el rango.
-// Las vistas semana y mes de agenda.html lo usan para marcar visualmente esos
-// días con un color de fondo diferente antes de mostrar los turnos.
+// GET /panel/feriados-bloqueos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&operadorId=N
+// Devuelve los días especiales del rango para que agenda.html pueda marcarlos
+// visualmente en las vistas semana y mes:
 //
-// Solo devuelve bloqueos de las áreas del usuario: un operador de Licencias
-// no ve los bloqueos de Tribunal de Faltas, que no le afectan.
+//   feriados:           ["YYYY-MM-DD", ...]
+//   bloqueados:         ["YYYY-MM-DD", ...]   ← bloqueos de OFICINA de día completo
+//   bloqueosIndividuales: { "YYYY-MM-DD": ["Nombre Op 1", ...] }
+//
+// Qué devuelve según el rol:
+//   Operador:                   sus propios bloqueos individuales de día completo.
+//   Encargado sin operadorId:   todos los bloqueos individuales de sus áreas.
+//   Encargado con operadorId:   solo los bloqueos de ese operador.
+//
+// Solo se consideran bloqueos de día completo (hora_inicio IS NULL).
+// Los bloqueos de hora específica no se incluyen: afectan un slot, no el día entero.
 router.get('/feriados-bloqueos', async (req, res) => {
   const { desde, hasta } = req.query;
+  const operadorIdFiltro = req.query.operadorId
+    ? parseInt(req.query.operadorId, 10)
+    : null;
 
   if (!desde || !hasta) {
     return res.status(400).json({ error: 'Los parámetros desde y hasta son obligatorios.' });
@@ -248,27 +259,27 @@ router.get('/feriados-bloqueos', async (req, res) => {
       [desde, hasta]
     );
 
-    // Bloqueos de oficina de día completo (hora_inicio IS NULL) para las áreas del usuario.
-    // Los bloqueos de hora específica no se incluyen porque solo afectan un slot,
-    // no todo el día.
     const { areaIds } = req.usuario;
-    let bloqueados = [];
+    let bloqueados           = [];
+    const bloqueosIndividuales = {}; // { "YYYY-MM-DD": ["Sofía García", ...] }
 
     if (areaIds.length > 0) {
-      const placeholders = areaIds.map(() => '?').join(',');
-      const [bloqueos] = await pool.query(`
+      const ph = areaIds.map(() => '?').join(','); // placeholders para areaIds
+
+      // ── Bloqueos de OFICINA de día completo ──────────────────────────────
+      // Solo mostramos las áreas del usuario: un operador de Licencias no ve
+      // los bloqueos de Tribunal de Faltas, que no le afectan.
+      const [bloqueoOficina] = await pool.query(`
         SELECT fecha_inicio, fecha_fin
         FROM bloqueos
         WHERE tipo        = 'oficina'
           AND hora_inicio IS NULL
-          AND area_id     IN (${placeholders})
+          AND area_id     IN (${ph})
           AND fecha_inicio <= ?
           AND fecha_fin    >= ?
       `, [...areaIds, hasta, desde]);
 
-      // Los bloqueos tienen fecha_inicio y fecha_fin: expandimos cada rango
-      // en días individuales para que el frontend pueda hacer una simple búsqueda en un Set.
-      bloqueos.forEach(b => {
+      bloqueoOficina.forEach(b => {
         const curDate = new Date(b.fecha_inicio.substring(0, 10) + 'T12:00:00');
         const finDate = new Date(b.fecha_fin.substring(0, 10)   + 'T12:00:00');
         while (curDate <= finDate) {
@@ -276,14 +287,63 @@ router.get('/feriados-bloqueos', async (req, res) => {
           curDate.setDate(curDate.getDate() + 1);
         }
       });
-
-      // Deduplicar por si dos bloqueos distintos se superponen en el mismo día
       bloqueados = [...new Set(bloqueados)].sort();
+
+      // ── Bloqueos INDIVIDUALES de día completo ─────────────────────────────
+      // Qué operadores se incluyen según el rol y el filtro del dropdown:
+      //   Operador regular     → solo sus propios bloqueos
+      //   Encargado sin filtro → todos los operadores de sus áreas
+      //   Encargado con filtro → solo ese operador específico
+      const condInd = [
+        "b.tipo        = 'individual'",
+        'b.hora_inicio IS NULL',
+        `b.area_id     IN (${ph})`,
+        'b.fecha_inicio <= ?',
+        'b.fecha_fin    >= ?',
+      ];
+      const paramsInd = [...areaIds, hasta, desde];
+
+      if (!esEncargado(req)) {
+        // Operador: solo puede ver sus propios bloqueos
+        condInd.push('b.usuario_id = ?');
+        paramsInd.push(req.usuario.id);
+      } else if (operadorIdFiltro) {
+        // Encargado con un operador específico seleccionado en el dropdown
+        condInd.push('b.usuario_id = ?');
+        paramsInd.push(operadorIdFiltro);
+      }
+      // Encargado sin filtro → no se agrega condición de usuario_id → devuelve todos
+
+      const [bloqueosInd] = await pool.query(`
+        SELECT b.fecha_inicio, b.fecha_fin, u.nombre AS operador_nombre
+        FROM   bloqueos  b
+        JOIN   usuarios  u ON b.usuario_id = u.id
+        WHERE  ${condInd.join(' AND ')}
+        ORDER BY u.nombre ASC, b.fecha_inicio ASC
+      `, paramsInd);
+
+      // Expandir rangos individuales en días y agrupar por fecha.
+      // Resultado: { "2026-06-10": ["Sofía García"], "2026-06-11": ["Sofía García", "Juan Pérez"] }
+      bloqueosInd.forEach(b => {
+        const nombre  = b.operador_nombre;
+        const curDate = new Date(b.fecha_inicio.substring(0, 10) + 'T12:00:00');
+        const finDate = new Date(b.fecha_fin.substring(0, 10)   + 'T12:00:00');
+        while (curDate <= finDate) {
+          const iso = curDate.toISOString().substring(0, 10);
+          if (!bloqueosIndividuales[iso]) bloqueosIndividuales[iso] = [];
+          // Deduplicar: el mismo operador puede tener bloqueos superpuestos
+          if (!bloqueosIndividuales[iso].includes(nombre)) {
+            bloqueosIndividuales[iso].push(nombre);
+          }
+          curDate.setDate(curDate.getDate() + 1);
+        }
+      });
     }
 
     res.json({
       feriados:  feriados.map(f => f.fecha.substring(0, 10)),
       bloqueados,
+      bloqueosIndividuales,
     });
 
   } catch (err) {

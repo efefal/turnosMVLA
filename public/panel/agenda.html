@@ -157,26 +157,46 @@
 
     /* ── Indicadores de feriado y bloqueo (vistas semana y mes) ──── */
     /* Se aplican sobre las celdas de los días afectados para que el operador
-       identifique de un vistazo qué días no tienen atención normal. */
+       identifique de un vistazo qué días no tienen atención normal.
+       Tres capas de color, en orden de prioridad visual:
+         Rojo   (#fef2f2) → Feriado nacional o local
+         Ámbar  (#fef3c7) → Bloqueo de oficina completa (Sin atención)
+         Azul   (#eff6ff) → Bloqueo individual de uno o más operadores */
 
-    /* Vista SEMANA — celdas de los días feriado/bloqueado */
-    .cel-feriado   { background: #fef2f2 !important; }
-    .cel-bloqueado { background: #fef3c7 !important; }
+    /* Vista SEMANA — celdas de columna */
+    .cel-feriado       { background: #fef2f2 !important; }
+    .cel-bloqueado     { background: #fef3c7 !important; }
+    .cel-bloqueado-ind { background: #eff6ff !important; }
 
-    /* Vista SEMANA — texto pequeño en el encabezado de la columna */
-    .encabezado-feriado-tag   { font-size: 0.65rem; color: #dc2626; display: block; font-weight: 500; }
-    .encabezado-bloqueado-tag { font-size: 0.65rem; color: #d97706; display: block; font-weight: 500; }
+    /* Vista SEMANA — etiquetas pequeñas en encabezado de columna */
+    .encabezado-feriado-tag       { font-size: 0.65rem; color: #dc2626; display: block; font-weight: 500; }
+    .encabezado-bloqueado-tag     { font-size: 0.65rem; color: #d97706; display: block; font-weight: 500; }
+    .encabezado-bloqueado-ind-tag { font-size: 0.65rem; color: #2563eb; display: block; font-weight: 500; }
 
-    /* Vista MES — celdas de los días feriado/bloqueado */
-    .cal-feriado              { background: #fef2f2 !important; border-color: #fecaca !important; }
-    .cal-feriado .cal-num     { color: #dc2626 !important; }
-    .cal-bloqueado            { background: #fef3c7 !important; border-color: #fde68a !important; }
-    .cal-bloqueado .cal-num   { color: #d97706 !important; }
+    /* Vista MES — celdas */
+    .cal-feriado               { background: #fef2f2 !important; border-color: #fecaca !important; }
+    .cal-feriado .cal-num      { color: #dc2626 !important; }
+    .cal-bloqueado             { background: #fef3c7 !important; border-color: #fde68a !important; }
+    .cal-bloqueado .cal-num    { color: #d97706 !important; }
+    .cal-bloqueado-ind         { background: #eff6ff !important; border-color: #bfdbfe !important; }
+    .cal-bloqueado-ind .cal-num { color: #1d4ed8 !important; }
 
-    /* Etiqueta pequeña dentro de la celda del mes */
-    .cal-indicador           { font-size: 0.62rem; font-weight: 600; line-height: 1; }
-    .cal-indicador.feriado   { color: #dc2626; }
-    .cal-indicador.bloqueado { color: #d97706; }
+    /* Etiquetas dentro de la celda del mes */
+    .cal-indicador             { font-size: 0.62rem; font-weight: 600; line-height: 1; }
+    .cal-indicador.feriado     { color: #dc2626; }
+    .cal-indicador.bloqueado   { color: #d97706; }
+    .cal-indicador.bloqueado-ind { color: #2563eb; }
+
+    /* ── Banners de la vista DÍA ──────────────────────────────────── */
+    /* Aparecen en la parte superior de la tabla cuando el día tiene
+       un feriado, un bloqueo de oficina, o bloqueos individuales. */
+    .banner-dia {
+      padding: 0.7rem 1rem; font-size: 0.875rem; font-weight: 500;
+      border-bottom: 1px solid transparent; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .banner-feriado       { background: #fef2f2; border-bottom-color: #fecaca; color: #991b1b; }
+    .banner-bloqueado     { background: #fef3c7; border-bottom-color: #fde68a; color: #78350f; }
+    .banner-bloqueado-ind { background: #eff6ff; border-bottom-color: #bfdbfe; color: #1e40af; }
 
     /* Misc */
     .cargando { text-align: center; color: #94a3b8; padding: 3rem; font-style: italic; }
@@ -310,11 +330,18 @@ let vista          = 'dia';    // 'dia' | 'semana' | 'mes'
 let turnosActuales = [];
 let turnoACancelar = null;
 
-// Días especiales para las vistas semana y mes.
+// Días especiales para las tres vistas (día, semana, mes).
 // Se precarga junto con los turnos para que el renderizado los tenga disponibles.
-//   feriados:  Set de strings "YYYY-MM-DD" con feriados del rango visible.
-//   bloqueados: Set de strings "YYYY-MM-DD" con bloqueos de oficina de día completo.
-let diasEspeciales = { feriados: new Set(), bloqueados: new Set() };
+//
+//   feriados:           Set  → días que son feriado nacional o local.
+//   bloqueados:         Set  → días con bloqueo de oficina de día completo (sin atención).
+//   bloqueosIndividuales: Object → { "YYYY-MM-DD": ["Nombre Op 1", "Nombre Op 2"] }
+//                         Días en los que uno o más operadores tienen bloqueo individual.
+let diasEspeciales = {
+  feriados:            new Set(),
+  bloqueados:          new Set(),
+  bloqueosIndividuales: {},
+};
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 function getToken() {
@@ -563,6 +590,38 @@ function renderizarTablaDia(turnos) {
   `;
 }
 
+// ─── Banners informativos de la vista DÍA ─────────────────────────────────
+// Inyecta al inicio del tabla-container los banners que correspondan según el
+// tipo de día (feriado, bloqueo de oficina, bloqueos individuales de operadores).
+// Se llama después de renderizarTablaDia() para que los banners queden arriba.
+function renderizarBannersDia() {
+  const container = document.getElementById('tabla-container');
+  const banners   = [];
+
+  // Banner de feriado — prioridad máxima (rojo)
+  if (diasEspeciales.feriados.has(fechaActual)) {
+    banners.push(`<div class="banner-dia banner-feriado">📅 Este día es feriado — no hay atención programada.</div>`);
+  }
+
+  // Banner de bloqueo de oficina (ámbar)
+  if (diasEspeciales.bloqueados.has(fechaActual)) {
+    banners.push(`<div class="banner-dia banner-bloqueado">🔒 Este día tiene un bloqueo de oficina — sin atención.</div>`);
+  }
+
+  // Banner de bloqueos individuales de operadores (azul)
+  const nombresInd = diasEspeciales.bloqueosIndividuales[fechaActual] || [];
+  if (nombresInd.length > 0) {
+    const lista  = nombresInd.map(n => esc(n)).join(', ');
+    const verbo  = nombresInd.length === 1 ? 'tiene' : 'tienen';
+    banners.push(`<div class="banner-dia banner-bloqueado-ind">👤 ${lista} ${verbo} bloqueo este día.</div>`);
+  }
+
+  // Insertar banners al inicio del container (antes de la tabla o del mensaje de vacío)
+  if (banners.length > 0) {
+    container.insertAdjacentHTML('afterbegin', banners.join(''));
+  }
+}
+
 async function cargarDia() {
   actualizarLabelDia();
   mostrarAlerta(null);
@@ -572,7 +631,11 @@ async function cargarDia() {
   let url = `/panel/agenda?fecha=${fechaActual}`;
   if (operadorId) url += `&operadorId=${operadorId}`;
 
-  const res = await apiFetch(url);
+  // Cargar turnos y días especiales en paralelo — misma técnica que semana y mes
+  const [res] = await Promise.all([
+    apiFetch(url),
+    cargarDiasEspeciales(fechaActual, fechaActual),
+  ]);
   if (!res) return;
 
   if (!res.ok) {
@@ -587,26 +650,39 @@ async function cargarDia() {
   turnosActuales = turnos;
   renderizarStats(turnos);
   renderizarTablaDia(turnos);
+  // Mostrar banners informativos de feriado o bloqueo si corresponde.
+  // Se llama después de renderizarTablaDia para que los banners aparezcan encima.
+  renderizarBannersDia();
 }
 
 // ─── Feriados y bloqueos ───────────────────────────────────────────────────
 // Precarga los días especiales del rango desde el servidor y los guarda en
-// `diasEspeciales`. Se llama en paralelo con la carga de turnos para no
-// agregar latencia perceptible al usuario.
+// `diasEspeciales`. Se llama en paralelo con la carga de turnos (Promise.all)
+// para no agregar latencia perceptible al usuario.
+//
+// Incluye automáticamente el operadorId del dropdown cuando hay uno seleccionado,
+// para que el endpoint filtre los bloqueos individuales según corresponda.
+//
 // Si falla (error de red, token vencido, etc.) la agenda sigue cargando
-// normalmente pero sin los indicadores de color.
+// normalmente pero sin los indicadores de color — falla silenciosa.
 async function cargarDiasEspeciales(desde, hasta) {
+  // Pasar el operadorId al endpoint para que filtre bloqueos individuales según
+  // el encargado haya seleccionado un operador específico o "todos".
+  const operadorId = document.getElementById('select-operador')?.value || '';
+  let url = `/panel/feriados-bloqueos?desde=${desde}&hasta=${hasta}`;
+  if (operadorId) url += `&operadorId=${operadorId}`;
+
   try {
-    const res = await apiFetch(`/panel/feriados-bloqueos?desde=${desde}&hasta=${hasta}`);
+    const res = await apiFetch(url);
     if (!res || !res.ok) return;
     const data = await res.json();
     diasEspeciales = {
-      feriados:  new Set(data.feriados  || []),
-      bloqueados: new Set(data.bloqueados || []),
+      feriados:            new Set(data.feriados  || []),
+      bloqueados:          new Set(data.bloqueados || []),
+      bloqueosIndividuales: data.bloqueosIndividuales || {},
     };
   } catch {
-    // Falla silenciosa: la agenda carga igual, sin los indicadores visuales
-    diasEspeciales = { feriados: new Set(), bloqueados: new Set() };
+    diasEspeciales = { feriados: new Set(), bloqueados: new Set(), bloqueosIndividuales: {} };
   }
 }
 
@@ -628,30 +704,39 @@ function renderizarSemana(turnos, dias) {
   const slots = generarSlotsTiempo('08:00', '17:30');
 
   // Encabezados de columnas (un día por columna).
-  // Si el día es feriado o tiene bloqueo de oficina, se tinta el encabezado
-  // y se agrega una etiqueta pequeña para que el operador lo identifique.
+  // Tres capas de color por prioridad:
+  //   Rojo  (feriado) > Ámbar (bloqueo oficina) > Azul (bloqueo individual) > sin tinte
   const headerCols = dias.map((fecha, i) => {
     const d           = parseFecha(fecha);
     const num         = d.getDate();
     const mes         = d.getMonth() + 1;
     const esHoy       = fecha === HOY;
     const esFeriado   = diasEspeciales.feriados.has(fecha);
-    // Los bloqueos solo se muestran si el día no es feriado (feriado tiene prioridad)
     const esBloqueado = !esFeriado && diasEspeciales.bloqueados.has(fecha);
+    // Nombres de operadores con bloqueo individual en este día (puede ser más de uno)
+    const nombresInd    = (!esFeriado && !esBloqueado)
+                          ? (diasEspeciales.bloqueosIndividuales[fecha] || [])
+                          : [];
+    const esBloqueadoInd = nombresInd.length > 0;
 
-    // Color de fondo del encabezado según prioridad: hoy > feriado > bloqueo > normal
-    const headerBg    = esFeriado   ? 'background:#fef2f2;'
-                      : esBloqueado ? 'background:#fef3c7;'
+    const headerBg    = esFeriado       ? 'background:#fef2f2;'
+                      : esBloqueado     ? 'background:#fef3c7;'
+                      : esBloqueadoInd  ? 'background:#eff6ff;'
                       : '';
-    const headerColor = esHoy       ? 'color:#1A3C4B;'
-                      : esFeriado   ? 'color:#dc2626;'
-                      : esBloqueado ? 'color:#92400e;'
+    const headerColor = esHoy           ? 'color:#1A3C4B;'
+                      : esFeriado       ? 'color:#dc2626;'
+                      : esBloqueado     ? 'color:#92400e;'
+                      : esBloqueadoInd  ? 'color:#1d4ed8;'
                       : '';
 
-    // Etiqueta informativa debajo del número de día
-    const tag         = esFeriado   ? '<span class="encabezado-feriado-tag">Feriado</span>'
-                      : esBloqueado ? '<span class="encabezado-bloqueado-tag">Sin atención</span>'
-                      : '';
+    // Una etiqueta por operador bloqueado; si hay muchos, se apilan en la columna
+    const tagsInd = nombresInd
+      .map(n => `<span class="encabezado-bloqueado-ind-tag">${esc(n.split(' ')[0])} — bloqueado</span>`)
+      .join('');
+
+    const tag = esFeriado      ? '<span class="encabezado-feriado-tag">Feriado</span>'
+              : esBloqueado    ? '<span class="encabezado-bloqueado-tag">Sin atención</span>'
+              : tagsInd;
 
     return `
       <th class="col-dia" style="${headerBg}${headerColor}">
@@ -662,21 +747,26 @@ function renderizarSemana(turnos, dias) {
   }).join('');
 
   // Filas de tiempo.
-  // Cada celda de un día feriado o bloqueado hereda el color de fondo para que
-  // la columna completa quede tintada, no solo el encabezado.
+  // Cada celda de un día especial hereda el mismo color de fondo del encabezado
+  // para que toda la columna quede tintada, no solo el encabezado.
+  // Prioridad: feriado > bloqueo oficina > bloqueo individual > hoy > normal
   const filas = slots.map(slot => {
     const celdas = dias.map(fecha => {
       const turnosDia = (porFecha[fecha] || [])
         .filter(t => t.hora_inicio.substring(0, 5) === slot);
-      const esHoy       = fecha === HOY;
-      const esFeriado   = diasEspeciales.feriados.has(fecha);
-      const esBloqueado = !esFeriado && diasEspeciales.bloqueados.has(fecha);
+      const esHoy         = fecha === HOY;
+      const esFeriado     = diasEspeciales.feriados.has(fecha);
+      const esBloqueado   = !esFeriado && diasEspeciales.bloqueados.has(fecha);
+      const esBloqueadoInd = !esFeriado && !esBloqueado
+                             && (diasEspeciales.bloqueosIndividuales[fecha] || []).length > 0;
 
-      // Determinar la clase CSS de la celda según prioridad
       let claseCelda = '';
-      if (esHoy)         claseCelda = 'cel-dia-hoy';
-      else if (esFeriado)  claseCelda = 'cel-feriado';
-      else if (esBloqueado) claseCelda = 'cel-bloqueado';
+      if (esFeriado)       claseCelda = 'cel-feriado';
+      else if (esBloqueado)  claseCelda = 'cel-bloqueado';
+      else if (esBloqueadoInd) claseCelda = 'cel-bloqueado-ind';
+      else if (esHoy)        claseCelda = 'cel-dia-hoy';
+      // "hoy" con prioridad más baja que los colores de alerta para que, si hoy
+      // es feriado o bloqueado, el color de alerta tenga prioridad visual.
 
       const cards = turnosDia.map(t => `
         <div class="turno-semana badge-${t.estado}" title="${esc(t.vecino_nombre)} — ${esc(t.servicio_nombre)}">
@@ -770,21 +860,35 @@ function renderizarMes(turnos, año, mes) {
 
     // Solo marcamos feriados/bloqueos en los días del mes visible.
     // Los días del mes anterior/siguiente (otro-mes) quedan opacos sin indicador.
-    const esFeriado   = esDelMes && diasEspeciales.feriados.has(fechaStr);
-    const esBloqueado = esDelMes && !esFeriado && diasEspeciales.bloqueados.has(fechaStr);
+    const esFeriado      = esDelMes && diasEspeciales.feriados.has(fechaStr);
+    const esBloqueado    = esDelMes && !esFeriado && diasEspeciales.bloqueados.has(fechaStr);
+    const nombresInd     = esDelMes && !esFeriado && !esBloqueado
+                           ? (diasEspeciales.bloqueosIndividuales[fechaStr] || [])
+                           : [];
+    const esBloqueadoInd = nombresInd.length > 0;
 
     const clases = [
       'cal-dia',
-      !esDelMes   ? 'otro-mes'     : '',
-      esHoy       ? 'cal-hoy'      : '',
-      esFeriado   ? 'cal-feriado'  : '',
-      esBloqueado ? 'cal-bloqueado': '',
+      !esDelMes      ? 'otro-mes'         : '',
+      esHoy          ? 'cal-hoy'          : '',
+      esFeriado      ? 'cal-feriado'      : '',
+      esBloqueado    ? 'cal-bloqueado'    : '',
+      esBloqueadoInd ? 'cal-bloqueado-ind': '',
     ].filter(Boolean).join(' ');
 
-    // Etiqueta pequeña dentro de la celda que identifica el motivo del color
-    const indicador = esFeriado   ? '<span class="cal-indicador feriado">Feriado</span>'
-                    : esBloqueado ? '<span class="cal-indicador bloqueado">Sin atención</span>'
-                    : '';
+    // Etiqueta(s) pequeñas dentro de la celda.
+    // Para bloqueos individuales: si hay 1 operador se muestra su primer nombre;
+    // si hay más de 1 se muestra la cantidad para no desbordar la celda.
+    let indicadorInd = '';
+    if (esBloqueadoInd) {
+      indicadorInd = nombresInd.length === 1
+        ? `<span class="cal-indicador bloqueado-ind">${esc(nombresInd[0].split(' ')[0])} — bloqueado</span>`
+        : `<span class="cal-indicador bloqueado-ind">${nombresInd.length} bloqueados</span>`;
+    }
+
+    const indicador = esFeriado      ? '<span class="cal-indicador feriado">Feriado</span>'
+                    : esBloqueado    ? '<span class="cal-indicador bloqueado">Sin atención</span>'
+                    : indicadorInd;
 
     const onclick = esDelMes ? `irADiaDesdeCalendario('${fechaStr}')` : '';
     celdas.push(`

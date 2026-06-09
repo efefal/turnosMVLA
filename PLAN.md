@@ -571,6 +571,70 @@ cuáles tienen bloqueo de oficina.
 
 ---
 
+### Correcciones post-pruebas visuales — Sesión 2
+
+#### Bug 1 — Anti-abuso no considera fecha actual ✅ (ya estaba correcto)
+**Descripción**: las queries de verificación de turno activo debían incluir
+`AND fecha >= CURDATE()` para que un turno del pasado no bloquee una nueva reserva.
+
+**Verificación**: al revisar el código se confirmó que todos los puntos de
+verificación ya tenían el filtro aplicado desde la sesión anterior:
+- `GET /api/vecino/:dni` → `AND t.fecha >= CURDATE()` ✓
+- `GET /panel/vecino/:dni` → `AND fecha >= CURDATE()` ✓
+- `POST /api/turno` → `AND fecha >= CURDATE()` ✓
+- `POST /panel/turno` → `AND fecha >= CURDATE()` ✓
+
+**No fue necesario ningún cambio de código.**
+
+---
+
+#### Bug 2 — Feriados (y bloqueos) no visibles en vista día del panel ✅
+**Problema**: las vistas semana y mes de agenda.html marcaban los días especiales
+con colores, pero la vista día no tenía ningún indicador cuando la fecha seleccionada
+era feriado, tenía un bloqueo de oficina, o había operadores con bloqueo individual.
+
+**Solución**:
+- `cargarDia()` llama a `cargarDiasEspeciales(fechaActual, fechaActual)` en paralelo
+  con la carga de turnos (Promise.all), sin latencia adicional perceptible.
+- Nueva función `renderizarBannersDia()` que inyecta banners informativos en la parte
+  superior de la tabla según el tipo de día:
+  - Rojo (`banner-feriado`): "📅 Este día es feriado — no hay atención programada."
+  - Ámbar (`banner-bloqueado`): "🔒 Este día tiene un bloqueo de oficina — sin atención."
+  - Azul (`banner-bloqueado-ind`): "👤 [Nombre(s)] tiene/n bloqueo este día."
+
+**Archivos**: `public/panel/agenda.html`
+
+---
+
+#### Mejora 1 — Bloqueos individuales diferenciados por rol en todas las vistas ✅
+**Problema**: la agenda solo mostraba bloqueos de oficina (ámbar) pero no los bloqueos
+individuales de operadores. El encargado no podía ver a simple vista qué días un
+operador específico no trabaja.
+
+**Solución**:
+
+**Backend** (`routes/panel.js`) — `GET /panel/feriados-bloqueos` extendido:
+- Acepta parámetro opcional `operadorId`.
+- Devuelve un nuevo campo `bloqueosIndividuales: { "YYYY-MM-DD": ["Sofía García", ...] }`.
+- Lógica según rol:
+  - Operador: solo sus propios bloqueos individuales de día completo.
+  - Encargado sin `operadorId`: todos los bloqueos individuales de sus áreas.
+  - Encargado con `operadorId`: solo los bloqueos del operador seleccionado.
+
+**Frontend** (`public/panel/agenda.html`):
+- `diasEspeciales` ahora incluye `bloqueosIndividuales: {}`.
+- `cargarDiasEspeciales()` pasa el `operadorId` del dropdown al endpoint.
+- CSS nuevo: `.cel-bloqueado-ind`, `.cal-bloqueado-ind` (azul pálido #eff6ff).
+- Vista semana: columna azul con etiqueta "NombreOp — bloqueado" por operador bloqueado.
+- Vista mes: celda azul con "Nombre — bloqueado" (si 1 op.) o "N bloqueados" (si varios).
+- Vista día: banner azul listando los operadores con bloqueo individual ese día.
+
+**Prioridad visual**: Rojo (feriado) > Ámbar (bloqueo oficina) > Azul (bloqueo individual).
+
+**Archivos**: `routes/panel.js`, `public/panel/agenda.html`
+
+---
+
 ### Features nuevas — Sesión 2
 
 #### N1 — Pantalla de auditoría en el panel ⬜
