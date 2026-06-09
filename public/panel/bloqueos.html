@@ -78,6 +78,15 @@
     .btn-full    { width: 100%; }
     .cargando    { text-align: center; color: #94a3b8; padding: 2rem; font-style: italic; }
 
+    /* Checkbox día completo */
+    .checkbox-label {
+      display: flex; align-items: center; gap: 0.5rem;
+      cursor: pointer; font-size: 0.85rem; font-weight: 500; color: #374151; margin: 0;
+    }
+    .checkbox-label input[type="checkbox"] {
+      width: auto; padding: 0; border: none; cursor: pointer; accent-color: #1A3C4B;
+    }
+
     /* Tipo selector */
     .tipo-opciones { display: flex; gap: 0.75rem; }
     .tipo-opcion { flex: 1; }
@@ -181,19 +190,23 @@
       </div>
     </div>
 
-    <!-- Horas (opcionales) -->
-    <div class="form-fila">
+    <!-- Checkbox día completo -->
+    <div class="form-grupo">
+      <label class="checkbox-label">
+        <input type="checkbox" id="dia-completo" onchange="onDiaCompletoChange()">
+        Día completo (sin especificar horario)
+      </label>
+      <p class="hint">Tildá si querés bloquear desde la apertura hasta el cierre de la oficina.</p>
+    </div>
+
+    <!-- Horas (visibles solo cuando no es día completo) -->
+    <div id="grupo-horas" class="form-fila">
       <div class="form-grupo">
-        <label for="hora-inicio">
-          Hora inicio <span class="opcional">(opcional)</span>
-        </label>
+        <label for="hora-inicio">Hora inicio</label>
         <input type="time" id="hora-inicio" step="1800">
-        <p class="hint">Dejá vacío para bloquear el día completo.</p>
       </div>
       <div class="form-grupo">
-        <label for="hora-fin">
-          Hora fin <span class="opcional">(opcional)</span>
-        </label>
+        <label for="hora-fin">Hora fin</label>
         <input type="time" id="hora-fin" step="1800">
       </div>
     </div>
@@ -346,6 +359,18 @@ function onTipoChange() {
     tipo === 'individual' ? 'block' : 'none';
 }
 
+// ─── Día completo change ───────────────────────────────────────────────────
+// Cuando el checkbox se tilda, oculta los campos de hora y los vacía para que
+// el backend reciba hora_inicio: null y hora_fin: null (bloqueo de día completo).
+function onDiaCompletoChange() {
+  const esDiaCompleto = document.getElementById('dia-completo').checked;
+  document.getElementById('grupo-horas').style.display = esDiaCompleto ? 'none' : 'grid';
+  if (esDiaCompleto) {
+    document.getElementById('hora-inicio').value = '';
+    document.getElementById('hora-fin').value    = '';
+  }
+}
+
 // ─── Crear bloqueo ─────────────────────────────────────────────────────────
 async function crearBloqueo() {
   mostrarAlertaForm(null);
@@ -355,8 +380,10 @@ async function crearBloqueo() {
   const areaEl      = document.getElementById('sel-area');
   const fechaInicio = document.getElementById('fecha-inicio').value;
   const fechaFin    = document.getElementById('fecha-fin').value;
-  const horaInicio  = document.getElementById('hora-inicio').value;
-  const horaFin     = document.getElementById('hora-fin').value;
+  // Si está tildado "Día completo", las horas van como null al backend
+  const diaCompleto = document.getElementById('dia-completo').checked;
+  const horaInicio  = diaCompleto ? '' : document.getElementById('hora-inicio').value;
+  const horaFin     = diaCompleto ? '' : document.getElementById('hora-fin').value;
   const motivo      = document.getElementById('motivo').value.trim();
 
   if (tipo === 'individual' && !operadorId) {
@@ -408,7 +435,9 @@ async function crearBloqueo() {
   document.getElementById('hora-inicio').value   = '';
   document.getElementById('hora-fin').value      = '';
   document.getElementById('motivo').value        = '';
+  document.getElementById('dia-completo').checked = false;
   onTipoChange();
+  onDiaCompletoChange();
 
   mostrarAlertaForm('ok', 'Bloqueo creado correctamente.');
   cargarBloqueos();

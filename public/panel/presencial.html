@@ -306,6 +306,7 @@ async function cerrarSesion() {
 const datos = {
   dni: '', nombre: '', telefono: '',
   serviceId: null, servicioNombre: '', fecha: '', horario: '',
+  turnosActivosServicioIds: [], // IDs de servicios con turno activo del vecino buscado
 };
 let serviciosDisponibles = [];
 let vecinoEncontrado = false; // true si el vecino ya existe en la BD
@@ -403,6 +404,8 @@ async function buscarVecino() {
     }
 
     datos.dni = dni;
+    // Guardar IDs de servicios con turno activo para el anti-abuso temprano en paso 2
+    datos.turnosActivosServicioIds = data.turnosActivosServicioIds || [];
     // Limpiar cualquier error que haya quedado de intentos anteriores de avanzar
     mostrarError(1, '');
     document.getElementById('btn-siguiente-1').disabled = false;
@@ -464,6 +467,17 @@ async function actualizarSlots() {
   document.getElementById('btn-confirmar').disabled = true;
 
   const slotsArea = document.getElementById('slots-area');
+
+  // Anti-abuso temprano: si el vecino ya tiene turno activo para este trámite,
+  // mostrar el error al seleccionar el servicio (sin esperar a que el empleado
+  // elija fecha y horario y llegue al 409 al confirmar)
+  if (serviceId && datos.turnosActivosServicioIds.includes(parseInt(serviceId, 10))) {
+    mostrarError(2, 'Este vecino ya tiene un turno activo para este trámite. Cancelalo primero antes de crear uno nuevo.');
+    slotsArea.innerHTML = '<p class="slots-placeholder">Seleccioná trámite y fecha para ver los horarios disponibles.</p>';
+    return;
+  }
+  // Limpiar el error si el empleado cambió a un trámite sin turno activo
+  mostrarError(2, '');
 
   // Si falta alguno de los dos, mostrar mensaje placeholder
   if (!serviceId || !fecha) {
@@ -587,6 +601,7 @@ async function confirmarTurno() {
 function reiniciar() {
   datos.dni = ''; datos.nombre = ''; datos.telefono = '';
   datos.serviceId = null; datos.servicioNombre = ''; datos.fecha = ''; datos.horario = '';
+  datos.turnosActivosServicioIds = [];
   vecinoEncontrado = false;
 
   document.getElementById('dni').value     = '';

@@ -124,6 +124,112 @@ router.get('/servicios/:id/mensaje', async (req, res) => {
 
 
 // =============================================================================
+// GET /api/disponibilidad/calendario?serviceId=N&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+// Devuelve para cada día del rango: si tiene slots libres, si es feriado, si tiene
+// bloqueo de oficina activo. Usado por el calendario visual del selector web para
+// marcar días no disponibles antes de que el vecino los seleccione.
+//
+// El check de disponibilidad real (motor.obtenerDisponibilidadServicio) corre en
+// paralelo para todos los días hábiles del rango — aceptable para el volumen de
+// un calendario mensual (~22 días hábiles).
+// =============================================================================
+router.get('/disponibilidad/calendario', async (req, res) => {
+  const { serviceId, desde, hasta } = req.query;
+
+  if (!serviceId || !desde || !hasta) {
+    return res.status(400).json({
+      error: 'Faltan parámetros: serviceId, desde y hasta son obligatorios.'
+    });
+  }
+
+  const serviceIdNum = parseInt(serviceId, 10);
+  if (isNaN(serviceIdNum)) {
+    return res.status(400).json({ error: 'serviceId debe ser un número entero.' });
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
+    return res.status(400).json({ error: 'Formato de fecha inválido. Usar YYYY-MM-DD.' });
+  }
+
+  try {
+    // Feriados del rango (incluye nacionales y locales de la tabla feriados)
+    const [feriados] = await pool.query(
+      'SELECT fecha FROM feriados WHERE fecha BETWEEN ? AND ?',
+      [desde, hasta]
+    );
+    const feriadosSet = new Set(feriados.map(f => f.fecha.substring(0, 10)));
+
+    // Bloqueos de oficina de día completo (hora_inicio IS NULL) para el área del servicio
+    const [bloqueos] = await pool.query(`
+      SELECT b.fecha_inicio, b.fecha_fin
+      FROM bloqueos b
+      JOIN servicios s ON b.area_id = s.area_id
+      WHERE s.id          = ?
+        AND b.tipo        = 'oficina'
+        AND b.hora_inicio IS NULL
+        AND b.fecha_inicio <= ?
+        AND b.fecha_fin    >= ?
+    `, [serviceIdNum, hasta, desde]);
+
+    // Expandir rangos de bloqueo en días individuales
+    const bloqueadosSet = new Set();
+    bloqueos.forEach(b => {
+      const cur = new Date(b.fecha_inicio.substring(0, 10) + 'T12:00:00');
+      const fin = new Date(b.fecha_fin.substring(0, 10)   + 'T12:00:00');
+      while (cur <= fin) {
+        bloqueadosSet.add(cur.toISOString().substring(0, 10));
+        cur.setDate(cur.getDate() + 1);
+      }
+    });
+
+    const hoy            = new Date().toISOString().substring(0, 10);
+    const dias           = {};
+    const diasAVerificar = []; // días hábiles no bloqueados → verificar slots reales
+
+    // Clasificar cada día del rango
+    const cur = new Date(desde + 'T12:00:00');
+    const fin = new Date(hasta + 'T12:00:00');
+
+    while (cur <= fin) {
+      const iso       = cur.toISOString().substring(0, 10);
+      const diaSemana = cur.getDay(); // 0=domingo, 6=sábado
+
+      if (diaSemana === 0 || diaSemana === 6) {
+        dias[iso] = { disponible: false, feriado: false, bloqueado: false, finDeSemana: true };
+      } else if (feriadosSet.has(iso)) {
+        dias[iso] = { disponible: false, feriado: true, bloqueado: false, finDeSemana: false };
+      } else if (bloqueadosSet.has(iso)) {
+        dias[iso] = { disponible: false, feriado: false, bloqueado: true, finDeSemana: false };
+      } else if (iso < hoy) {
+        dias[iso] = { disponible: false, feriado: false, bloqueado: false, finDeSemana: false };
+      } else {
+        diasAVerificar.push(iso);
+        dias[iso] = { disponible: false, feriado: false, bloqueado: false, finDeSemana: false };
+      }
+
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // Verificar disponibilidad real en paralelo para los días hábiles candidatos
+    await Promise.all(diasAVerificar.map(async (iso) => {
+      try {
+        const disponibilidad = await motor.obtenerDisponibilidadServicio(serviceIdNum, iso);
+        dias[iso].disponible = disponibilidad.horariosLibres.length > 0;
+      } catch {
+        // En caso de error en un día particular, queda como no disponible
+      }
+    }));
+
+    res.json({ dias });
+
+  } catch (err) {
+    logger.error('[publico] Error al obtener calendario:', err);
+    res.status(500).json({ error: 'No se pudo obtener el calendario. Intentá de nuevo.' });
+  }
+});
+
+
+// =============================================================================
 // GET /api/disponibilidad?serviceId=N&fecha=YYYY-MM-DD
 // Horarios disponibles para un servicio en una fecha.
 // Reemplaza el endpoint heredado de Easy!Appointments en index.js.

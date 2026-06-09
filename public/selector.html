@@ -302,6 +302,75 @@
 
     /* ── Cargando ─────────────────────────────────────────────── */
     .cargando { color: #94a3b8; font-size: 0.875rem; font-style: italic; padding: 1rem 0; }
+
+    /* ── Calendario visual (paso 3) ─────────────────────────── */
+    .cal-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+    .cal-nav-btn {
+      background: white; border: 1px solid #d1d5db; border-radius: 6px;
+      padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.82rem;
+      font-family: inherit; color: #374151; transition: background 0.15s;
+    }
+    .cal-nav-btn:hover:not(:disabled) { background: #f1f5f9; }
+    .cal-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .cal-mes-titulo {
+      font-weight: 700; font-size: 0.95rem; color: #1A3C4B;
+      text-transform: capitalize;
+    }
+    .cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px;
+    }
+    .cal-header {
+      text-align: center; font-size: 0.7rem; font-weight: 600;
+      color: #94a3b8; padding: 0.35rem 0;
+    }
+    .cal-dia {
+      text-align: center; padding: 0.45rem 0.2rem; border-radius: 6px;
+      font-size: 0.875rem; font-weight: 500; cursor: default;
+      border: 2px solid transparent; transition: all 0.12s;
+      min-height: 36px; display: flex; align-items: center; justify-content: center;
+    }
+    .cal-dia.disponible { background: #f0f7f9; color: #1A3C4B; cursor: pointer; }
+    .cal-dia.disponible:hover { background: #e6f0f3; border-color: #1A3C4B; }
+    .cal-dia.seleccionado { background: #1A3C4B; color: white; border-color: #1A3C4B; }
+    .cal-dia.feriado { background: #fef2f2; color: #dc2626; }
+    .cal-dia.bloqueado { background: #f8fafc; color: #94a3b8; }
+    .cal-dia.pasado { color: #d1d5db; }
+    .cal-dia.fin-de-semana { color: #e2e8f0; }
+    .cal-dia.hoy.disponible { font-weight: 800; }
+    .cal-leyenda {
+      display: flex; gap: 1rem; margin-top: 0.65rem; flex-wrap: wrap;
+    }
+    .cal-leyenda-item {
+      display: flex; align-items: center; gap: 0.3rem;
+      font-size: 0.7rem; color: #64748b;
+    }
+    .cal-leyenda-dot {
+      width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+    }
+
+    /* ── Servicio deshabilitado (ya tiene turno activo) ──────── */
+    .servicio-card.servicio-deshabilitado {
+      cursor: not-allowed;
+      opacity: 0.7;
+      background: #f8fafc;
+    }
+    .servicio-card.servicio-deshabilitado:hover {
+      border-color: #e2e8f0;
+      background: #f8fafc;
+    }
+    .servicio-turno-activo {
+      font-size: 0.75rem;
+      color: #92400e;
+      background: #fef3c7;
+      border: 1px solid #fde68a;
+      border-radius: 5px;
+      padding: 0.3rem 0.6rem;
+      margin-top: 0.4rem;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
@@ -319,18 +388,17 @@
 <div class="container">
   <div class="card">
 
-    <!-- Stepper: 5 pasos -->
+    <!-- Stepper: 4 pasos -->
     <div class="stepper" id="stepper" role="navigation" aria-label="Pasos del trámite">
       <div class="step-tab activo" id="tab-1"><span class="num">1</span>Identificación</div>
       <div class="step-tab"        id="tab-2"><span class="num">2</span>Trámite</div>
       <div class="step-tab"        id="tab-3"><span class="num">3</span>Fecha y hora</div>
-      <div class="step-tab"        id="tab-4"><span class="num">4</span>Datos</div>
-      <div class="step-tab"        id="tab-5"><span class="num">5</span>Confirmación</div>
+      <div class="step-tab"        id="tab-4"><span class="num">4</span>Confirmación</div>
     </div>
 
     <div class="card-body">
 
-      <!-- ── PASO 1 — Identificación ──────────────────────────── -->
+      <!-- ── PASO 1 — Identificación + datos de contacto ─────── -->
       <div id="paso-1">
         <p class="paso-titulo">¿Cuál es tu DNI?</p>
 
@@ -343,19 +411,38 @@
                    inputmode="numeric" maxlength="10" autocomplete="off"
                    onkeydown="if(event.key==='Enter') consultarDni();">
             <button class="btn btn-primary" id="btn-consultar" onclick="consultarDni()">
-              Consultar
+              Buscar
             </button>
           </div>
           <p class="hint">Sin puntos ni espacios.</p>
         </div>
 
-        <!-- Área de resultado de la consulta -->
+        <!-- Área de resultado de la consulta (turnos activos del vecino) -->
         <div id="resultado-dni" style="display:none"></div>
 
-        <!-- Botón "Sacar un turno" — visible solo si no hay turnos activos -->
-        <button class="btn btn-primary btn-full" id="btn-sacar-turno"
-                style="display:none" onclick="irAPaso(2)">
-          Sacar un turno →
+        <!-- Nombre y teléfono: aparecen después de buscar el DNI.
+             Si el vecino existe se pre-completan; si es nuevo quedan vacíos. -->
+        <div id="campos-datos" style="display:none">
+          <div class="form-grupo">
+            <label for="input-nombre">Nombre y apellido</label>
+            <input type="text" id="input-nombre" placeholder="Ej: María González"
+                   autocomplete="name">
+          </div>
+
+          <div class="form-grupo">
+            <label for="input-telefono">
+              Teléfono (WhatsApp) <span style="color:#dc2626">*</span>
+            </label>
+            <input type="tel" id="input-telefono" placeholder="Ej: 2944123456"
+                   inputmode="numeric" autocomplete="tel">
+            <p class="hint">Sin código de país ni cero inicial. Se usa para recordatorios automáticos.</p>
+          </div>
+        </div>
+
+        <!-- Botón siguiente: visible solo después de la búsqueda -->
+        <button class="btn btn-primary btn-full" id="btn-siguiente-1"
+                style="display:none" onclick="avanzarDesdePaso1()">
+          Siguiente →
         </button>
       </div>
 
@@ -384,8 +471,28 @@
         <div class="alerta alerta-error" id="error-3"></div>
 
         <div class="form-grupo">
-          <label for="input-fecha">Fecha</label>
-          <input type="date" id="input-fecha" onchange="cargarSlots()">
+          <label>Fecha</label>
+          <!-- Calendario propio: marca feriados y días sin turnos para orientar al vecino
+               antes de que elija una fecha y encuentre la grilla de horarios vacía -->
+          <div class="cal-nav">
+            <button class="cal-nav-btn" id="cal-btn-prev" onclick="calNavMes(-1)">← Anterior</button>
+            <span class="cal-mes-titulo" id="cal-mes-titulo"></span>
+            <button class="cal-nav-btn" onclick="calNavMes(1)">Siguiente →</button>
+          </div>
+          <div class="cal-grid" id="cal-grid">
+            <p class="slots-placeholder" style="grid-column:span 7">Cargando calendario...</p>
+          </div>
+          <div class="cal-leyenda">
+            <div class="cal-leyenda-item">
+              <div class="cal-leyenda-dot" style="background:#f0f7f9;border:1.5px solid #1A3C4B"></div>Disponible
+            </div>
+            <div class="cal-leyenda-item">
+              <div class="cal-leyenda-dot" style="background:#fef2f2;border:1.5px solid #fecaca"></div>Feriado
+            </div>
+            <div class="cal-leyenda-item">
+              <div class="cal-leyenda-dot" style="background:#f8fafc;border:1.5px solid #e2e8f0"></div>Sin turnos
+            </div>
+          </div>
         </div>
 
         <div class="slots-area" id="slots-area">
@@ -400,43 +507,16 @@
         </div>
       </div>
 
-      <!-- ── PASO 4 — Datos de contacto ──────────────────────── -->
+      <!-- ── PASO 4 — Confirmación ────────────────────────────── -->
       <div id="paso-4" style="display:none">
-        <p class="paso-titulo">Tus datos de contacto</p>
+        <p class="paso-titulo">Confirmá tu turno</p>
 
         <div class="alerta alerta-error" id="error-4"></div>
 
-        <div class="form-grupo">
-          <label for="input-nombre">Nombre y apellido</label>
-          <input type="text" id="input-nombre" placeholder="Ej: María González"
-                 autocomplete="name">
-        </div>
-
-        <div class="form-grupo">
-          <label for="input-telefono">
-            Teléfono (WhatsApp) <span style="color:#dc2626">*</span>
-          </label>
-          <input type="tel" id="input-telefono" placeholder="Ej: 2944123456"
-                 inputmode="numeric" autocomplete="tel">
-          <p class="hint">Sin código de país ni cero inicial. Se usa para recordatorios automáticos.</p>
-        </div>
+        <div class="resumen" id="resumen-paso4"></div>
 
         <div class="nav-botones">
           <button class="btn btn-ghost" onclick="irAPaso(3)">← Volver</button>
-          <button class="btn btn-primary" onclick="irAPaso(5)">Siguiente →</button>
-        </div>
-      </div>
-
-      <!-- ── PASO 5 — Confirmación ────────────────────────────── -->
-      <div id="paso-5" style="display:none">
-        <p class="paso-titulo">Confirmá tu turno</p>
-
-        <div class="alerta alerta-error" id="error-5"></div>
-
-        <div class="resumen" id="resumen-paso5"></div>
-
-        <div class="nav-botones">
-          <button class="btn btn-ghost" onclick="irAPaso(4)">← Volver</button>
           <button class="btn btn-primary" id="btn-confirmar" onclick="confirmarTurno()">
             Confirmar turno
           </button>
@@ -520,13 +600,9 @@ function horaCorta(str) { return str ? str.substring(0, 5) : ''; }
 // ─────────────────────────────────────────────────────────────────
 // NAVEGACIÓN POR PASOS
 // ─────────────────────────────────────────────────────────────────
-const PASOS = ['1','2','3','4','5','exito'];
+const PASOS = ['1','2','3','4','exito'];
 
 function irAPaso(n) {
-  // Validaciones antes de avanzar
-  if (n === 4 && !validarPaso4Previo()) return;
-  if (n === 5 && !validarPaso4()) return;
-
   PASOS.forEach(p => {
     const el = document.getElementById(`paso-${p}`);
     if (el) el.style.display = 'none';
@@ -536,12 +612,12 @@ function irAPaso(n) {
   if (pasoEl) pasoEl.style.display = 'block';
 
   // Actualizar stepper (solo pasos numéricos)
-  if (typeof n === 'number' && n <= 5) {
-    for (let i = 1; i <= 5; i++) {
+  if (typeof n === 'number' && n <= 4) {
+    for (let i = 1; i <= 4; i++) {
       const tab = document.getElementById(`tab-${i}`);
       if (!tab) continue;
       tab.classList.remove('activo', 'completo');
-      if (i < n)       tab.classList.add('completo');
+      if (i < n)        tab.classList.add('completo');
       else if (i === n) tab.classList.add('activo');
     }
   }
@@ -550,21 +626,20 @@ function irAPaso(n) {
     document.getElementById('stepper').style.display = 'none';
   }
 
-  // Al entrar en paso 3: limpiar slots si el servicio cambió
+  // Al entrar en paso 3: limpiar selección anterior e iniciar el calendario
   if (n === 3) {
     est.horario = '';
+    est.fecha   = '';
     document.getElementById('btn-paso3').disabled = true;
-    // Resetear fecha para que el vecino elija desde cero
-    const fi = document.getElementById('input-fecha');
-    fi.value = '';
     document.getElementById('slots-area').innerHTML =
-      '<p class="slots-placeholder">Seleccioná una fecha para ver los horarios.</p>';
+      '<p class="slots-placeholder">Seleccioná una fecha en el calendario.</p>';
+    iniciarCalendario();
   }
 
-  // Al entrar en paso 5: mostrar resumen
-  if (n === 5) {
-    document.getElementById('resumen-paso5').innerHTML = construirResumen();
-    mostrarError(5, '');
+  // Al entrar en paso 4: mostrar resumen de confirmación
+  if (n === 4) {
+    document.getElementById('resumen-paso4').innerHTML = construirResumen();
+    mostrarError(4, '');
     document.getElementById('btn-confirmar').disabled = false;
     document.getElementById('btn-confirmar').textContent = 'Confirmar turno';
   }
@@ -603,20 +678,33 @@ async function consultarDni() {
     // Pre-cargar los trámites en segundo plano para que paso 2 sea instantáneo
     cargarServicios();
 
-    const resultadoDiv = document.getElementById('resultado-dni');
-    const btnSacar     = document.getElementById('btn-sacar-turno');
+    const resultadoDiv  = document.getElementById('resultado-dni');
+    const camposDatos   = document.getElementById('campos-datos');
+    const btnSiguiente  = document.getElementById('btn-siguiente-1');
+    const ni            = document.getElementById('input-nombre');
+    const ti            = document.getElementById('input-telefono');
 
+    // Mostrar turnos activos si los hay (con opciones de cancelar/modificar)
     if (data.turnos && data.turnos.length > 0) {
-      // Hay turnos activos: mostrar las tarjetas
       resultadoDiv.style.display = 'block';
       resultadoDiv.innerHTML = renderTurnosActivos(data.turnos);
-      btnSacar.style.display = 'none';
     } else {
-      // Sin turnos activos: avanzar directamente al paso 2
       resultadoDiv.style.display = 'none';
-      btnSacar.style.display     = 'none';
-      irAPaso(2);
     }
+
+    // Pre-completar nombre y teléfono si el vecino ya existe; limpiar si es nuevo
+    if (data.existe) {
+      if (!ni.value) ni.value = data.nombre   || '';
+      if (!ti.value) ti.value = data.telefono || '';
+    } else {
+      ni.value = '';
+      ti.value = '';
+    }
+
+    // Mostrar los campos de datos y el botón de avance
+    camposDatos.style.display  = 'block';
+    btnSiguiente.style.display = 'block';
+    ni.focus();
 
   } catch (e) {
     mostrarError(1, 'Error de conexión. Verificá tu internet e intentá de nuevo.');
@@ -681,7 +769,7 @@ function renderTurnosActivos(turnos) {
       ¿Querés sacar un turno para otro trámite?
     </p>
     <button class="btn btn-ghost" style="margin-top:0.5rem;font-size:0.85rem"
-            onclick="irAPaso(2)">
+            onclick="avanzarDesdePaso1()">
       + Sacar otro turno
     </button>`;
 }
@@ -812,10 +900,29 @@ function renderizarServicios(servicios) {
   const cont = document.getElementById('lista-servicios');
   cont.innerHTML = '';
 
+  // Mapa serviceId → turno activo del vecino. Se usa para deshabilitar
+  // las cards de trámites donde ya tiene un turno vigente y evitar
+  // que el vecino llegue hasta el final antes de recibir el error 409.
+  const turnoActivo = {};
+  if (est.vecino?.turnos) {
+    est.vecino.turnos.forEach(t => { turnoActivo[t.servicio_id] = t; });
+  }
+
   servicios.forEach(s => {
+    const turno         = turnoActivo[s.id];
+    const deshabilitado = !!turno;
+
     const div = document.createElement('div');
-    div.className = 'servicio-card';
-    if (est.serviceId === s.id) div.classList.add('seleccionado');
+    div.className = 'servicio-card' + (deshabilitado ? ' servicio-deshabilitado' : '');
+    if (!deshabilitado && est.serviceId === s.id) div.classList.add('seleccionado');
+
+    // Aviso inline cuando el trámite ya tiene un turno activo
+    const avisoTurno = turno
+      ? `<div class="servicio-turno-activo">
+           Ya tenés un turno el ${fechaBonita(turno.fecha)} a las ${horaCorta(turno.hora_inicio)} hs.
+           Cancelalo desde el inicio si querés modificarlo.
+         </div>`
+      : '';
 
     div.innerHTML = `
       <div class="servicio-icono">
@@ -824,32 +931,146 @@ function renderizarServicios(servicios) {
           <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
         </svg>
       </div>
-      <div>
+      <div style="flex:1">
         <div class="servicio-nombre">${esc(s.name)}</div>
         <div class="servicio-duracion">Duración: ${s.duration} minutos</div>
+        ${avisoTurno}
       </div>`;
 
-    div.addEventListener('click', () => {
-      document.querySelectorAll('.servicio-card')
-              .forEach(c => c.classList.remove('seleccionado'));
-      div.classList.add('seleccionado');
-
-      est.serviceId      = s.id;
-      est.servicioNombre = s.name;
-      est.duracion       = s.duration;
-
-      document.getElementById('btn-paso2').disabled = false;
-    });
+    // Solo las cards habilitadas responden al clic
+    if (!deshabilitado) {
+      div.addEventListener('click', () => {
+        document.querySelectorAll('.servicio-card:not(.servicio-deshabilitado)')
+                .forEach(c => c.classList.remove('seleccionado'));
+        div.classList.add('seleccionado');
+        est.serviceId      = s.id;
+        est.servicioNombre = s.name;
+        est.duracion       = s.duration;
+        document.getElementById('btn-paso2').disabled = false;
+      });
+    }
 
     cont.appendChild(div);
   });
 }
 
 // ─────────────────────────────────────────────────────────────────
+// CALENDARIO — Selector visual de fecha con feriados y bloqueos
+// ─────────────────────────────────────────────────────────────────
+let calAno  = 0;
+let calMes  = 0; // 0 = enero … 11 = diciembre
+let calDias = {}; // caché: { "YYYY-MM-DD": { disponible, feriado, bloqueado, finDeSemana } }
+
+const MESES_LARGO    = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                        'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DIAS_CABECERA  = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+// Se llama al entrar en paso 3 — arranca en el mes actual
+function iniciarCalendario() {
+  const hoy = new Date();
+  calAno    = hoy.getFullYear();
+  calMes    = hoy.getMonth();
+  calDias   = {};
+  cargarCalendario();
+}
+
+// Navega al mes anterior (-1) o siguiente (+1)
+function calNavMes(delta) {
+  calMes += delta;
+  if (calMes < 0)  { calMes = 11; calAno--; }
+  if (calMes > 11) { calMes = 0;  calAno++; }
+  cargarCalendario();
+}
+
+// Pide el calendario del mes al backend y lo renderiza
+async function cargarCalendario() {
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '<p class="slots-cargando" style="grid-column:span 7">Cargando...</p>';
+
+  document.getElementById('cal-mes-titulo').textContent =
+    `${MESES_LARGO[calMes]} ${calAno}`;
+
+  // Deshabilitar "← Anterior" si ya estamos en el mes actual o antes
+  const hoy = new Date();
+  document.getElementById('cal-btn-prev').disabled =
+    calAno < hoy.getFullYear() ||
+    (calAno === hoy.getFullYear() && calMes <= hoy.getMonth());
+
+  const desde     = `${calAno}-${String(calMes + 1).padStart(2, '0')}-01`;
+  const ultimoDia = new Date(calAno, calMes + 1, 0).getDate();
+  const hasta     = `${calAno}-${String(calMes + 1).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+
+  try {
+    const res  = await fetch(`/api/disponibilidad/calendario?serviceId=${est.serviceId}&desde=${desde}&hasta=${hasta}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    calDias = data.dias || {};
+  } catch (e) {
+    grid.innerHTML = '<p style="grid-column:span 7;color:#dc2626;font-size:.85rem">No se pudo cargar el calendario. Intentá de nuevo.</p>';
+    return;
+  }
+
+  renderCalendario();
+}
+
+// Dibuja el grid del mes en el DOM
+function renderCalendario() {
+  const grid   = document.getElementById('cal-grid');
+  const hoyStr = new Date().toISOString().substring(0, 10);
+
+  // Cabecera de días (semana empieza en lunes)
+  let html = DIAS_CABECERA.map(d => `<div class="cal-header">${d}</div>`).join('');
+
+  // Calcular offset del primer día (lunes = 0, domingo = 6)
+  const primerDiaSemana = new Date(calAno, calMes, 1).getDay();
+  const offset          = primerDiaSemana === 0 ? 6 : primerDiaSemana - 1;
+  for (let i = 0; i < offset; i++) html += '<div class="cal-dia"></div>';
+
+  const ultimoDia = new Date(calAno, calMes + 1, 0).getDate();
+
+  for (let d = 1; d <= ultimoDia; d++) {
+    const iso  = `${calAno}-${String(calMes + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const info = calDias[iso] || {};
+    let clase  = 'cal-dia';
+    let titulo = '';
+    let click  = '';
+
+    if (iso === est.fecha) {
+      clase += ' seleccionado';
+    } else if (info.finDeSemana) {
+      clase += ' fin-de-semana'; titulo = 'Fin de semana';
+    } else if (info.feriado) {
+      clase += ' feriado'; titulo = 'Feriado';
+    } else if (info.bloqueado) {
+      clase += ' bloqueado'; titulo = 'Sin atención';
+    } else if (info.disponible) {
+      clase += ' disponible'; click = `onclick="seleccionarDia('${iso}')"`;
+    } else {
+      clase += ' pasado';
+      titulo = iso >= hoyStr ? 'Sin horarios disponibles' : '';
+    }
+
+    if (iso === hoyStr) clase += ' hoy';
+    html += `<div class="${clase}" ${click} title="${titulo}">${d}</div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+// Selecciona un día del calendario y carga los horarios disponibles
+function seleccionarDia(iso) {
+  est.fecha = iso;
+  renderCalendario(); // re-renderizar para marcar el día seleccionado
+  cargarSlots();
+}
+
+
+// ─────────────────────────────────────────────────────────────────
 // PASO 3 — Carga de slots
 // ─────────────────────────────────────────────────────────────────
 async function cargarSlots() {
-  const fecha     = document.getElementById('input-fecha').value;
+  // est.fecha es establecida por seleccionarDia() antes de llamar a esta función
+  const fecha     = est.fecha;
   const slotsArea = document.getElementById('slots-area');
 
   est.horario = '';
@@ -857,17 +1078,9 @@ async function cargarSlots() {
   mapaHorarioOperador = {};
 
   if (!fecha) {
-    slotsArea.innerHTML = '<p class="slots-placeholder">Seleccioná una fecha para ver los horarios.</p>';
+    slotsArea.innerHTML = '<p class="slots-placeholder">Seleccioná una fecha en el calendario.</p>';
     return;
   }
-
-  const hoy = new Date().toISOString().substring(0, 10);
-  if (fecha < hoy) {
-    slotsArea.innerHTML = '<p class="slots-placeholder">La fecha no puede ser anterior a hoy.</p>';
-    return;
-  }
-
-  est.fecha = fecha;
 
   slotsArea.innerHTML = '<p class="slots-cargando">Consultando disponibilidad...</p>';
 
@@ -914,39 +1127,29 @@ function seleccionarSlot(hora) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// PASO 4 — Validación antes de avanzar
+// PASO 1 — Avanzar al paso 2 validando nombre y teléfono
+// Los datos de contacto ahora se capturan en el mismo paso 1 junto
+// al DNI, por lo que la validación ocurre aquí antes de ir al paso 2.
 // ─────────────────────────────────────────────────────────────────
-function validarPaso4Previo() {
-  // No tiene nada que validar al avanzar a paso 4 — solo pre-completar campos
-  if (est.vecino?.existe) {
-    // Pre-completar con datos conocidos si el campo está vacío
-    const ni = document.getElementById('input-nombre');
-    const ti = document.getElementById('input-telefono');
-    if (!ni.value && est.vecino.nombre)   ni.value = est.vecino.nombre;
-    if (!ti.value && est.vecino.telefono) ti.value = est.vecino.telefono;
-  }
-  return true;
-}
-
-function validarPaso4() {
-  mostrarError(4, '');
+function avanzarDesdePaso1() {
+  mostrarError(1, '');
   const nombre   = document.getElementById('input-nombre').value.trim();
   const telefono = document.getElementById('input-telefono').value.trim();
 
   if (nombre.length < 3) {
-    mostrarError(4, 'Ingresá tu nombre completo.');
+    mostrarError(1, 'Ingresá tu nombre completo.');
     document.getElementById('input-nombre').focus();
-    return false;
+    return;
   }
   if (!telefono) {
-    mostrarError(4, 'El teléfono es obligatorio para recibir recordatorios automáticos.');
+    mostrarError(1, 'El teléfono es obligatorio para recibir recordatorios automáticos.');
     document.getElementById('input-telefono').focus();
-    return false;
+    return;
   }
 
   est.nombre   = nombre;
   est.telefono = telefono;
-  return true;
+  irAPaso(2);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -973,7 +1176,7 @@ function construirResumen(idCita) {
 // PASO 5 — Confirmar y crear turno
 // ─────────────────────────────────────────────────────────────────
 async function confirmarTurno() {
-  mostrarError(5, '');
+  mostrarError(4, '');
   const btn = document.getElementById('btn-confirmar');
   btn.disabled    = true;
   btn.textContent = 'Confirmando...';
@@ -997,9 +1200,9 @@ async function confirmarTurno() {
     if (!res.ok) {
       // 409: horario tomado → volver al paso 3 para elegir otro
       if (res.status === 409) {
-        mostrarError(5, data.error + ' Volvé al paso anterior para elegir otro horario.');
+        mostrarError(4, data.error + ' Volvé al paso anterior para elegir otro horario.');
       } else {
-        mostrarError(5, data.error || 'No se pudo confirmar el turno. Intentá de nuevo.');
+        mostrarError(4, data.error || 'No se pudo confirmar el turno. Intentá de nuevo.');
       }
       btn.disabled    = false;
       btn.textContent = 'Confirmar turno';
@@ -1012,7 +1215,7 @@ async function confirmarTurno() {
     irAPaso('exito');
 
   } catch (e) {
-    mostrarError(5, 'Error de conexión. Verificá tu internet e intentá de nuevo.');
+    mostrarError(4, 'Error de conexión. Verificá tu internet e intentá de nuevo.');
     btn.disabled    = false;
     btn.textContent = 'Confirmar turno';
   }
@@ -1043,20 +1246,20 @@ function reiniciar() {
   est.nombre = ''; est.telefono = '';
   mapaHorarioOperador = {};
 
-  document.getElementById('input-dni').value     = '';
-  document.getElementById('input-nombre').value  = '';
+  document.getElementById('input-dni').value      = '';
+  document.getElementById('input-nombre').value   = '';
   document.getElementById('input-telefono').value = '';
-  document.getElementById('input-fecha').value   = '';
-  document.getElementById('resultado-dni').style.display  = 'none';
-  document.getElementById('resultado-dni').innerHTML = '';
-  document.getElementById('btn-sacar-turno').style.display = 'none';
+  document.getElementById('resultado-dni').style.display   = 'none';
+  document.getElementById('resultado-dni').innerHTML       = '';
+  document.getElementById('campos-datos').style.display    = 'none';
+  document.getElementById('btn-siguiente-1').style.display = 'none';
   document.getElementById('btn-paso2').disabled = true;
   document.getElementById('btn-paso3').disabled = true;
   document.getElementById('exito-mensaje').style.display = 'none';
   document.getElementById('stepper').style.display = 'flex';
 
-  // Limpiar alertas
-  ['1','2','3','4','5'].forEach(p => {
+  // Limpiar alertas de todos los pasos
+  ['1','2','3','4'].forEach(p => {
     const el = document.getElementById(`error-${p}`);
     if (el) { el.textContent = ''; el.classList.remove('visible'); }
   });
@@ -1072,8 +1275,6 @@ function reiniciar() {
 // INIT
 // ─────────────────────────────────────────────────────────────────
 (function init() {
-  // Fecha mínima = hoy
-  document.getElementById('input-fecha').min = new Date().toISOString().substring(0, 10);
   // Pre-cargar servicios para que paso 2 sea instantáneo
   cargarServicios();
 })();

@@ -55,24 +55,35 @@ async function auditar(usuarioId, entidadTipo, entidadId, accion, detalle, ip) {
 // GET /panel/vecino/:dni
 // Busca un vecino por DNI. El formulario presencial lo usa para pre-completar
 // el nombre y el teléfono cuando el vecino ya está registrado en el sistema.
-// Devuelve { existe: true, nombre, telefono } o { existe: false }.
+// También devuelve los IDs de servicios con turno activo para que el frontend
+// pueda advertir al empleado al seleccionar el trámite, sin esperar al 409 al confirmar.
+// Devuelve { existe, nombre, telefono, turnosActivosServicioIds } o { existe: false, turnosActivosServicioIds: [] }.
 router.get('/vecino/:dni', async (req, res) => {
   const { dni } = req.params;
 
   try {
     const [rows] = await pool.query(
-      'SELECT nombre, telefono FROM vecinos WHERE dni = ?',
+      'SELECT id, nombre, telefono FROM vecinos WHERE dni = ?',
       [dni]
     );
 
     if (rows.length === 0) {
-      return res.json({ existe: false });
+      return res.json({ existe: false, turnosActivosServicioIds: [] });
     }
+
+    const vecino = rows[0];
+
+    // IDs de servicios con turno activo futuro — para anti-abuso temprano en el frontend
+    const [turnos] = await pool.query(`
+      SELECT servicio_id FROM turnos
+      WHERE vecino_id = ? AND estado = 'agendado' AND fecha >= CURDATE()
+    `, [vecino.id]);
 
     res.json({
       existe:   true,
-      nombre:   rows[0].nombre,
-      telefono: rows[0].telefono || '',
+      nombre:   vecino.nombre,
+      telefono: vecino.telefono || '',
+      turnosActivosServicioIds: turnos.map(t => t.servicio_id),
     });
   } catch (err) {
     logger.error('[panel] Error al buscar vecino por DNI:', err);
