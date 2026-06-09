@@ -39,7 +39,7 @@ const crypto = require('crypto');
 // obtener servicios, consultar disponibilidad, crear y cancelar citas.
 // Al importarlo acá, index.js puede usar esas funciones sin conocer
 // los detalles de cómo se comunica con la API.
-const ea = require('./ea');
+const ea = require('./motor');
 
 // ---------------------------------------------------------------
 // 3. RUTA AL ARCHIVO DE LA BASE DE DATOS
