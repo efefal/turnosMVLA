@@ -497,7 +497,7 @@ pueden desarrollarse en paralelo o en una segunda sesión posterior al corte.
 
 ### Correcciones de flujo — Sesión 1
 
-#### F1 — Anti-abuso temprano en selector web ⬜
+#### F1 — Anti-abuso temprano en selector web ✅
 **Problema**: en el paso 2 del selector web el vecino puede elegir un trámite para el que ya
 tiene un turno activo, y el error solo aparece en el último paso (confirmación), después de
 que eligió fecha y horario.
@@ -511,7 +511,7 @@ visualmente las cards de trámites con turno activo y mostrar un texto explicati
 
 ---
 
-#### F2 — Anti-abuso temprano en presencial ⬜
+#### F2 — Anti-abuso temprano en presencial ✅
 **Problema**: en el paso 2 del panel presencial el empleado puede seleccionar un trámite para un
 vecino que ya tiene turno activo, y el error 409 llega recién al confirmar (POST /panel/turno).
 
@@ -524,7 +524,7 @@ si se necesita un endpoint específico.
 
 ---
 
-#### F3 — Checkbox "Día completo" en bloqueos ⬜
+#### F3 — Checkbox "Día completo" en bloqueos ✅
 **Problema**: el formulario de bloqueos siempre muestra los campos hora inicio/fin. Si el
 empleado quiere bloquear el día entero debe dejarlos vacíos, lo que no es intuitivo.
 Además, si los envía vacíos el frontend actual puede mandar strings vacíos en lugar de `null`.
@@ -537,7 +537,7 @@ Además, si los envía vacíos el frontend actual puede mandar strings vacíos e
 
 ---
 
-#### F4 — Unificación DNI + datos en selector web ⬜
+#### F4 — Unificación DNI + datos en selector web ✅
 **Problema**: el selector web tiene 5 pasos. Los datos del vecino (nombre y teléfono) son
 el paso 4, separado del paso 1 donde se ingresa el DNI. Esto obliga al vecino a pasar por
 trámite → fecha/hora → datos → confirmación, sin poder corregir sus datos al inicio.
@@ -553,7 +553,7 @@ trámite → fecha/hora → datos → confirmación, sin poder corregir sus dato
 
 ---
 
-#### F5 — Feriados y bloqueos visibles en el calendario del selector ⬜
+#### F5 — Feriados y bloqueos visibles en el calendario del selector ✅
 **Problema**: en el paso 3 del selector web, el `<input type="date">` no diferencia
 visualmente los días feriados o con bloqueo activo. El vecino los elige, luego la grilla
 de slots aparece vacía y no entiende por qué.
