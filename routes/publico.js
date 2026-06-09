@@ -60,7 +60,7 @@ router.get('/vecino/:dni', async (req, res) => {
       JOIN servicios s ON t.servicio_id = s.id
       WHERE t.vecino_id = ?
         AND t.estado    = 'agendado'
-        AND t.fecha     >= CURDATE()
+        AND (t.fecha > CURDATE() OR (t.fecha = CURDATE() AND t.hora_inicio > CURTIME()))
       ORDER BY t.fecha ASC, t.hora_inicio ASC
     `, [vecino.id]);
 
@@ -282,7 +282,7 @@ router.post('/turno', async (req, res) => {
       WHERE vecino_id = (SELECT id FROM vecinos WHERE dni = ?)
         AND servicio_id = ?
         AND estado      = 'agendado'
-        AND fecha       >= CURDATE()
+        AND (fecha > CURDATE() OR (fecha = CURDATE() AND hora_inicio > CURTIME()))
       LIMIT 1
     `, [dni, serviceIdNum]);
 
