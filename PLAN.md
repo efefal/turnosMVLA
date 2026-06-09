@@ -484,3 +484,148 @@ Resumen ejecutivo:
 - [ ] Probar el flujo completo **desde WhatsApp real** (requiere que el bot corra con motor.js)
 - [ ] Ejecutar `admin/migrar-vecinos.js` y verificar que los vecinos existentes funcionan correctamente
 - [ ] Verificar el endpoint `/api/disponibilidad` con el bot corriendo en puerto 3001
+
+---
+
+## Pendientes pre-lanzamiento
+
+Tareas ordenadas por prioridad. Las correcciones de flujo (F*) deben resolverse antes de
+habilitar el acceso a vecinos y empleados municipales reales. Las features nuevas (N*)
+pueden desarrollarse en paralelo o en una segunda sesión posterior al corte.
+
+---
+
+### Correcciones de flujo — Sesión 1
+
+#### F1 — Anti-abuso temprano en selector web ⬜
+**Problema**: en el paso 2 del selector web el vecino puede elegir un trámite para el que ya
+tiene un turno activo, y el error solo aparece en el último paso (confirmación), después de
+que eligió fecha y horario.
+
+**Solución**: al cargar el paso 2, comparar los servicios disponibles contra los turnos activos
+del vecino (ya disponibles desde el paso 1 vía `GET /api/vecino/:dni`). Deshabilitar
+visualmente las cards de trámites con turno activo y mostrar un texto explicativo inline
+(ej: "Ya tenés un turno el 12/06 a las 09:00 — cancelalo desde el inicio si querés modificarlo").
+
+**Archivos**: `public/selector.html`
+
+---
+
+#### F2 — Anti-abuso temprano en presencial ⬜
+**Problema**: en el paso 2 del panel presencial el empleado puede seleccionar un trámite para un
+vecino que ya tiene turno activo, y el error 409 llega recién al confirmar (POST /panel/turno).
+
+**Solución**: al cambiar el select de trámite en paso 2, disparar un `GET /panel/disponibilidad`
+(o un endpoint dedicado) que verifique si el vecino ya tiene turno activo para ese servicio y
+muestre el error de inmediato, antes de que el empleado elija fecha y horario.
+
+**Archivos**: `public/panel/presencial.html` (frontend), posiblemente `routes/panel.js`
+si se necesita un endpoint específico.
+
+---
+
+#### F3 — Checkbox "Día completo" en bloqueos ⬜
+**Problema**: el formulario de bloqueos siempre muestra los campos hora inicio/fin. Si el
+empleado quiere bloquear el día entero debe dejarlos vacíos, lo que no es intuitivo.
+Además, si los envía vacíos el frontend actual puede mandar strings vacíos en lugar de `null`.
+
+**Solución**: agregar un checkbox "Día completo" en el formulario de bloqueos del panel.
+- Cuando está **tildado**: ocultar los campos hora inicio/fin y enviar `hora_inicio: null, hora_fin: null` al backend (que el motor interpreta como bloqueo de día completo).
+- Cuando está **destildado**: mostrar los campos hora inicio/fin (comportamiento actual).
+
+**Archivos**: `public/panel/bloqueos.html`
+
+---
+
+#### F4 — Unificación DNI + datos en selector web ⬜
+**Problema**: el selector web tiene 5 pasos. Los datos del vecino (nombre y teléfono) son
+el paso 4, separado del paso 1 donde se ingresa el DNI. Esto obliga al vecino a pasar por
+trámite → fecha/hora → datos → confirmación, sin poder corregir sus datos al inicio.
+
+**Solución**: fusionar el paso 1 (DNI) con los datos de contacto:
+- El vecino ingresa el DNI y hace clic en "Buscar" (igual que hoy).
+- Si el vecino **existe**: se muestran nombre y teléfono pre-completados en el mismo paso, editables.
+- Si el vecino **no existe**: se muestran los campos nombre y teléfono vacíos para completar.
+- El vecino avanza al paso 2 (trámite) solo cuando nombre y teléfono estén completos.
+- El paso 4 actual (datos) desaparece; el flujo pasa a ser de 4 pasos.
+
+**Archivos**: `public/selector.html`
+
+---
+
+#### F5 — Feriados y bloqueos visibles en el calendario del selector ⬜
+**Problema**: en el paso 3 del selector web, el `<input type="date">` no diferencia
+visualmente los días feriados o con bloqueo activo. El vecino los elige, luego la grilla
+de slots aparece vacía y no entiende por qué.
+
+**Solución**: reemplazar el `<input type="date">` por un calendario HTML/CSS propio
+(o un picker liviano sin dependencias externas) que marque con color distinto o con un
+indicador los días no disponibles (feriados + bloqueos de oficina activos).
+
+Requiere un endpoint nuevo:
+`GET /api/disponibilidad/calendario?serviceId=N&desde=YYYY-MM-DD&hasta=YYYY-MM-DD`
+que devuelva qué días del rango tienen al menos un slot libre, cuáles son feriado y
+cuáles tienen bloqueo de oficina.
+
+**Archivos**: `public/selector.html`, `routes/publico.js`
+
+---
+
+### Features nuevas — Sesión 2
+
+#### N1 — Pantalla de auditoría en el panel ⬜
+Tabla paginada con filtros por rango de fechas, usuario y tipo de acción (`accion` del ENUM),
+mostrando qué entidad fue afectada, quién realizó la acción y cuándo.
+
+**Backend**: `GET /panel/auditoria?desde=&hasta=&usuarioId=&accion=` (requiere rol encargado).
+**Frontend**: página nueva `public/panel/auditoria.html`, enlace en el navbar del panel.
+**Archivos**: `routes/panel.js`, `public/panel/auditoria.html`
+
+---
+
+#### N2 — Dashboard de estadísticas en el panel ⬜
+Métricas clave para el encargado:
+- Turnos por canal de origen (whatsapp / web / presencial) — últimos 30 días
+- Tasa de ausentismo (`ausente / (agendado + presente + ausente + atendido)`)
+- Operadores con más carga (turnos atendidos por operador)
+- Horarios más demandados (distribución por franja horaria)
+- Evolución semanal de turnos (gráfico de barras simple en SVG o Chart.js CDN)
+
+**Backend**: `GET /panel/estadisticas?desde=&hasta=` (requiere rol encargado).
+**Frontend**: página nueva `public/panel/estadisticas.html`, enlace en el navbar del panel.
+**Archivos**: `routes/panel.js`, `public/panel/estadisticas.html`
+
+---
+
+#### N3 — ABM de usuarios en el panel ⬜
+Crear, editar y desactivar operadores y encargados sin usar los scripts CLI.
+Reemplaza el uso de `admin/crear-usuario.js` en producción.
+
+Operaciones requeridas:
+- Listar usuarios con su área y rol
+- Crear usuario (nombre, email, contraseña temporal, área, rol)
+- Editar nombre, email y rol
+- Cambiar contraseña (solo encargado o el propio usuario)
+- Desactivar usuario (`activo = FALSE`) — no se borra para conservar auditoría
+
+**Backend**: rutas CRUD en `routes/panel.js` bajo `/panel/usuarios` (requiere rol encargado).
+**Frontend**: página nueva `public/panel/usuarios.html`.
+**Archivos**: `routes/panel.js`, `public/panel/usuarios.html`
+
+---
+
+#### N4 — ABM de servicios en el panel ⬜
+Crear, editar y desactivar servicios sin usar los scripts CLI.
+Reemplaza el uso de `admin/crear-servicio.js` en producción.
+
+Operaciones requeridas:
+- Listar servicios con área, duración y estado
+- Crear servicio (nombre, área, duración, anticipación máxima, mensaje de confirmación)
+- Editar todos los campos
+- Activar / desactivar servicio (`activo = TRUE/FALSE`)
+
+**Backend**: rutas CRUD en `routes/panel.js` bajo `/panel/servicios-admin` (requiere rol encargado).
+Nota: ya existe `GET /panel/servicios` para el dropdown de turnos — usar una ruta distinta para
+el ABM para no romper el comportamiento del formulario presencial.
+**Frontend**: página nueva `public/panel/servicios.html`.
+**Archivos**: `routes/panel.js`, `public/panel/servicios.html`
