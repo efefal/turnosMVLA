@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Servicios — Panel MVLA</title>
+  <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
+
+    /* Navbar */
+    .navbar { background: #1A3C4B; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-logo { height: 34px; display: block; }
+    .nav-links { display: flex; gap: 0.25rem; flex: 1; }
+    .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
+    .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
+    .nav-user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+    .nav-user span { color: rgba(255,255,255,.85); }
+    .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
+    .btn-logout:hover { background: rgba(255,255,255,.2); }
+    .badge-rol { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+
+    /* Layout */
+    .container { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    h1 { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-size: 1.25rem; color: #1A3C4B; margin-bottom: 1rem; }
+
+    /* Card */
+    .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    .card-titulo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-weight: 700; color: #1A3C4B; font-size: 0.95rem; }
+
+    /* Botones */
+    .btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.8rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; font-family: inherit; transition: opacity 0.15s; white-space: nowrap; }
+    .btn:hover:not(:disabled) { opacity: 0.85; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: #1A3C4B; color: white; }
+    .btn-ghost   { background: white; color: #374151; border: 1px solid #d1d5db; }
+    .btn-warning { background: #d97706; color: white; }
+    .btn-sm      { padding: 0.25rem 0.6rem; font-size: 0.75rem; }
+
+    /* Alerta */
+    .alerta { padding: 0.7rem 1rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
+    .alerta.visible { display: block; }
+    .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .alerta-ok    { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+
+    /* Tabla */
+    .tabla-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.7rem 1rem; border-bottom: 2px solid #e2e8f0; text-align: left; white-space: nowrap; }
+    td { padding: 0.8rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    .td-acciones { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .td-mensaje  { max-width: 220px; font-size: 0.78rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 0.18rem 0.55rem; border-radius: 99px; font-size: 0.72rem; font-weight: 600; }
+    .badge-activo   { background: #dcfce7; color: #166534; }
+    .badge-inactivo { background: #fee2e2; color: #b91c1c; }
+
+    /* Formulario */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
+    @media (max-width: 680px) { .form-grid, .form-grid-3 { grid-template-columns: 1fr; } }
+    .form-grupo { display: flex; flex-direction: column; gap: 0.3rem; }
+    .form-grupo.full { grid-column: 1 / -1; }
+    .form-grupo label { font-size: 0.82rem; font-weight: 500; color: #374151; }
+    .form-grupo input, .form-grupo select { padding: 0.4rem 0.65rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: white; }
+    .form-grupo textarea { padding: 0.4rem 0.65rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; resize: vertical; }
+    .form-grupo input:focus, .form-grupo select:focus, .form-grupo textarea:focus { outline: none; border-color: #1A3C4B; box-shadow: 0 0 0 2px rgba(26,60,75,.1); }
+    .form-hint { font-size: 0.78rem; color: #64748b; margin-top: 0.2rem; }
+    .form-pie  { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+    /* Modal */
+    .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-fondo.abierto { display: flex; }
+    .modal-caja { background: white; border-radius: 10px; padding: 1.5rem; max-width: 560px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.25); max-height: 90vh; overflow-y: auto; }
+    .modal-caja h3 { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-size: 1rem; color: #1e293b; margin-bottom: 1rem; }
+    .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+
+    /* Misc */
+    .cargando { text-align: center; color: #94a3b8; padding: 3rem; font-style: italic; }
+    .vacio    { text-align: center; color: #94a3b8; padding: 3rem; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/panel/agenda.html">
+    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
+         alt="Municipalidad Villa La Angostura" class="nav-logo">
+  </a>
+  <div class="nav-links">
+    <a href="/panel/agenda.html">Agenda</a>
+    <a href="/panel/presencial.html">Presencial</a>
+    <a href="/panel/bloqueos.html">Bloqueos</a>
+    <a href="/panel/auditoria.html"       id="nav-auditoria" style="display:none">Auditoría</a>
+    <a href="/panel/dashboard.html"       id="nav-dashboard" style="display:none">Dashboard</a>
+    <a href="/panel/usuarios.html"        id="nav-usuarios"  style="display:none">Usuarios</a>
+    <a href="/panel/servicios-admin.html" class="activo">Servicios</a>
+  </div>
+  <div class="nav-user">
+    <span id="nav-nombre"></span>
+    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</nav>
+
+<div class="container">
+
+  <h1>Gestión de servicios</h1>
+
+  <!-- Lista de servicios -->
+  <div class="card">
+    <div class="card-titulo">
+      <span>Servicios del área</span>
+      <button class="btn btn-ghost btn-sm" onclick="cargarServicios()">↻ Actualizar</button>
+    </div>
+    <div class="alerta alerta-error" id="error-lista"></div>
+    <div class="alerta alerta-ok"    id="ok-lista"></div>
+    <div class="tabla-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Área</th>
+            <th>Duración</th>
+            <th>Anticipación máx.</th>
+            <th>Estado</th>
+            <th>Mensaje confirmación</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-servicios">
+          <tr><td colspan="7" class="cargando">Cargando servicios...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Formulario nuevo servicio -->
+  <div class="card">
+    <div class="card-titulo">Nuevo servicio</div>
+    <div class="alerta alerta-error" id="error-form"></div>
+    <div class="form-grid">
+      <div class="form-grupo">
+        <label for="nuevo-nombre">Nombre del servicio <span style="color:#dc2626">*</span></label>
+        <input type="text" id="nuevo-nombre" placeholder="Ej: Renovación de Licencia">
+      </div>
+      <div class="form-grupo">
+        <label for="nuevo-area">Área <span style="color:#dc2626">*</span></label>
+        <select id="nuevo-area">
+          <option value="">— Seleccioná un área —</option>
+        </select>
+      </div>
+      <div class="form-grupo">
+        <label for="nuevo-duracion">Duración (minutos) <span style="color:#dc2626">*</span></label>
+        <input type="number" id="nuevo-duracion" min="5" max="240" placeholder="Ej: 30">
+        <span class="form-hint">Entre 5 y 240 minutos.</span>
+      </div>
+      <div class="form-grupo">
+        <label for="nuevo-anticipacion">Anticipación máxima (días hábiles)</label>
+        <input type="number" id="nuevo-anticipacion" min="1" max="365" placeholder="30" value="30">
+        <span class="form-hint">Cuántos días hacia adelante puede reservarse.</span>
+      </div>
+      <div class="form-grupo full">
+        <label for="nuevo-mensaje">Mensaje de confirmación (opcional)</label>
+        <textarea id="nuevo-mensaje" rows="3" placeholder="Texto que se le envía al vecino al confirmar el turno. Ej: Traé DNI original y fotocopia..."></textarea>
+      </div>
+    </div>
+    <div class="form-pie">
+      <button class="btn btn-primary" onclick="crearServicio()">Crear servicio</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal de edición -->
+<div class="modal-fondo" id="modal-fondo">
+  <div class="modal-caja">
+    <h3 id="modal-titulo">Editar servicio</h3>
+    <div class="alerta alerta-error" id="error-modal"></div>
+    <div class="form-grid">
+      <div class="form-grupo">
+        <label for="edit-nombre">Nombre</label>
+        <input type="text" id="edit-nombre">
+      </div>
+      <div class="form-grupo">
+        <label for="edit-duracion">Duración (minutos)</label>
+        <input type="number" id="edit-duracion" min="5" max="240">
+      </div>
+      <div class="form-grupo">
+        <label for="edit-anticipacion">Anticipación máxima (días)</label>
+        <input type="number" id="edit-anticipacion" min="1" max="365">
+      </div>
+      <div class="form-grupo">
+        <label for="edit-activo">Estado</label>
+        <select id="edit-activo">
+          <option value="1">Activo</option>
+          <option value="0">Inactivo</option>
+        </select>
+      </div>
+      <div class="form-grupo full">
+        <label for="edit-mensaje">Mensaje de confirmación</label>
+        <textarea id="edit-mensaje" rows="4"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarEdicion()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Auth ──────────────────────────────────────────────────────────────────
+function getToken() {
+  const t = sessionStorage.getItem('panel_token');
+  if (!t) { window.location.href = '/panel/login.html'; return null; }
+  return t;
+}
+function getUsuario() { return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}'); }
+async function apiFetch(url, opts = {}) {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers },
+  });
+  if (res.status === 401) { sessionStorage.clear(); window.location.href = '/panel/login.html'; return null; }
+  return res;
+}
+async function cerrarSesion() {
+  try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
+  sessionStorage.clear(); window.location.href = '/panel/login.html';
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function mostrarAlerta(idErr, idOk, tipo, msg) {
+  const errEl = document.getElementById(idErr);
+  const okEl  = idOk ? document.getElementById(idOk) : null;
+  if (errEl) errEl.classList.remove('visible');
+  if (okEl)  okEl.classList.remove('visible');
+  if (!msg) return;
+  if (tipo === 'error') { if (errEl) { errEl.textContent = msg; errEl.classList.add('visible'); } }
+  else { if (okEl) { okEl.textContent = msg; okEl.classList.add('visible'); setTimeout(() => okEl.classList.remove('visible'), 4000); } }
+}
+
+function mostrarAlertaModal(tipo, msg) {
+  const el = document.getElementById('error-modal');
+  if (msg && tipo === 'error') { el.textContent = msg; el.classList.add('visible'); }
+  else { el.classList.remove('visible'); }
+}
+
+// ─── Estado de edición ─────────────────────────────────────────────────────
+let idEditando = null;
+
+// ─── Áreas disponibles (para el select) ───────────────────────────────────
+let areasDisponibles = {}; // { id: nombre }
+
+// ─── Cargar servicios ──────────────────────────────────────────────────────
+async function cargarServicios() {
+  mostrarAlerta('error-lista', 'ok-lista', null, '');
+  document.getElementById('tbody-servicios').innerHTML =
+    '<tr><td colspan="7" class="cargando">Cargando...</td></tr>';
+
+  const res = await apiFetch('/panel/servicios/admin');
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) {
+    mostrarAlerta('error-lista', 'ok-lista', 'error', data.error || 'Error al cargar los servicios.');
+    return;
+  }
+
+  // Actualizar lista de áreas disponibles para el select de nuevo servicio
+  areasDisponibles = {};
+  data.forEach(s => { areasDisponibles[s.area_id] = s.area_nombre; });
+  poblarSelectArea();
+
+  if (!data.length) {
+    document.getElementById('tbody-servicios').innerHTML =
+      '<tr><td colspan="7" class="vacio">No hay servicios en tu área.</td></tr>';
+    return;
+  }
+
+  document.getElementById('tbody-servicios').innerHTML = data.map(s => `
+    <tr>
+      <td style="font-weight:500">${esc(s.nombre)}</td>
+      <td style="color:#64748b">${esc(s.area_nombre)}</td>
+      <td>${s.duracion_min} min</td>
+      <td>${s.max_dias_anticipacion} días</td>
+      <td><span class="badge ${s.activo ? 'badge-activo' : 'badge-inactivo'}">${s.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="td-mensaje" title="${esc(s.mensaje_confirmacion || '')}">${s.mensaje_confirmacion ? esc(s.mensaje_confirmacion) : '<span style="color:#94a3b8">Sin mensaje</span>'}</td>
+      <td class="td-acciones">
+        <button class="btn btn-ghost btn-sm"
+                onclick="abrirModal(${s.id}, '${esc(s.nombre)}', ${s.duracion_min}, ${s.max_dias_anticipacion}, ${s.activo ? 1 : 0}, \`${(s.mensaje_confirmacion || '').replace(/`/g, '\\`')}\`)">
+          Editar
+        </button>
+        <button class="btn btn-sm ${s.activo ? 'btn-warning' : 'btn-ghost'}"
+                onclick="toggleActivo(${s.id}, ${s.activo ? 0 : 1})">
+          ${s.activo ? 'Desactivar' : 'Activar'}
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ─── Poblar select de área ─────────────────────────────────────────────────
+function poblarSelectArea() {
+  const select = document.getElementById('nuevo-area');
+  select.innerHTML = '<option value="">— Seleccioná un área —</option>';
+  Object.entries(areasDisponibles).forEach(([id, nombre]) => {
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = nombre;
+    select.appendChild(opt);
+  });
+}
+
+// ─── Crear servicio ────────────────────────────────────────────────────────
+async function crearServicio() {
+  mostrarAlerta('error-form', null, null, '');
+
+  const nombre         = document.getElementById('nuevo-nombre').value.trim();
+  const area_id        = document.getElementById('nuevo-area').value;
+  const duracion_min   = document.getElementById('nuevo-duracion').value;
+  const anticipacion   = document.getElementById('nuevo-anticipacion').value || '30';
+  const mensaje        = document.getElementById('nuevo-mensaje').value.trim();
+
+  if (!nombre || !area_id || !duracion_min) {
+    mostrarAlerta('error-form', null, 'error', 'Completá los campos obligatorios: nombre, área y duración.');
+    return;
+  }
+
+  const dur = parseInt(duracion_min, 10);
+  if (isNaN(dur) || dur < 5 || dur > 240) {
+    mostrarAlerta('error-form', null, 'error', 'La duración debe estar entre 5 y 240 minutos.');
+    return;
+  }
+
+  const res = await apiFetch('/panel/servicios', {
+    method: 'POST',
+    body: JSON.stringify({
+      nombre, area_id, duracion_min: dur,
+      max_dias_anticipacion: parseInt(anticipacion, 10) || 30,
+      mensaje_confirmacion: mensaje || null,
+    }),
+  });
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) {
+    mostrarAlerta('error-form', null, 'error', data.error || 'Error al crear el servicio.');
+    return;
+  }
+
+  document.getElementById('nuevo-nombre').value       = '';
+  document.getElementById('nuevo-area').value         = '';
+  document.getElementById('nuevo-duracion').value     = '';
+  document.getElementById('nuevo-anticipacion').value = '30';
+  document.getElementById('nuevo-mensaje').value      = '';
+
+  mostrarAlerta('error-lista', 'ok-lista', 'ok', 'Servicio creado correctamente.');
+  cargarServicios();
+}
+
+// ─── Modal de edición ──────────────────────────────────────────────────────
+function abrirModal(id, nombre, duracion, anticipacion, activo, mensaje) {
+  idEditando = id;
+  document.getElementById('edit-nombre').value       = nombre;
+  document.getElementById('edit-duracion').value     = duracion;
+  document.getElementById('edit-anticipacion').value = anticipacion;
+  document.getElementById('edit-activo').value       = activo;
+  document.getElementById('edit-mensaje').value      = mensaje;
+  mostrarAlertaModal(null, '');
+  document.getElementById('modal-fondo').classList.add('abierto');
+}
+
+function cerrarModal() {
+  document.getElementById('modal-fondo').classList.remove('abierto');
+  idEditando = null;
+}
+
+async function guardarEdicion() {
+  if (!idEditando) return;
+  mostrarAlertaModal(null, '');
+
+  const nombre       = document.getElementById('edit-nombre').value.trim();
+  const duracion_min = parseInt(document.getElementById('edit-duracion').value, 10);
+  const anticipacion = parseInt(document.getElementById('edit-anticipacion').value, 10);
+  const activo       = document.getElementById('edit-activo').value === '1';
+  const mensaje      = document.getElementById('edit-mensaje').value.trim();
+
+  if (!nombre) { mostrarAlertaModal('error', 'El nombre no puede estar vacío.'); return; }
+  if (isNaN(duracion_min) || duracion_min < 5 || duracion_min > 240) {
+    mostrarAlertaModal('error', 'La duración debe estar entre 5 y 240 minutos.'); return;
+  }
+
+  const res = await apiFetch(`/panel/servicios/${idEditando}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      nombre, duracion_min, max_dias_anticipacion: anticipacion,
+      activo, mensaje_confirmacion: mensaje || null,
+    }),
+  });
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) { mostrarAlertaModal('error', data.error || 'Error al guardar.'); return; }
+
+  cerrarModal();
+  mostrarAlerta('error-lista', 'ok-lista', 'ok', 'Servicio actualizado correctamente.');
+  cargarServicios();
+}
+
+// ─── Activar / Desactivar directo desde la tabla ──────────────────────────
+async function toggleActivo(id, nuevoActivo) {
+  const res = await apiFetch(`/panel/servicios/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ activo: nuevoActivo === 1 }),
+  });
+  if (!res) return;
+  const data = await res.json();
+  if (!res.ok) {
+    mostrarAlerta('error-lista', 'ok-lista', 'error', data.error || 'No se pudo cambiar el estado.');
+    return;
+  }
+  mostrarAlerta('error-lista', 'ok-lista', 'ok',
+    nuevoActivo ? 'Servicio activado.' : 'Servicio desactivado.');
+  cargarServicios();
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+(async function init() {
+  const token = getToken();
+  if (!token) return;
+
+  const usuario = getUsuario();
+
+  if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {
+    window.location.href = '/panel/agenda.html';
+    return;
+  }
+
+  const nombreEl = document.getElementById('nav-nombre');
+  nombreEl.innerHTML = esc(usuario.nombre);
+  const labelRol = usuario.rol === 'sistemas' ? 'Sistemas' : 'Encargado';
+  nombreEl.innerHTML += ` <span class="badge-rol">${labelRol}</span>`;
+
+  ['nav-auditoria', 'nav-dashboard', 'nav-usuarios'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = '';
+  });
+
+  document.getElementById('modal-fondo').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-fondo')) cerrarModal();
+  });
+
+  await cargarServicios();
+})();
+</script>
+</body>
+</html>

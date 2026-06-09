@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auditoría — Panel MVLA</title>
+  <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
+
+    /* Navbar */
+    .navbar { background: #1A3C4B; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-logo { height: 34px; display: block; }
+    .nav-links { display: flex; gap: 0.25rem; flex: 1; }
+    .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
+    .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
+    .nav-user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+    .nav-user span { color: rgba(255,255,255,.85); }
+    .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
+    .btn-logout:hover { background: rgba(255,255,255,.2); }
+    .badge-rol { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+
+    /* Layout */
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    h1 { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-size: 1.25rem; color: #1A3C4B; margin-bottom: 1rem; }
+
+    /* Card */
+    .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+
+    /* Filtros */
+    .filtros { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; }
+    .filtro-grupo { display: flex; flex-direction: column; gap: 0.3rem; }
+    .filtro-grupo label { font-size: 0.78rem; font-weight: 500; color: #64748b; }
+    input[type="date"], select { padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: white; }
+    input[type="date"]:focus, select:focus { outline: none; border-color: #1A3C4B; }
+
+    /* Botones */
+    .btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.9rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; font-family: inherit; transition: opacity 0.15s; white-space: nowrap; }
+    .btn:hover:not(:disabled) { opacity: 0.85; }
+    .btn-primary { background: #1A3C4B; color: white; }
+    .btn-ghost   { background: white; color: #374151; border: 1px solid #d1d5db; }
+
+    /* Alerta */
+    .alerta { padding: 0.7rem 1rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
+    .alerta.visible { display: block; }
+    .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+    /* Tabla */
+    .tabla-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8fafc; color: #64748b; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.7rem 1rem; border-bottom: 2px solid #e2e8f0; text-align: left; white-space: nowrap; }
+    td { padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; font-size: 0.825rem; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    .td-fecha { white-space: nowrap; color: #64748b; }
+    .td-detalle { max-width: 300px; word-break: break-word; color: #64748b; font-size: 0.775rem; }
+
+    /* Badges de acción */
+    .badge-accion { display: inline-block; padding: 0.18rem 0.55rem; border-radius: 99px; font-size: 0.72rem; font-weight: 600; }
+    .accion-crear       { background: #dcfce7; color: #166534; }
+    .accion-modificar   { background: #dbeafe; color: #1e40af; }
+    .accion-cancelar    { background: #fee2e2; color: #b91c1c; }
+    .accion-eliminar    { background: #fee2e2; color: #b91c1c; }
+    .accion-bloquear    { background: #fef3c7; color: #92400e; }
+    .accion-desbloquear { background: #f3f4f6; color: #4b5563; }
+    .accion-login       { background: #ede9fe; color: #6d28d9; }
+    .accion-logout      { background: #f3f4f6; color: #4b5563; }
+
+    /* Paginación */
+    .paginacion { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0 0; flex-wrap: wrap; gap: 0.5rem; }
+    .pag-info { font-size: 0.825rem; color: #64748b; }
+    .pag-botones { display: flex; gap: 0.4rem; }
+
+    /* Misc */
+    .cargando { text-align: center; color: #94a3b8; padding: 3rem; font-style: italic; }
+    .vacio    { text-align: center; color: #94a3b8; padding: 3rem; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/panel/agenda.html">
+    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
+         alt="Municipalidad Villa La Angostura" class="nav-logo">
+  </a>
+  <div class="nav-links">
+    <a href="/panel/agenda.html">Agenda</a>
+    <a href="/panel/presencial.html">Presencial</a>
+    <a href="/panel/bloqueos.html">Bloqueos</a>
+    <a href="/panel/auditoria.html"       class="activo"       id="nav-auditoria">Auditoría</a>
+    <a href="/panel/dashboard.html"       id="nav-dashboard"   style="display:none">Dashboard</a>
+    <a href="/panel/usuarios.html"        id="nav-usuarios"    style="display:none">Usuarios</a>
+    <a href="/panel/servicios-admin.html" id="nav-servicios"   style="display:none">Servicios</a>
+  </div>
+  <div class="nav-user">
+    <span id="nav-nombre"></span>
+    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</nav>
+
+<div class="container">
+
+  <h1>Registro de auditoría</h1>
+
+  <!-- Filtros -->
+  <div class="card">
+    <div class="filtros">
+      <div class="filtro-grupo">
+        <label>Desde</label>
+        <input type="date" id="filtro-desde">
+      </div>
+      <div class="filtro-grupo">
+        <label>Hasta</label>
+        <input type="date" id="filtro-hasta">
+      </div>
+      <div class="filtro-grupo">
+        <label>Usuario</label>
+        <select id="filtro-usuario">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="filtro-grupo">
+        <label>Acción</label>
+        <select id="filtro-accion">
+          <option value="">Todas</option>
+          <option value="crear">Crear</option>
+          <option value="modificar">Modificar</option>
+          <option value="cancelar">Cancelar</option>
+          <option value="eliminar">Eliminar</option>
+          <option value="bloquear">Bloquear</option>
+          <option value="desbloquear">Desbloquear</option>
+          <option value="login">Login</option>
+          <option value="logout">Logout</option>
+        </select>
+      </div>
+      <div class="filtro-grupo">
+        <label>Entidad</label>
+        <select id="filtro-entidad">
+          <option value="">Todas</option>
+          <option value="turno">Turno</option>
+          <option value="servicio">Servicio</option>
+          <option value="bloqueo">Bloqueo</option>
+          <option value="usuario">Usuario</option>
+          <option value="area">Área</option>
+          <option value="feriado">Feriado</option>
+          <option value="horario">Horario</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="buscar()">Buscar</button>
+      <button class="btn btn-ghost"   onclick="limpiarFiltros()">Limpiar</button>
+    </div>
+  </div>
+
+  <div class="alerta alerta-error" id="alerta-error"></div>
+
+  <!-- Tabla de registros -->
+  <div class="card">
+    <div class="tabla-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha/hora</th>
+            <th>Usuario</th>
+            <th>Acción</th>
+            <th>Entidad</th>
+            <th>ID</th>
+            <th>Canal</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div id="estado-carga" class="cargando">Cargando registros...</div>
+    </div>
+    <div class="paginacion">
+      <span class="pag-info" id="pag-info"></span>
+      <div class="pag-botones">
+        <button class="btn btn-ghost" id="btn-anterior" onclick="irPagina(paginaActual - 1)" disabled>◀ Anterior</button>
+        <button class="btn btn-ghost" id="btn-siguiente" onclick="irPagina(paginaActual + 1)" disabled>Siguiente ▶</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── Auth ──────────────────────────────────────────────────────────────────
+function getToken() {
+  const t = sessionStorage.getItem('panel_token');
+  if (!t) { window.location.href = '/panel/login.html'; return null; }
+  return t;
+}
+function getUsuario() { return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}'); }
+async function apiFetch(url, opts = {}) {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers },
+  });
+  if (res.status === 401) { sessionStorage.clear(); window.location.href = '/panel/login.html'; return null; }
+  return res;
+}
+async function cerrarSesion() {
+  try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
+  sessionStorage.clear(); window.location.href = '/panel/login.html';
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function formatFecha(ts) {
+  if (!ts) return '—';
+  // ts viene como "YYYY-MM-DD HH:MM:SS"
+  const [fecha, hora] = String(ts).split('T').length > 1 ? String(ts).split('T') : String(ts).split(' ');
+  const [y, m, d] = fecha.split('-');
+  return `${d}/${m}/${y} ${hora ? hora.substring(0, 5) : ''}`;
+}
+
+function badgeAccion(accion) {
+  return `<span class="badge-accion accion-${esc(accion)}">${esc(accion)}</span>`;
+}
+
+function mostrarError(msg) {
+  const el = document.getElementById('alerta-error');
+  if (msg) { el.textContent = msg; el.classList.add('visible'); }
+  else      { el.classList.remove('visible'); }
+}
+
+// ─── Estado ────────────────────────────────────────────────────────────────
+let paginaActual = 1;
+let totalPaginas = 1;
+
+// ─── Cargar registros ──────────────────────────────────────────────────────
+async function cargar(pagina = 1) {
+  paginaActual = pagina;
+  mostrarError('');
+  document.getElementById('tbody').innerHTML = '';
+  document.getElementById('estado-carga').style.display = 'block';
+  document.getElementById('estado-carga').textContent   = 'Cargando registros...';
+  document.getElementById('pag-info').textContent = '';
+  document.getElementById('btn-anterior').disabled  = true;
+  document.getElementById('btn-siguiente').disabled = true;
+
+  const desde      = document.getElementById('filtro-desde').value;
+  const hasta      = document.getElementById('filtro-hasta').value;
+  const usuarioId  = document.getElementById('filtro-usuario').value;
+  const accion     = document.getElementById('filtro-accion').value;
+  const entidadTipo= document.getElementById('filtro-entidad').value;
+
+  const params = new URLSearchParams({ pagina });
+  if (desde)       params.set('desde',       desde);
+  if (hasta)       params.set('hasta',        hasta);
+  if (usuarioId)   params.set('usuarioId',   usuarioId);
+  if (accion)      params.set('accion',       accion);
+  if (entidadTipo) params.set('entidadTipo', entidadTipo);
+
+  const res = await apiFetch(`/panel/auditoria?${params}`);
+  if (!res) return;
+
+  const data = await res.json();
+  document.getElementById('estado-carga').style.display = 'none';
+
+  if (!res.ok) { mostrarError(data.error || 'Error al cargar los registros.'); return; }
+
+  totalPaginas = data.paginas || 1;
+
+  if (!data.registros || data.registros.length === 0) {
+    document.getElementById('tbody').innerHTML =
+      '<tr><td colspan="7" class="vacio">No hay registros para los filtros aplicados.</td></tr>';
+    document.getElementById('pag-info').textContent = '0 registros';
+    return;
+  }
+
+  document.getElementById('tbody').innerHTML = data.registros.map(r => {
+    // detalle: viene como objeto JSON de MySQL, mostrar como string legible
+    let detalleStr = '—';
+    if (r.detalle) {
+      try {
+        const d = typeof r.detalle === 'string' ? JSON.parse(r.detalle) : r.detalle;
+        detalleStr = Object.entries(d)
+          .filter(([, v]) => v !== null && v !== undefined && v !== '')
+          .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+          .join(' · ');
+      } catch { detalleStr = String(r.detalle); }
+    }
+
+    return `<tr>
+      <td class="td-fecha">${formatFecha(r.timestamp)}</td>
+      <td>${r.usuario_nombre ? esc(r.usuario_nombre) : '<span style="color:#94a3b8">Sistema</span>'}</td>
+      <td>${badgeAccion(r.accion)}</td>
+      <td>${esc(r.entidad_tipo)}</td>
+      <td style="color:#64748b">${r.entidad_id}</td>
+      <td style="color:#64748b">${esc(r.canal)}</td>
+      <td class="td-detalle">${esc(detalleStr)}</td>
+    </tr>`;
+  }).join('');
+
+  const desde2 = (paginaActual - 1) * 50 + 1;
+  const hasta2 = Math.min(paginaActual * 50, data.total);
+  document.getElementById('pag-info').textContent =
+    `Mostrando ${desde2}–${hasta2} de ${data.total} registros (pág. ${paginaActual} / ${totalPaginas})`;
+
+  document.getElementById('btn-anterior').disabled  = paginaActual <= 1;
+  document.getElementById('btn-siguiente').disabled = paginaActual >= totalPaginas;
+}
+
+function buscar() { cargar(1); }
+
+function irPagina(n) {
+  if (n < 1 || n > totalPaginas) return;
+  cargar(n);
+}
+
+function limpiarFiltros() {
+  document.getElementById('filtro-desde').value    = '';
+  document.getElementById('filtro-hasta').value    = '';
+  document.getElementById('filtro-usuario').value  = '';
+  document.getElementById('filtro-accion').value   = '';
+  document.getElementById('filtro-entidad').value  = '';
+  cargar(1);
+}
+
+// ─── Cargar dropdown de usuarios ──────────────────────────────────────────
+async function cargarUsuarios() {
+  const res = await apiFetch('/panel/auditoria/usuarios');
+  if (!res || !res.ok) return;
+  const data = await res.json();
+  const select = document.getElementById('filtro-usuario');
+  data.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value       = u.id;
+    opt.textContent = u.nombre;
+    select.appendChild(opt);
+  });
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+(async function init() {
+  const token = getToken();
+  if (!token) return;
+
+  const usuario = getUsuario();
+
+  // Solo encargados y sistemas pueden acceder a esta página
+  if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {
+    window.location.href = '/panel/agenda.html';
+    return;
+  }
+
+  const nombreEl = document.getElementById('nav-nombre');
+  nombreEl.innerHTML = esc(usuario.nombre);
+  const labelRol = usuario.rol === 'sistemas' ? 'Sistemas' : 'Encargado';
+  nombreEl.innerHTML += ` <span class="badge-rol">${labelRol}</span>`;
+
+  // Mostrar links de admin en el navbar
+  if (usuario.rol === 'sistemas') {
+    ['nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
+  } else {
+    ['nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
+  }
+
+  // Fecha por defecto: último mes
+  const hoy   = new Date();
+  const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  document.getElementById('filtro-hasta').value = hoy.toISOString().substring(0, 10);
+  document.getElementById('filtro-desde').value = inicio.toISOString().substring(0, 10);
+
+  await Promise.all([cargarUsuarios(), cargar(1)]);
+})();
+</script>
+</body>
+</html>

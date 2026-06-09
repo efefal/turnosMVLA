@@ -226,6 +226,10 @@
     <a href="/panel/agenda.html" class="activo">Agenda</a>
     <a href="/panel/presencial.html">Presencial</a>
     <a href="/panel/bloqueos.html">Bloqueos</a>
+    <a href="/panel/auditoria.html"      id="nav-auditoria"  style="display:none">Auditoría</a>
+    <a href="/panel/dashboard.html"      id="nav-dashboard"  style="display:none">Dashboard</a>
+    <a href="/panel/usuarios.html"       id="nav-usuarios"   style="display:none">Usuarios</a>
+    <a href="/panel/servicios-admin.html" id="nav-servicios" style="display:none">Servicios</a>
   </div>
   <div class="nav-user">
     <span id="nav-nombre"></span>
@@ -1051,6 +1055,17 @@ async function cargarOperadores() {
     nombreEl.innerHTML += ' <span class="badge-encargado">Encargado</span>';
     document.getElementById('filtro-operador').style.display = 'flex';
     await cargarOperadores();
+  } else if (usuario.rol === 'sistemas') {
+    nombreEl.innerHTML += ' <span class="badge-encargado">Sistemas</span>';
+    document.getElementById('filtro-operador').style.display = 'flex';
+    await cargarOperadores();
+  }
+  // Mostrar links de administración para encargados y sistemas
+  if (usuario.rol === 'encargado' || usuario.rol === 'sistemas') {
+    ['nav-auditoria', 'nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
   }
 
   document.getElementById('fecha-input').value = fechaActual;

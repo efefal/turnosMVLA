@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS usuario_areas (
   id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   usuario_id  INT UNSIGNED  NOT NULL,
   area_id     INT UNSIGNED  NOT NULL,
-  rol         ENUM('operador', 'encargado') NOT NULL COMMENT 'Define qué puede hacer en esta área específica',
+  rol         ENUM('operador', 'encargado', 'sistemas') NOT NULL COMMENT 'Define qué puede hacer en esta área específica',
   created_at  DATETIME      NOT NULL DEFAULT NOW(),
 
   PRIMARY KEY (id),

@@ -113,6 +113,10 @@
     <a href="/panel/agenda.html">Agenda</a>
     <a href="/panel/presencial.html">Presencial</a>
     <a href="/panel/bloqueos.html" class="activo">Bloqueos</a>
+    <a href="/panel/auditoria.html"       id="nav-auditoria"  style="display:none">Auditoría</a>
+    <a href="/panel/dashboard.html"       id="nav-dashboard"  style="display:none">Dashboard</a>
+    <a href="/panel/usuarios.html"        id="nav-usuarios"   style="display:none">Usuarios</a>
+    <a href="/panel/servicios-admin.html" id="nav-servicios"  style="display:none">Servicios</a>
   </div>
   <div class="nav-user">
     <span id="nav-nombre"></span>
@@ -451,7 +455,14 @@ async function crearBloqueo() {
   const usuario = getUsuario();
   document.getElementById('nav-nombre').textContent = usuario.nombre;
 
-  if (usuario.rol !== 'encargado') {
+  if (usuario.rol === 'encargado' || usuario.rol === 'sistemas') {
+    ['nav-auditoria', 'nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
+  }
+
+  if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {
     document.getElementById('opcion-oficina').style.display = 'none';
     document.getElementById('hint-tipo').textContent =
       'Podés bloquear días de tu propia agenda (ej: licencia, capacitación).';

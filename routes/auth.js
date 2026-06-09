@@ -79,10 +79,11 @@ router.post('/login', async (req, res) => {
     // Filtrar NULLs que aparecen si el LEFT JOIN no encontró filas (usuario sin áreas)
     areas = (areas || []).filter(a => a && a.area_id !== null);
 
-    // Determinar el rol efectivo del usuario:
-    // Si es encargado en AL MENOS UNA área, su rol en el JWT es 'encargado'.
-    // Esto simplifica los checks de permiso en routes/panel.js.
-    const rol = areas.some(a => a.rol === 'encargado') ? 'encargado' : 'operador';
+    // Determinar el rol efectivo del usuario (orden de precedencia: sistemas > encargado > operador).
+    // 'sistemas' da acceso completo sin restricción de área — solo se asigna a administradores TI.
+    const rol = areas.some(a => a.rol === 'sistemas')  ? 'sistemas'
+              : areas.some(a => a.rol === 'encargado') ? 'encargado'
+              : 'operador';
 
     // Lista de IDs de áreas donde trabaja este usuario
     const areaIds = areas.map(a => a.area_id);

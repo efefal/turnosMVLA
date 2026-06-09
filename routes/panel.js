@@ -17,6 +17,7 @@ const router = require('express').Router();
 const pool   = require('../db');
 const motor  = require('../motor');
 const logger = require('../logger');
+const bcrypt = require('bcrypt');
 const { verificarJWT } = require('../middleware/auth');
 
 // Todos los endpoints de este router requieren autenticación
@@ -27,13 +28,26 @@ router.use(verificarJWT);
 // HELPERS INTERNOS (no se exportan)
 // =============================================================================
 
-// Retorna true si el usuario autenticado tiene rol 'encargado'
+// Retorna true si el usuario tiene rol 'sistemas' (acceso total sin restricción de área)
+function esSistemas(req) {
+  return req.usuario.rol === 'sistemas';
+}
+
+// Retorna true si el usuario tiene rol 'encargado' (solo dentro de sus áreas)
 function esEncargado(req) {
   return req.usuario.rol === 'encargado';
 }
 
-// Retorna true si el areaId dado está entre las áreas del usuario
+// Retorna true si el usuario tiene rol 'encargado' O 'sistemas'
+// Usar esta función para endpoints que deben excluir a operadores pero admitir a ambos roles superiores
+function esEncargadoOSistemas(req) {
+  return req.usuario.rol === 'encargado' || req.usuario.rol === 'sistemas';
+}
+
+// Retorna true si el areaId dado está entre las áreas del usuario.
+// El rol 'sistemas' tiene acceso a cualquier área sin restricción.
 function tieneAccesoAlArea(req, areaId) {
+  if (esSistemas(req)) return true;
   return req.usuario.areaIds.includes(parseInt(areaId, 10));
 }
 
@@ -1058,6 +1072,624 @@ router.get('/servicios', async (req, res) => {
   } catch (err) {
     logger.error('[panel] Error al obtener servicios del panel:', err);
     res.status(500).json({ error: 'No se pudieron obtener los servicios.' });
+  }
+});
+
+
+// =============================================================================
+// N1 — AUDITORÍA
+// =============================================================================
+
+// GET /panel/auditoria?desde=&hasta=&usuarioId=&accion=&entidadTipo=&pagina=
+// Devuelve registros de auditoría paginados (50 por página).
+// Encargado: solo ve registros de acciones de usuarios de sus áreas.
+// Sistemas: ve todos los registros sin filtro de área.
+router.get('/auditoria', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
+  }
+
+  const { desde, hasta, usuarioId, accion, entidadTipo } = req.query;
+  const pagina  = Math.max(1, parseInt(req.query.pagina, 10) || 1);
+  const limite  = 50;
+  const offset  = (pagina - 1) * limite;
+
+  try {
+    const condiciones = [];
+    const params      = [];
+
+    // El encargado solo ve acciones de usuarios de sus propias áreas.
+    // El rol sistemas ve todo — no se agrega filtro de área.
+    if (!esSistemas(req)) {
+      const { areaIds } = req.usuario;
+      if (areaIds.length > 0) {
+        const ph = areaIds.map(() => '?').join(',');
+        // Incluir registros de usuarios que trabajan en las áreas del encargado,
+        // más los registros del sistema (usuario_id NULL) y los del propio encargado.
+        condiciones.push(`(
+          a.usuario_id IS NULL
+          OR a.usuario_id = ?
+          OR a.usuario_id IN (
+            SELECT ua.usuario_id FROM usuario_areas ua WHERE ua.area_id IN (${ph})
+          )
+        )`);
+        params.push(req.usuario.id, ...areaIds);
+      }
+    }
+
+    if (desde)        { condiciones.push('a.timestamp >= ?'); params.push(desde + ' 00:00:00'); }
+    if (hasta)        { condiciones.push('a.timestamp <= ?'); params.push(hasta + ' 23:59:59'); }
+    if (usuarioId)    { condiciones.push('a.usuario_id = ?'); params.push(parseInt(usuarioId, 10)); }
+    if (accion)       { condiciones.push('a.accion = ?');     params.push(accion); }
+    if (entidadTipo)  { condiciones.push('a.entidad_tipo = ?'); params.push(entidadTipo); }
+
+    const where = condiciones.length ? 'WHERE ' + condiciones.join(' AND ') : '';
+
+    // Contar total para la paginación
+    const [conteo] = await pool.query(
+      `SELECT COUNT(*) AS total FROM auditoria a ${where}`,
+      params
+    );
+    const total = conteo[0].total;
+
+    // Traer la página solicitada
+    const [registros] = await pool.query(`
+      SELECT
+        a.id,
+        a.timestamp,
+        u.nombre    AS usuario_nombre,
+        u.email     AS usuario_email,
+        a.accion,
+        a.entidad_tipo,
+        a.entidad_id,
+        a.detalle,
+        a.canal,
+        a.ip
+      FROM auditoria a
+      LEFT JOIN usuarios u ON a.usuario_id = u.id
+      ${where}
+      ORDER BY a.timestamp DESC
+      LIMIT ? OFFSET ?
+    `, [...params, limite, offset]);
+
+    res.json({
+      registros,
+      total,
+      pagina,
+      paginas: Math.ceil(total / limite),
+    });
+
+  } catch (err) {
+    logger.error('[panel] Error al obtener auditoría:', err);
+    res.status(500).json({ error: 'No se pudo obtener el registro de auditoría.' });
+  }
+});
+
+
+// GET /panel/auditoria/usuarios — dropdown con usuarios del área para el filtro
+// Devuelve solo los usuarios relevantes para el rol: el encargado ve su área, sistemas ve todos.
+router.get('/auditoria/usuarios', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso.' });
+  }
+
+  try {
+    let query;
+    let params = [];
+
+    if (esSistemas(req)) {
+      query = 'SELECT id, nombre, email FROM usuarios WHERE activo = TRUE ORDER BY nombre ASC';
+    } else {
+      const { areaIds } = req.usuario;
+      const ph = areaIds.map(() => '?').join(',');
+      query = `
+        SELECT DISTINCT u.id, u.nombre, u.email
+        FROM usuarios u
+        JOIN usuario_areas ua ON u.id = ua.usuario_id
+        WHERE ua.area_id IN (${ph})
+        ORDER BY u.nombre ASC
+      `;
+      params = areaIds;
+    }
+
+    const [usuarios] = await pool.query(query, params);
+    res.json(usuarios);
+  } catch (err) {
+    logger.error('[panel] Error al obtener usuarios para dropdown de auditoría:', err);
+    res.status(500).json({ error: 'No se pudo obtener la lista de usuarios.' });
+  }
+});
+
+
+// =============================================================================
+// N2 — ESTADÍSTICAS / DASHBOARD
+// =============================================================================
+
+// GET /panel/estadisticas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+// Devuelve métricas de turnos para el período indicado.
+// Encargado: solo datos de sus áreas. Sistemas: todas las áreas.
+router.get('/estadisticas', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
+  }
+
+  const { desde, hasta } = req.query;
+  if (!desde || !hasta) {
+    return res.status(400).json({ error: 'Los parámetros desde y hasta son obligatorios.' });
+  }
+
+  try {
+    const { areaIds } = req.usuario;
+
+    // El filtro de área solo aplica para encargados — sistemas ve todo
+    const areaFiltro = esSistemas(req) ? '' : (areaIds.length > 0
+      ? `AND s.area_id IN (${areaIds.map(() => '?').join(',')})`
+      : '');
+    const areaParams = esSistemas(req) ? [] : areaIds;
+
+    const base = `
+      FROM turnos t
+      JOIN servicios s ON t.servicio_id = s.id
+      WHERE t.fecha BETWEEN ? AND ?
+      ${areaFiltro}
+    `;
+    const baseParams = [desde, hasta, ...areaParams];
+
+    // Totales por estado
+    const [porEstado] = await pool.query(
+      `SELECT t.estado, COUNT(*) AS cantidad ${base} GROUP BY t.estado`,
+      baseParams
+    );
+
+    // Distribución por canal de origen
+    const [porCanal] = await pool.query(
+      `SELECT t.canal_origen, COUNT(*) AS cantidad ${base} GROUP BY t.canal_origen`,
+      baseParams
+    );
+
+    // Operador con más turnos atendidos — requiere JOIN explícito a usuarios
+    const [porOperadorFinal] = await pool.query(`
+      SELECT u.nombre AS operador, COUNT(*) AS atendidos
+      FROM turnos t
+      JOIN servicios s ON t.servicio_id = s.id
+      JOIN usuarios  u ON t.operador_id = u.id
+      WHERE t.fecha BETWEEN ? AND ?
+        AND t.estado = 'atendido'
+        ${areaFiltro}
+      GROUP BY t.operador_id, u.nombre
+      ORDER BY atendidos DESC
+      LIMIT 5
+    `, [desde, hasta, ...areaParams]);
+
+    // Día de la semana con más demanda (1=lunes ... 7=domingo en MySQL DAYOFWEEK es 1=dom)
+    // Usamos WEEKDAY(): 0=lunes, 1=martes, ..., 6=domingo
+    const [porDia] = await pool.query(`
+      SELECT WEEKDAY(t.fecha) AS dia_semana, COUNT(*) AS cantidad
+      FROM turnos t
+      JOIN servicios s ON t.servicio_id = s.id
+      WHERE t.fecha BETWEEN ? AND ?
+        AND t.estado != 'cancelado'
+        ${areaFiltro}
+      GROUP BY dia_semana
+      ORDER BY dia_semana ASC
+    `, [desde, hasta, ...areaParams]);
+
+    // Evolución semanal: turnos agendados (no cancelados) agrupados por semana ISO
+    const [evolucionSemanal] = await pool.query(`
+      SELECT
+        YEARWEEK(t.fecha, 1) AS semana_iso,
+        MIN(t.fecha)         AS inicio_semana,
+        COUNT(*)             AS cantidad
+      FROM turnos t
+      JOIN servicios s ON t.servicio_id = s.id
+      WHERE t.fecha BETWEEN ? AND ?
+        AND t.estado != 'cancelado'
+        ${areaFiltro}
+      GROUP BY semana_iso
+      ORDER BY semana_iso ASC
+    `, [desde, hasta, ...areaParams]);
+
+    // Tasa de ausentismo: ausentes / (presentes + ausentes + atendidos) × 100
+    const estados = {};
+    porEstado.forEach(r => { estados[r.estado] = Number(r.cantidad); });
+    const presentes  = estados.presente  || 0;
+    const ausentes   = estados.ausente   || 0;
+    const atendidos  = estados.atendido  || 0;
+    const denominador = presentes + ausentes + atendidos;
+    const tasaAusentismo = denominador > 0
+      ? ((ausentes / denominador) * 100).toFixed(1)
+      : '0.0';
+
+    res.json({
+      porEstado,
+      porCanal,
+      porOperador:    porOperadorFinal,
+      porDia,
+      evolucionSemanal,
+      tasaAusentismo,
+    });
+
+  } catch (err) {
+    logger.error('[panel] Error al obtener estadísticas:', err);
+    res.status(500).json({ error: 'No se pudieron obtener las estadísticas.' });
+  }
+});
+
+
+// =============================================================================
+// N3 — ABM DE USUARIOS
+// =============================================================================
+
+// GET /panel/usuarios — lista usuarios del área (sistemas ve todos)
+router.get('/usuarios', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
+  }
+
+  try {
+    let rows;
+
+    if (esSistemas(req)) {
+      // Sistemas ve todos los usuarios con todas sus áreas y roles
+      [rows] = await pool.query(`
+        SELECT
+          u.id, u.nombre, u.email, u.activo, u.ultimo_acceso, u.created_at,
+          JSON_ARRAYAGG(
+            JSON_OBJECT('area_id', ua.area_id, 'area_nombre', a.nombre, 'rol', ua.rol)
+          ) AS areas_json
+        FROM usuarios u
+        LEFT JOIN usuario_areas ua ON u.id = ua.usuario_id
+        LEFT JOIN areas          a  ON ua.area_id = a.id
+        GROUP BY u.id
+        ORDER BY u.nombre ASC
+      `);
+    } else {
+      // Encargado ve solo los usuarios de sus propias áreas
+      const { areaIds } = req.usuario;
+      const ph = areaIds.map(() => '?').join(',');
+      [rows] = await pool.query(`
+        SELECT
+          u.id, u.nombre, u.email, u.activo, u.ultimo_acceso, u.created_at,
+          JSON_ARRAYAGG(
+            JSON_OBJECT('area_id', ua.area_id, 'area_nombre', a.nombre, 'rol', ua.rol)
+          ) AS areas_json
+        FROM usuarios u
+        JOIN usuario_areas ua ON u.id = ua.usuario_id
+        JOIN areas          a  ON ua.area_id = a.id
+        WHERE ua.area_id IN (${ph})
+        GROUP BY u.id
+        ORDER BY u.nombre ASC
+      `, areaIds);
+    }
+
+    // Parsear areas_json y determinar el rol efectivo de cada usuario
+    const usuarios = rows.map(u => {
+      let areas = u.areas_json;
+      if (typeof areas === 'string') areas = JSON.parse(areas);
+      areas = (areas || []).filter(a => a && a.area_id !== null);
+      const rolEfectivo = areas.some(a => a.rol === 'sistemas')  ? 'sistemas'
+                        : areas.some(a => a.rol === 'encargado') ? 'encargado'
+                        : areas.length > 0 ? 'operador'
+                        : null;
+      return { id: u.id, nombre: u.nombre, email: u.email, activo: u.activo,
+               ultimo_acceso: u.ultimo_acceso, created_at: u.created_at,
+               rol: rolEfectivo, areas };
+    });
+
+    res.json(usuarios);
+  } catch (err) {
+    logger.error('[panel] Error al obtener usuarios:', err);
+    res.status(500).json({ error: 'No se pudo obtener la lista de usuarios.' });
+  }
+});
+
+
+// POST /panel/usuarios — crear usuario nuevo
+// El encargado solo puede asignarlo a sus propias áreas y con rol <= encargado.
+// Sistemas puede asignar cualquier área y rol.
+router.post('/usuarios', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
+  }
+
+  const { nombre, email, password, area_id, rol } = req.body;
+
+  if (!nombre || !email || !password || !area_id || !rol) {
+    return res.status(400).json({
+      error: 'Faltan datos: nombre, email, password, area_id y rol son obligatorios.'
+    });
+  }
+
+  const rolesValidos = ['operador', 'encargado', 'sistemas'];
+  if (!rolesValidos.includes(rol)) {
+    return res.status(400).json({ error: `Rol inválido. Valores permitidos: ${rolesValidos.join(', ')}.` });
+  }
+
+  // El encargado no puede asignar rol 'sistemas' ni asignar a áreas ajenas
+  if (!esSistemas(req)) {
+    if (rol === 'sistemas') {
+      return res.status(403).json({ error: 'Solo el rol sistemas puede crear usuarios con rol sistemas.' });
+    }
+    if (!tieneAccesoAlArea(req, area_id)) {
+      return res.status(403).json({ error: 'Sin permiso para crear usuarios en esa área.' });
+    }
+  }
+
+  const areaIdNum = parseInt(area_id, 10);
+
+  try {
+    // Verificar que el email no esté en uso
+    const [existe] = await pool.query('SELECT id FROM usuarios WHERE email = ?', [email]);
+    if (existe.length > 0) {
+      return res.status(409).json({ error: 'Ya existe un usuario con ese email.' });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [result] = await conn.query(
+        'INSERT INTO usuarios (nombre, email, password_hash) VALUES (?, ?, ?)',
+        [nombre.trim(), email.trim().toLowerCase(), hash]
+      );
+      const nuevoId = result.insertId;
+
+      await conn.query(
+        'INSERT INTO usuario_areas (usuario_id, area_id, rol) VALUES (?, ?, ?)',
+        [nuevoId, areaIdNum, rol]
+      );
+
+      await conn.query(
+        `INSERT INTO auditoria (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal, ip)
+         VALUES (?, 'usuario', ?, 'crear', ?, 'panel', ?)`,
+        [req.usuario.id, nuevoId, JSON.stringify({ nombre, email, rol, area_id: areaIdNum, creado_por: req.usuario.nombre }), req.ip || null]
+      );
+
+      await conn.commit();
+      logger.info(`[panel] Usuario ${nuevoId} (${email}) creado por ${req.usuario.nombre}`);
+      res.status(201).json({ ok: true, id: nuevoId });
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    logger.error('[panel] Error al crear usuario:', err);
+    res.status(500).json({ error: 'No se pudo crear el usuario.' });
+  }
+});
+
+
+// PATCH /panel/usuarios/:id — editar nombre, rol o estado (activar/desactivar)
+// El encargado no puede modificar usuarios de otras áreas ni usuarios con rol sistemas.
+// Sistemas puede modificar cualquier usuario.
+router.patch('/usuarios/:id', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
+  }
+
+  const id = parseInt(req.params.id, 10);
+  const { nombre, rol, activo } = req.body;
+
+  if (nombre === undefined && rol === undefined && activo === undefined) {
+    return res.status(400).json({ error: 'Se requiere al menos uno de: nombre, rol, activo.' });
+  }
+
+  try {
+    // Verificar existencia del usuario y obtener su rol actual
+    const [rows] = await pool.query(`
+      SELECT u.id, u.nombre, u.activo,
+             MAX(ua.rol) AS rol_actual
+      FROM   usuarios u
+      LEFT JOIN usuario_areas ua ON u.id = ua.usuario_id
+      WHERE  u.id = ?
+      GROUP BY u.id
+    `, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    const target = rows[0];
+
+    // El encargado no puede modificar usuarios con rol 'sistemas'
+    if (!esSistemas(req) && target.rol_actual === 'sistemas') {
+      return res.status(403).json({ error: 'No podés modificar un usuario con rol sistemas.' });
+    }
+
+    // El encargado solo puede modificar usuarios de sus propias áreas
+    if (!esSistemas(req)) {
+      const [enArea] = await pool.query(`
+        SELECT ua.usuario_id FROM usuario_areas ua
+        WHERE ua.usuario_id = ?
+          AND ua.area_id IN (${req.usuario.areaIds.map(() => '?').join(',')})
+        LIMIT 1
+      `, [id, ...req.usuario.areaIds]);
+      if (enArea.length === 0) {
+        return res.status(403).json({ error: 'Sin permiso para modificar ese usuario.' });
+      }
+    }
+
+    // Validar rol si se envía
+    if (rol !== undefined) {
+      const rolesValidos = ['operador', 'encargado', 'sistemas'];
+      if (!rolesValidos.includes(rol)) {
+        return res.status(400).json({ error: `Rol inválido. Valores permitidos: ${rolesValidos.join(', ')}.` });
+      }
+      if (!esSistemas(req) && rol === 'sistemas') {
+        return res.status(403).json({ error: 'Solo el rol sistemas puede asignar rol sistemas.' });
+      }
+    }
+
+    // Aplicar cambios
+    if (nombre !== undefined || activo !== undefined) {
+      const sets    = [];
+      const valores = [];
+      if (nombre !== undefined) { sets.push('nombre = ?'); valores.push(nombre.trim()); }
+      if (activo !== undefined) { sets.push('activo = ?'); valores.push(activo ? 1 : 0); }
+      valores.push(id);
+      await pool.query(`UPDATE usuarios SET ${sets.join(', ')} WHERE id = ?`, valores);
+    }
+
+    // Actualizar rol en todas las áreas del usuario (usamos UPDATE en usuario_areas)
+    if (rol !== undefined) {
+      await pool.query('UPDATE usuario_areas SET rol = ? WHERE usuario_id = ?', [rol, id]);
+    }
+
+    await auditar(req.usuario.id, 'usuario', id, 'modificar',
+      { nombre, rol, activo, modificado_por: req.usuario.nombre }, req.ip);
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error('[panel] Error al editar usuario:', err);
+    res.status(500).json({ error: 'No se pudo modificar el usuario.' });
+  }
+});
+
+
+// =============================================================================
+// N4 — ABM DE SERVICIOS
+// =============================================================================
+
+// GET /panel/servicios/admin — lista servicios con todos los campos (para el ABM)
+// IMPORTANTE: esta ruta DEBE ir ANTES de GET /servicios/:id/mensaje para que Express
+// no interprete "admin" como un ID numérico. En el código actual ya está ordenado
+// correctamente porque este endpoint se agrega al final del archivo.
+router.get('/servicios/admin', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
+  }
+
+  try {
+    let query;
+    let params = [];
+
+    if (esSistemas(req)) {
+      query = `
+        SELECT s.id, s.nombre, s.duracion_min, s.max_dias_anticipacion,
+               s.mensaje_confirmacion, s.activo, s.created_at,
+               a.id AS area_id, a.nombre AS area_nombre
+        FROM servicios s
+        JOIN areas a ON s.area_id = a.id
+        ORDER BY a.nombre ASC, s.nombre ASC
+      `;
+    } else {
+      const { areaIds } = req.usuario;
+      const ph = areaIds.map(() => '?').join(',');
+      query = `
+        SELECT s.id, s.nombre, s.duracion_min, s.max_dias_anticipacion,
+               s.mensaje_confirmacion, s.activo, s.created_at,
+               a.id AS area_id, a.nombre AS area_nombre
+        FROM servicios s
+        JOIN areas a ON s.area_id = a.id
+        WHERE s.area_id IN (${ph})
+        ORDER BY a.nombre ASC, s.nombre ASC
+      `;
+      params = areaIds;
+    }
+
+    const [servicios] = await pool.query(query, params);
+    res.json(servicios);
+  } catch (err) {
+    logger.error('[panel] Error al obtener servicios (admin):', err);
+    res.status(500).json({ error: 'No se pudo obtener la lista de servicios.' });
+  }
+});
+
+
+// POST /panel/servicios — crear servicio nuevo
+router.post('/servicios', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
+  }
+
+  const { nombre, area_id, duracion_min, max_dias_anticipacion, mensaje_confirmacion } = req.body;
+
+  if (!nombre || !area_id || !duracion_min) {
+    return res.status(400).json({
+      error: 'Faltan datos: nombre, area_id y duracion_min son obligatorios.'
+    });
+  }
+
+  const areaIdNum     = parseInt(area_id, 10);
+  const duracionNum   = parseInt(duracion_min, 10);
+  const anticipacion  = parseInt(max_dias_anticipacion, 10) || 30;
+
+  if (!tieneAccesoAlArea(req, areaIdNum)) {
+    return res.status(403).json({ error: 'Sin permiso para crear servicios en esa área.' });
+  }
+
+  if (duracionNum < 5 || duracionNum > 240) {
+    return res.status(400).json({ error: 'La duración debe estar entre 5 y 240 minutos.' });
+  }
+
+  try {
+    const [result] = await pool.query(`
+      INSERT INTO servicios (nombre, area_id, duracion_min, max_dias_anticipacion, mensaje_confirmacion)
+      VALUES (?, ?, ?, ?, ?)
+    `, [
+      nombre.trim(), areaIdNum, duracionNum, anticipacion,
+      mensaje_confirmacion?.trim() || null,
+    ]);
+
+    await auditar(req.usuario.id, 'servicio', result.insertId, 'crear',
+      { nombre, area_id: areaIdNum, duracion_min: duracionNum, creado_por: req.usuario.nombre }, req.ip);
+
+    logger.info(`[panel] Servicio ${result.insertId} (${nombre}) creado por ${req.usuario.nombre}`);
+    res.status(201).json({ ok: true, id: result.insertId });
+  } catch (err) {
+    logger.error('[panel] Error al crear servicio:', err);
+    res.status(500).json({ error: 'No se pudo crear el servicio.' });
+  }
+});
+
+
+// PATCH /panel/servicios/:id — editar cualquier campo del servicio (incluyendo activar/desactivar)
+router.patch('/servicios/:id', async (req, res) => {
+  if (!esEncargadoOSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
+  }
+
+  const id = parseInt(req.params.id, 10);
+  const { nombre, duracion_min, max_dias_anticipacion, mensaje_confirmacion, activo } = req.body;
+
+  if (nombre === undefined && duracion_min === undefined &&
+      max_dias_anticipacion === undefined && mensaje_confirmacion === undefined && activo === undefined) {
+    return res.status(400).json({ error: 'Se requiere al menos un campo para actualizar.' });
+  }
+
+  try {
+    const [rows] = await pool.query('SELECT id, area_id FROM servicios WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Servicio no encontrado.' });
+    }
+
+    if (!tieneAccesoAlArea(req, rows[0].area_id)) {
+      return res.status(403).json({ error: 'Sin permiso para modificar ese servicio.' });
+    }
+
+    const sets    = [];
+    const valores = [];
+    if (nombre !== undefined)               { sets.push('nombre = ?');                valores.push(nombre.trim()); }
+    if (duracion_min !== undefined)         { sets.push('duracion_min = ?');          valores.push(parseInt(duracion_min, 10)); }
+    if (max_dias_anticipacion !== undefined){ sets.push('max_dias_anticipacion = ?'); valores.push(parseInt(max_dias_anticipacion, 10)); }
+    if (mensaje_confirmacion !== undefined) { sets.push('mensaje_confirmacion = ?');  valores.push(mensaje_confirmacion.trim() || null); }
+    if (activo !== undefined)               { sets.push('activo = ?');                valores.push(activo ? 1 : 0); }
+    valores.push(id);
+
+    await pool.query(`UPDATE servicios SET ${sets.join(', ')} WHERE id = ?`, valores);
+
+    await auditar(req.usuario.id, 'servicio', id, 'modificar',
+      { nombre, duracion_min, max_dias_anticipacion, mensaje_confirmacion, activo, modificado_por: req.usuario.nombre },
+      req.ip);
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error('[panel] Error al editar servicio:', err);
+    res.status(500).json({ error: 'No se pudo modificar el servicio.' });
   }
 });
 

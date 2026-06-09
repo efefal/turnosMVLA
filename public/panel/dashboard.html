@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Panel MVLA</title>
+  <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
+
+    /* Navbar */
+    .navbar { background: #1A3C4B; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+    .nav-logo { height: 34px; display: block; }
+    .nav-links { display: flex; gap: 0.25rem; flex: 1; }
+    .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
+    .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
+    .nav-user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+    .nav-user span { color: rgba(255,255,255,.85); }
+    .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
+    .btn-logout:hover { background: rgba(255,255,255,.2); }
+    .badge-rol { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+
+    /* Layout */
+    .container { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.5rem; }
+    h1 { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-size: 1.25rem; color: #1A3C4B; margin-bottom: 1rem; }
+
+    /* Card */
+    .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    .card-titulo { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-weight: 700; color: #1A3C4B; font-size: 0.95rem; margin-bottom: 1rem; }
+
+    /* Selector de período */
+    .periodo-bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .btn-group-periodo { display: inline-flex; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; }
+    .btn-periodo { background: white; border: none; border-right: 1px solid #d1d5db; padding: 0.38rem 0.9rem; cursor: pointer; font-size: 0.82rem; font-weight: 500; color: #374151; font-family: inherit; }
+    .btn-periodo:last-child { border-right: none; }
+    .btn-periodo.activo { background: #1A3C4B; color: white; }
+    .btn-periodo:hover:not(.activo) { background: #f8fafc; }
+    .campos-custom { display: none; align-items: center; gap: 0.5rem; }
+    .campos-custom.visible { display: flex; }
+    input[type="date"] { padding: 0.38rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; }
+    input[type="date"]:focus { outline: none; border-color: #1A3C4B; }
+    .btn { display: inline-flex; align-items: center; padding: 0.38rem 0.9rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 500; font-family: inherit; }
+    .btn-primary { background: #1A3C4B; color: white; }
+    .btn:hover:not(:disabled) { opacity: 0.85; }
+
+    /* Grid de métricas */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 720px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    /* Stat grande */
+    .stat-grande { text-align: center; padding: 0.5rem 0; }
+    .stat-numero { font-size: 2.5rem; font-weight: 700; font-family: 'Trebuchet MS', Trebuchet, sans-serif; color: #1A3C4B; line-height: 1; }
+    .stat-label  { font-size: 0.82rem; color: #64748b; margin-top: 0.3rem; }
+
+    /* Tabla de estados */
+    .tabla-estados { width: 100%; border-collapse: collapse; }
+    .tabla-estados td { padding: 0.5rem 0.5rem; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+    .tabla-estados tr:last-child td { border-bottom: none; }
+    .tabla-estados .num { font-weight: 700; text-align: right; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.4rem; }
+
+    /* Leyenda de torta */
+    .leyenda { margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .leyenda-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: #374151; }
+
+    /* Tabla operadores */
+    .tabla-op { width: 100%; border-collapse: collapse; }
+    .tabla-op td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+    .tabla-op tr:last-child td { border-bottom: none; }
+    .tabla-op .num { font-weight: 700; color: #1A3C4B; text-align: right; }
+    .tabla-op .pos { color: #94a3b8; font-size: 0.78rem; width: 24px; }
+
+    /* Alerta */
+    .alerta { padding: 0.7rem 1rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
+    .alerta.visible { display: block; }
+    .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .cargando { text-align: center; color: #94a3b8; padding: 2rem; font-style: italic; }
+    .vacio    { text-align: center; color: #94a3b8; padding: 1.5rem; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/panel/agenda.html">
+    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
+         alt="Municipalidad Villa La Angostura" class="nav-logo">
+  </a>
+  <div class="nav-links">
+    <a href="/panel/agenda.html">Agenda</a>
+    <a href="/panel/presencial.html">Presencial</a>
+    <a href="/panel/bloqueos.html">Bloqueos</a>
+    <a href="/panel/auditoria.html"       id="nav-auditoria"  style="display:none">Auditoría</a>
+    <a href="/panel/dashboard.html"       class="activo">Dashboard</a>
+    <a href="/panel/usuarios.html"        id="nav-usuarios"   style="display:none">Usuarios</a>
+    <a href="/panel/servicios-admin.html" id="nav-servicios"  style="display:none">Servicios</a>
+  </div>
+  <div class="nav-user">
+    <span id="nav-nombre"></span>
+    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
+  </div>
+</nav>
+
+<div class="container">
+
+  <h1>Dashboard de estadísticas</h1>
+
+  <!-- Selector de período -->
+  <div class="card">
+    <div class="periodo-bar">
+      <div class="btn-group-periodo">
+        <button class="btn-periodo" onclick="elegirPeriodo('semana')">Última semana</button>
+        <button class="btn-periodo activo" id="btn-mes" onclick="elegirPeriodo('mes')">Último mes</button>
+        <button class="btn-periodo" onclick="elegirPeriodo('trimestre')">Últimos 3 meses</button>
+        <button class="btn-periodo" onclick="elegirPeriodo('custom')">Personalizado</button>
+      </div>
+      <div class="campos-custom" id="campos-custom">
+        <input type="date" id="custom-desde">
+        <span style="color:#64748b">—</span>
+        <input type="date" id="custom-hasta">
+        <button class="btn btn-primary" onclick="aplicarCustom()">Aplicar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="alerta alerta-error" id="alerta-error"></div>
+
+  <div id="contenido"><div class="card cargando">Cargando estadísticas...</div></div>
+
+</div>
+
+<script>
+// ─── Auth ──────────────────────────────────────────────────────────────────
+function getToken() {
+  const t = sessionStorage.getItem('panel_token');
+  if (!t) { window.location.href = '/panel/login.html'; return null; }
+  return t;
+}
+function getUsuario() { return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}'); }
+async function apiFetch(url, opts = {}) {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers },
+  });
+  if (res.status === 401) { sessionStorage.clear(); window.location.href = '/panel/login.html'; return null; }
+  return res;
+}
+async function cerrarSesion() {
+  try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
+  sessionStorage.clear(); window.location.href = '/panel/login.html';
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function mostrarError(msg) {
+  const el = document.getElementById('alerta-error');
+  if (msg) { el.textContent = msg; el.classList.add('visible'); }
+  else      { el.classList.remove('visible'); }
+}
+
+// Calcular rango de fechas según el período seleccionado
+function rangoFechas(periodo) {
+  const hoy   = new Date();
+  const hasta = hoy.toISOString().substring(0, 10);
+  let desde;
+  if (periodo === 'semana') {
+    const d = new Date(hoy); d.setDate(d.getDate() - 6);
+    desde = d.toISOString().substring(0, 10);
+  } else if (periodo === 'mes') {
+    const d = new Date(hoy); d.setDate(d.getDate() - 29);
+    desde = d.toISOString().substring(0, 10);
+  } else if (periodo === 'trimestre') {
+    const d = new Date(hoy); d.setDate(d.getDate() - 89);
+    desde = d.toISOString().substring(0, 10);
+  }
+  return { desde, hasta };
+}
+
+// ─── Gráfico de torta (SVG) ────────────────────────────────────────────────
+const COLORES_CANAL = { whatsapp: '#25d366', web: '#3b82f6', presencial: '#f59e0b' };
+const NOMBRES_CANAL = { whatsapp: 'WhatsApp', web: 'Web', presencial: 'Presencial' };
+
+function svgTorta(datos, radio) {
+  // datos: [{ label, valor, color }]
+  const total = datos.reduce((s, d) => s + d.valor, 0);
+  if (total === 0) return `<p class="vacio">Sin datos para el período.</p>`;
+
+  const cx = radio + 5, cy = radio + 5;
+  const r  = radio;
+  let angulo = -Math.PI / 2; // empezar arriba
+  let paths  = '';
+
+  datos.forEach(d => {
+    if (d.valor === 0) return;
+    const pct  = d.valor / total;
+    const ang2 = angulo + pct * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(angulo);
+    const y1 = cy + r * Math.sin(angulo);
+    const x2 = cx + r * Math.cos(ang2);
+    const y2 = cy + r * Math.sin(ang2);
+    const large = pct > 0.5 ? 1 : 0;
+    paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z"
+                    fill="${d.color}" stroke="white" stroke-width="2"/>`;
+    angulo = ang2;
+  });
+
+  const size = (radio + 5) * 2;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${paths}</svg>`;
+}
+
+// ─── Gráfico de barras (SVG) ───────────────────────────────────────────────
+function svgBarras(datos, alto, color) {
+  // datos: [{ label, valor }]
+  if (!datos || datos.length === 0) return `<p class="vacio">Sin datos para el período.</p>`;
+
+  const maxVal   = Math.max(...datos.map(d => d.valor), 1);
+  const ancho    = Math.max(datos.length * 52, 280);
+  const barW     = Math.min(38, Math.floor(ancho / datos.length) - 10);
+  const padL     = 36; const padB = 28; const padT = 12; const padR = 8;
+  const grafH    = alto - padT - padB;
+  const grafW    = ancho - padL - padR;
+  const paso     = grafW / datos.length;
+
+  let barras = '';
+  let etiqX  = '';
+  let etiqV  = '';
+
+  datos.forEach((d, i) => {
+    const h   = Math.round((d.valor / maxVal) * grafH);
+    const x   = padL + i * paso + (paso - barW) / 2;
+    const y   = padT + grafH - h;
+    barras += `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${color}" rx="3"/>`;
+    // Etiqueta eje X
+    etiqX += `<text x="${padL + i * paso + paso / 2}" y="${alto - 4}"
+                    text-anchor="middle" font-size="10" fill="#94a3b8">${esc(String(d.label))}</text>`;
+    // Valor encima de la barra (solo si hay espacio)
+    if (d.valor > 0) {
+      etiqV += `<text x="${x + barW / 2}" y="${y - 3}"
+                      text-anchor="middle" font-size="10" fill="#374151">${d.valor}</text>`;
+    }
+  });
+
+  // Línea base
+  const linea = `<line x1="${padL}" y1="${padT + grafH}" x2="${padL + grafW}" y2="${padT + grafH}"
+                        stroke="#e2e8f0" stroke-width="1"/>`;
+
+  return `<div style="overflow-x:auto">
+    <svg width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}">
+      ${linea}${barras}${etiqX}${etiqV}
+    </svg>
+  </div>`;
+}
+
+// ─── Renderizar dashboard ──────────────────────────────────────────────────
+const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const COLORES_ESTADO = {
+  agendado: '#93c5fd', presente: '#86efac', atendido: '#d1d5db', ausente: '#fca5a5', cancelado: '#e2e8f0'
+};
+const NOMBRES_ESTADO = {
+  agendado: 'Agendado', presente: 'Presente', atendido: 'Atendido', ausente: 'Ausente', cancelado: 'Cancelado'
+};
+
+function renderDashboard(data) {
+  // ── Totales por estado ──────────────────────────────────────────────────
+  const estadoMap = {};
+  (data.porEstado || []).forEach(r => { estadoMap[r.estado] = Number(r.cantidad); });
+  const totalGeneral = Object.values(estadoMap).reduce((s, v) => s + v, 0);
+
+  const filasEstado = ['agendado', 'presente', 'atendido', 'ausente', 'cancelado'].map(e => {
+    const n = estadoMap[e] || 0;
+    const pct = totalGeneral > 0 ? Math.round(n / totalGeneral * 100) : 0;
+    return `<tr>
+      <td><span class="dot" style="background:${COLORES_ESTADO[e]||'#ccc'}"></span>${NOMBRES_ESTADO[e] || e}</td>
+      <td class="num">${n}</td>
+      <td style="color:#94a3b8;text-align:right">${pct}%</td>
+    </tr>`;
+  }).join('');
+
+  // ── Torta de canal ──────────────────────────────────────────────────────
+  const canalDatos = (data.porCanal || []).map(r => ({
+    label: NOMBRES_CANAL[r.canal_origen] || r.canal_origen,
+    valor: Number(r.cantidad),
+    color: COLORES_CANAL[r.canal_origen] || '#94a3b8',
+  }));
+  const tortaHTML = svgTorta(canalDatos, 80);
+  const leyendaHTML = canalDatos.map(d =>
+    `<span class="leyenda-item"><span class="dot" style="background:${d.color}"></span>${esc(d.label)}: <strong>${d.valor}</strong></span>`
+  ).join('');
+
+  // ── Tasa de ausentismo ──────────────────────────────────────────────────
+  const tasa = data.tasaAusentismo ?? '0.0';
+
+  // ── Operadores top ──────────────────────────────────────────────────────
+  const opRows = (data.porOperador || []).length > 0
+    ? (data.porOperador || []).map((op, i) =>
+        `<tr>
+          <td class="pos">${i + 1}°</td>
+          <td>${esc(op.operador)}</td>
+          <td class="num">${op.atendidos}</td>
+        </tr>`).join('')
+    : `<tr><td colspan="3" class="vacio">Sin datos.</td></tr>`;
+
+  // ── Día de semana con más demanda ────────────────────────────────────────
+  const diasData = Array.from({ length: 7 }, (_, i) => ({
+    label: ['L','M','X','J','V','S','D'][i],
+    valor: 0,
+  }));
+  (data.porDia || []).forEach(d => { diasData[d.dia_semana].valor = Number(d.cantidad); });
+  const barrasDia = svgBarras(diasData, 130, '#1A3C4B');
+
+  // ── Evolución semanal ───────────────────────────────────────────────────
+  const semanasData = (data.evolucionSemanal || []).map(s => ({
+    label: String(s.inicio_semana || s.semana_iso).substring(5, 10), // MM-DD
+    valor: Number(s.cantidad),
+  }));
+  const barrasSemana = semanasData.length > 0
+    ? svgBarras(semanasData, 150, '#3b82f6')
+    : `<p class="vacio">Sin datos para el período.</p>`;
+
+  document.getElementById('contenido').innerHTML = `
+    <!-- Fila 1: estados + canal -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-titulo">Turnos por estado</div>
+        <table class="tabla-estados">${filasEstado}</table>
+        <div style="margin-top:.75rem;font-size:.78rem;color:#64748b">Total del período: <strong>${totalGeneral}</strong></div>
+      </div>
+      <div class="card">
+        <div class="card-titulo">Canal de origen</div>
+        <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+          ${tortaHTML}
+          <div>
+            <div class="leyenda">${leyendaHTML}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fila 2: ausentismo + operadores top -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-titulo">Tasa de ausentismo</div>
+        <div class="stat-grande">
+          <div class="stat-numero" style="color:${parseFloat(tasa) > 20 ? '#dc2626' : '#1A3C4B'}">${tasa}%</div>
+          <div class="stat-label">Ausentes / (Presentes + Ausentes + Atendidos)</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-titulo">Operadores con más turnos atendidos</div>
+        <table class="tabla-op">
+          <thead><tr>
+            <th style="font-size:.72rem;color:#64748b;padding:.4rem .5rem;border-bottom:1px solid #e2e8f0"></th>
+            <th style="font-size:.72rem;color:#64748b;padding:.4rem .5rem;border-bottom:1px solid #e2e8f0">Operador</th>
+            <th style="font-size:.72rem;color:#64748b;padding:.4rem .5rem;border-bottom:1px solid #e2e8f0;text-align:right">Atendidos</th>
+          </tr></thead>
+          <tbody>${opRows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Fila 3: día de semana -->
+    <div class="card">
+      <div class="card-titulo">Demanda por día de la semana</div>
+      ${barrasDia}
+    </div>
+
+    <!-- Fila 4: evolución semanal -->
+    <div class="card">
+      <div class="card-titulo">Evolución semanal de turnos (no cancelados)</div>
+      ${barrasSemana}
+    </div>
+  `;
+}
+
+// ─── Período ───────────────────────────────────────────────────────────────
+let periodoActual = 'mes';
+let desdeActual, hastaActual;
+
+function elegirPeriodo(p) {
+  // Actualizar botones
+  document.querySelectorAll('.btn-periodo').forEach(b => b.classList.remove('activo'));
+  event.target.classList.add('activo');
+
+  const camposCustom = document.getElementById('campos-custom');
+  if (p === 'custom') {
+    camposCustom.classList.add('visible');
+    periodoActual = 'custom';
+    return;
+  }
+  camposCustom.classList.remove('visible');
+  periodoActual = p;
+  const { desde, hasta } = rangoFechas(p);
+  desdeActual = desde; hastaActual = hasta;
+  cargar();
+}
+
+function aplicarCustom() {
+  desdeActual = document.getElementById('custom-desde').value;
+  hastaActual = document.getElementById('custom-hasta').value;
+  if (!desdeActual || !hastaActual) {
+    mostrarError('Seleccioná ambas fechas para el período personalizado.');
+    return;
+  }
+  if (desdeActual > hastaActual) {
+    mostrarError('La fecha de inicio debe ser anterior a la fecha de fin.');
+    return;
+  }
+  mostrarError('');
+  cargar();
+}
+
+async function cargar() {
+  mostrarError('');
+  document.getElementById('contenido').innerHTML = '<div class="card cargando">Cargando estadísticas...</div>';
+
+  const res = await apiFetch(`/panel/estadisticas?desde=${desdeActual}&hasta=${hastaActual}`);
+  if (!res) return;
+
+  const data = await res.json();
+  if (!res.ok) { mostrarError(data.error || 'Error al cargar estadísticas.'); return; }
+
+  renderDashboard(data);
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+(async function init() {
+  const token = getToken();
+  if (!token) return;
+
+  const usuario = getUsuario();
+
+  if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {
+    window.location.href = '/panel/agenda.html';
+    return;
+  }
+
+  const nombreEl = document.getElementById('nav-nombre');
+  nombreEl.innerHTML = esc(usuario.nombre);
+  const labelRol = usuario.rol === 'sistemas' ? 'Sistemas' : 'Encargado';
+  nombreEl.innerHTML += ` <span class="badge-rol">${labelRol}</span>`;
+
+  ['nav-auditoria', 'nav-usuarios', 'nav-servicios'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = '';
+  });
+
+  const { desde, hasta } = rangoFechas('mes');
+  desdeActual = desde; hastaActual = hasta;
+  await cargar();
+})();
+</script>
+</body>
+</html>

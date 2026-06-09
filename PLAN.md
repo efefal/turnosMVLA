@@ -637,7 +637,7 @@ operador específico no trabaja.
 
 ### Features nuevas — Sesión 2
 
-#### N1 — Pantalla de auditoría en el panel ⬜
+#### N1 — Pantalla de auditoría en el panel ✅
 Tabla paginada con filtros por rango de fechas, usuario y tipo de acción (`accion` del ENUM),
 mostrando qué entidad fue afectada, quién realizó la acción y cuándo.
 
@@ -647,7 +647,7 @@ mostrando qué entidad fue afectada, quién realizó la acción y cuándo.
 
 ---
 
-#### N2 — Dashboard de estadísticas en el panel ⬜
+#### N2 — Dashboard de estadísticas en el panel ✅
 Métricas clave para el encargado:
 - Turnos por canal de origen (whatsapp / web / presencial) — últimos 30 días
 - Tasa de ausentismo (`ausente / (agendado + presente + ausente + atendido)`)
@@ -661,7 +661,7 @@ Métricas clave para el encargado:
 
 ---
 
-#### N3 — ABM de usuarios en el panel ⬜
+#### N3 — ABM de usuarios en el panel ✅
 Crear, editar y desactivar operadores y encargados sin usar los scripts CLI.
 Reemplaza el uso de `admin/crear-usuario.js` en producción.
 
@@ -678,7 +678,7 @@ Operaciones requeridas:
 
 ---
 
-#### N4 — ABM de servicios en el panel ⬜
+#### N4 — ABM de servicios en el panel ✅
 Crear, editar y desactivar servicios sin usar los scripts CLI.
 Reemplaza el uso de `admin/crear-servicio.js` en producción.
 
