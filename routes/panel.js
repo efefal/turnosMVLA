@@ -224,6 +224,76 @@ router.get('/agenda', async (req, res) => {
 
 
 // =============================================================================
+// CALENDARIO — feriados y bloqueos (para agenda.html)
+// =============================================================================
+
+// GET /panel/feriados-bloqueos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+// Devuelve los días con feriado o bloqueo de oficina de día completo en el rango.
+// Las vistas semana y mes de agenda.html lo usan para marcar visualmente esos
+// días con un color de fondo diferente antes de mostrar los turnos.
+//
+// Solo devuelve bloqueos de las áreas del usuario: un operador de Licencias
+// no ve los bloqueos de Tribunal de Faltas, que no le afectan.
+router.get('/feriados-bloqueos', async (req, res) => {
+  const { desde, hasta } = req.query;
+
+  if (!desde || !hasta) {
+    return res.status(400).json({ error: 'Los parámetros desde y hasta son obligatorios.' });
+  }
+
+  try {
+    // Feriados en el rango (incluye nacionales y locales de la tabla feriados)
+    const [feriados] = await pool.query(
+      'SELECT fecha FROM feriados WHERE fecha BETWEEN ? AND ? ORDER BY fecha',
+      [desde, hasta]
+    );
+
+    // Bloqueos de oficina de día completo (hora_inicio IS NULL) para las áreas del usuario.
+    // Los bloqueos de hora específica no se incluyen porque solo afectan un slot,
+    // no todo el día.
+    const { areaIds } = req.usuario;
+    let bloqueados = [];
+
+    if (areaIds.length > 0) {
+      const placeholders = areaIds.map(() => '?').join(',');
+      const [bloqueos] = await pool.query(`
+        SELECT fecha_inicio, fecha_fin
+        FROM bloqueos
+        WHERE tipo        = 'oficina'
+          AND hora_inicio IS NULL
+          AND area_id     IN (${placeholders})
+          AND fecha_inicio <= ?
+          AND fecha_fin    >= ?
+      `, [...areaIds, hasta, desde]);
+
+      // Los bloqueos tienen fecha_inicio y fecha_fin: expandimos cada rango
+      // en días individuales para que el frontend pueda hacer una simple búsqueda en un Set.
+      bloqueos.forEach(b => {
+        const curDate = new Date(b.fecha_inicio.substring(0, 10) + 'T12:00:00');
+        const finDate = new Date(b.fecha_fin.substring(0, 10)   + 'T12:00:00');
+        while (curDate <= finDate) {
+          bloqueados.push(curDate.toISOString().substring(0, 10));
+          curDate.setDate(curDate.getDate() + 1);
+        }
+      });
+
+      // Deduplicar por si dos bloqueos distintos se superponen en el mismo día
+      bloqueados = [...new Set(bloqueados)].sort();
+    }
+
+    res.json({
+      feriados:  feriados.map(f => f.fecha.substring(0, 10)),
+      bloqueados,
+    });
+
+  } catch (err) {
+    logger.error('[panel] Error al obtener feriados/bloqueos del calendario:', err);
+    res.status(500).json({ error: 'No se pudieron obtener los días especiales.' });
+  }
+});
+
+
+// =============================================================================
 // TURNOS — modificar estado
 // =============================================================================
 

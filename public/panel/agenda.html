@@ -155,6 +155,29 @@
       padding: 0.1rem 0.45rem; align-self: flex-start;
     }
 
+    /* ── Indicadores de feriado y bloqueo (vistas semana y mes) ──── */
+    /* Se aplican sobre las celdas de los días afectados para que el operador
+       identifique de un vistazo qué días no tienen atención normal. */
+
+    /* Vista SEMANA — celdas de los días feriado/bloqueado */
+    .cel-feriado   { background: #fef2f2 !important; }
+    .cel-bloqueado { background: #fef3c7 !important; }
+
+    /* Vista SEMANA — texto pequeño en el encabezado de la columna */
+    .encabezado-feriado-tag   { font-size: 0.65rem; color: #dc2626; display: block; font-weight: 500; }
+    .encabezado-bloqueado-tag { font-size: 0.65rem; color: #d97706; display: block; font-weight: 500; }
+
+    /* Vista MES — celdas de los días feriado/bloqueado */
+    .cal-feriado              { background: #fef2f2 !important; border-color: #fecaca !important; }
+    .cal-feriado .cal-num     { color: #dc2626 !important; }
+    .cal-bloqueado            { background: #fef3c7 !important; border-color: #fde68a !important; }
+    .cal-bloqueado .cal-num   { color: #d97706 !important; }
+
+    /* Etiqueta pequeña dentro de la celda del mes */
+    .cal-indicador           { font-size: 0.62rem; font-weight: 600; line-height: 1; }
+    .cal-indicador.feriado   { color: #dc2626; }
+    .cal-indicador.bloqueado { color: #d97706; }
+
     /* Misc */
     .cargando { text-align: center; color: #94a3b8; padding: 3rem; font-style: italic; }
     .vacio { text-align: center; color: #94a3b8; padding: 3rem; }
@@ -286,6 +309,12 @@ let fechaActual    = new Date().toISOString().substring(0, 10);
 let vista          = 'dia';    // 'dia' | 'semana' | 'mes'
 let turnosActuales = [];
 let turnoACancelar = null;
+
+// Días especiales para las vistas semana y mes.
+// Se precarga junto con los turnos para que el renderizado los tenga disponibles.
+//   feriados:  Set de strings "YYYY-MM-DD" con feriados del rango visible.
+//   bloqueados: Set de strings "YYYY-MM-DD" con bloqueos de oficina de día completo.
+let diasEspeciales = { feriados: new Set(), bloqueados: new Set() };
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 function getToken() {
@@ -560,6 +589,27 @@ async function cargarDia() {
   renderizarTablaDia(turnos);
 }
 
+// ─── Feriados y bloqueos ───────────────────────────────────────────────────
+// Precarga los días especiales del rango desde el servidor y los guarda en
+// `diasEspeciales`. Se llama en paralelo con la carga de turnos para no
+// agregar latencia perceptible al usuario.
+// Si falla (error de red, token vencido, etc.) la agenda sigue cargando
+// normalmente pero sin los indicadores de color.
+async function cargarDiasEspeciales(desde, hasta) {
+  try {
+    const res = await apiFetch(`/panel/feriados-bloqueos?desde=${desde}&hasta=${hasta}`);
+    if (!res || !res.ok) return;
+    const data = await res.json();
+    diasEspeciales = {
+      feriados:  new Set(data.feriados  || []),
+      bloqueados: new Set(data.bloqueados || []),
+    };
+  } catch {
+    // Falla silenciosa: la agenda carga igual, sin los indicadores visuales
+    diasEspeciales = { feriados: new Set(), bloqueados: new Set() };
+  }
+}
+
 // ─── Vista SEMANA ──────────────────────────────────────────────────────────
 function renderizarSemana(turnos, dias) {
   const lunes   = dias[0];
@@ -577,31 +627,63 @@ function renderizarSemana(turnos, dias) {
   // Slots de tiempo para las filas (08:00 a 17:30)
   const slots = generarSlotsTiempo('08:00', '17:30');
 
-  // Encabezados de columnas (un día por columna)
+  // Encabezados de columnas (un día por columna).
+  // Si el día es feriado o tiene bloqueo de oficina, se tinta el encabezado
+  // y se agrega una etiqueta pequeña para que el operador lo identifique.
   const headerCols = dias.map((fecha, i) => {
-    const d   = parseFecha(fecha);
-    const num = d.getDate();
-    const mes = d.getMonth() + 1;
-    const esHoy = fecha === HOY;
+    const d           = parseFecha(fecha);
+    const num         = d.getDate();
+    const mes         = d.getMonth() + 1;
+    const esHoy       = fecha === HOY;
+    const esFeriado   = diasEspeciales.feriados.has(fecha);
+    // Los bloqueos solo se muestran si el día no es feriado (feriado tiene prioridad)
+    const esBloqueado = !esFeriado && diasEspeciales.bloqueados.has(fecha);
+
+    // Color de fondo del encabezado según prioridad: hoy > feriado > bloqueo > normal
+    const headerBg    = esFeriado   ? 'background:#fef2f2;'
+                      : esBloqueado ? 'background:#fef3c7;'
+                      : '';
+    const headerColor = esHoy       ? 'color:#1A3C4B;'
+                      : esFeriado   ? 'color:#dc2626;'
+                      : esBloqueado ? 'color:#92400e;'
+                      : '';
+
+    // Etiqueta informativa debajo del número de día
+    const tag         = esFeriado   ? '<span class="encabezado-feriado-tag">Feriado</span>'
+                      : esBloqueado ? '<span class="encabezado-bloqueado-tag">Sin atención</span>'
+                      : '';
+
     return `
-      <th class="col-dia" style="${esHoy ? 'color:#1A3C4B' : ''}">
+      <th class="col-dia" style="${headerBg}${headerColor}">
         <span class="encabezado-dia-semana">${DIAS_CORTO[i]}</span>
         <span class="encabezado-num-semana">${num}/${String(mes).padStart(2,'0')}</span>
+        ${tag}
       </th>`;
   }).join('');
 
-  // Filas de tiempo
+  // Filas de tiempo.
+  // Cada celda de un día feriado o bloqueado hereda el color de fondo para que
+  // la columna completa quede tintada, no solo el encabezado.
   const filas = slots.map(slot => {
     const celdas = dias.map(fecha => {
       const turnosDia = (porFecha[fecha] || [])
         .filter(t => t.hora_inicio.substring(0, 5) === slot);
-      const esHoy = fecha === HOY;
+      const esHoy       = fecha === HOY;
+      const esFeriado   = diasEspeciales.feriados.has(fecha);
+      const esBloqueado = !esFeriado && diasEspeciales.bloqueados.has(fecha);
+
+      // Determinar la clase CSS de la celda según prioridad
+      let claseCelda = '';
+      if (esHoy)         claseCelda = 'cel-dia-hoy';
+      else if (esFeriado)  claseCelda = 'cel-feriado';
+      else if (esBloqueado) claseCelda = 'cel-bloqueado';
+
       const cards = turnosDia.map(t => `
         <div class="turno-semana badge-${t.estado}" title="${esc(t.vecino_nombre)} — ${esc(t.servicio_nombre)}">
           ${esc(t.hora_inicio.substring(0,5))} ${esc(t.vecino_nombre.split(' ')[0])}
         </div>
       `).join('');
-      return `<td${esHoy ? ' class="cel-dia-hoy"' : ''}>${cards}</td>`;
+      return `<td${claseCelda ? ` class="${claseCelda}"` : ''}>${cards}</td>`;
     }).join('');
     return `<tr><td class="cel-hora">${slot}</td>${celdas}</tr>`;
   }).join('');
@@ -634,7 +716,12 @@ async function cargarSemana() {
   let url = `/panel/agenda/rango?desde=${lunes}&hasta=${domingo}`;
   if (operadorId) url += `&operadorId=${operadorId}`;
 
-  const res = await apiFetch(url);
+  // Cargamos los turnos y los días especiales (feriados/bloqueos) en paralelo
+  // para no agregar latencia: ambas peticiones salen al mismo tiempo.
+  const [res] = await Promise.all([
+    apiFetch(url),
+    cargarDiasEspeciales(lunes, domingo),
+  ]);
   if (!res) return;
 
   if (!res.ok) {
@@ -680,12 +767,30 @@ function renderizarMes(turnos, año, mes) {
     const esDelMes  = cur.getMonth() + 1 === mes;
     const esHoy     = fechaStr === HOY;
     const cuenta    = cuentaPorFecha[fechaStr] || 0;
-    const clases    = ['cal-dia', !esDelMes ? 'otro-mes' : '', esHoy ? 'cal-hoy' : '']
-                        .filter(Boolean).join(' ');
-    const onclick   = esDelMes ? `irADiaDesdeCalendario('${fechaStr}')` : '';
+
+    // Solo marcamos feriados/bloqueos en los días del mes visible.
+    // Los días del mes anterior/siguiente (otro-mes) quedan opacos sin indicador.
+    const esFeriado   = esDelMes && diasEspeciales.feriados.has(fechaStr);
+    const esBloqueado = esDelMes && !esFeriado && diasEspeciales.bloqueados.has(fechaStr);
+
+    const clases = [
+      'cal-dia',
+      !esDelMes   ? 'otro-mes'     : '',
+      esHoy       ? 'cal-hoy'      : '',
+      esFeriado   ? 'cal-feriado'  : '',
+      esBloqueado ? 'cal-bloqueado': '',
+    ].filter(Boolean).join(' ');
+
+    // Etiqueta pequeña dentro de la celda que identifica el motivo del color
+    const indicador = esFeriado   ? '<span class="cal-indicador feriado">Feriado</span>'
+                    : esBloqueado ? '<span class="cal-indicador bloqueado">Sin atención</span>'
+                    : '';
+
+    const onclick = esDelMes ? `irADiaDesdeCalendario('${fechaStr}')` : '';
     celdas.push(`
       <div class="${clases}" onclick="${onclick}">
         <span class="cal-num">${cur.getDate()}</span>
+        ${indicador}
         ${cuenta > 0 ? `<span class="cal-count">${cuenta}</span>` : ''}
       </div>
     `);
@@ -716,7 +821,11 @@ async function cargarMes() {
   let url = `/panel/agenda/rango?desde=${desde}&hasta=${hasta}`;
   if (operadorId) url += `&operadorId=${operadorId}`;
 
-  const res = await apiFetch(url);
+  // Igual que en cargarSemana: turnos y días especiales se piden al mismo tiempo
+  const [res] = await Promise.all([
+    apiFetch(url),
+    cargarDiasEspeciales(desde, hasta),
+  ]);
   if (!res) return;
 
   if (!res.ok) {
