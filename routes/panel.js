@@ -447,6 +447,85 @@ router.patch('/turno/:id/tomar', async (req, res) => {
 });
 
 
+// PATCH /panel/turno/:id/liberar
+// Desasigna el operador de un turno agendado, devolviéndolo al estado "sin tomar".
+// Solo puede liberar el mismo operador que lo tomó, o un encargado/sistemas del área.
+router.patch('/turno/:id/liberar', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
+
+  const id = parseInt(req.params.id, 10);
+
+  try {
+    const [rows] = await pool.query(`
+      SELECT t.id, t.operador_id, t.estado, s.area_id
+      FROM   turnos t
+      JOIN   servicios s ON t.servicio_id = s.id
+      WHERE  t.id = ?
+    `, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Turno no encontrado.' });
+    }
+
+    const turno = rows[0];
+
+    if (!tieneAccesoAlArea(req, turno.area_id)) {
+      return res.status(403).json({ error: 'Sin permiso para liberar este turno.' });
+    }
+
+    if (turno.estado !== 'agendado') {
+      return res.status(409).json({ error: 'Solo se pueden liberar turnos en estado agendado.' });
+    }
+
+    if (turno.operador_id === null) {
+      return res.status(409).json({ error: 'El turno ya está sin operador asignado.' });
+    }
+
+    // Solo el operador que lo tomó puede liberarlo, salvo encargado o sistemas
+    const esGestor = esEncargado(req) || esSistemas(req);
+    if (!esGestor && turno.operador_id !== req.usuario.id) {
+      return res.status(403).json({ error: 'Solo podés liberar turnos que vos tomaste.' });
+    }
+
+    await pool.query('UPDATE turnos SET operador_id = NULL WHERE id = ?', [id]);
+
+    await pool.query(
+      `INSERT INTO auditoria (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal, ip)
+       VALUES (?, 'turno', ?, 'modificar', ?, 'panel', ?)`,
+      [
+        req.usuario.id,
+        id,
+        JSON.stringify({ operacion: 'liberar', liberado_por: req.usuario.nombre }),
+        req.ip || null,
+      ]
+    );
+
+    const [actualizados] = await pool.query(`
+      SELECT
+        t.id, t.fecha, t.hora_inicio, t.hora_fin, t.estado, t.canal_origen,
+        v.dni        AS vecino_dni,
+        v.nombre     AS vecino_nombre,
+        s.id         AS servicio_id,
+        s.nombre     AS servicio_nombre,
+        u.id         AS operador_id,
+        u.nombre     AS operador_nombre
+      FROM   turnos    t
+      JOIN   vecinos   v ON t.vecino_id   = v.id
+      JOIN   servicios s ON t.servicio_id = s.id
+      LEFT JOIN usuarios u ON t.operador_id = u.id
+      WHERE  t.id = ?
+    `, [id]);
+
+    logger.info(`[panel] Turno ${id} liberado por ${req.usuario.nombre}`);
+    res.json(actualizados[0]);
+
+  } catch (err) {
+    logger.error('[panel] Error al liberar turno:', err);
+    res.status(500).json({ error: 'No se pudo liberar el turno.' });
+  }
+});
+
+
 // =============================================================================
 // TURNOS — modificar estado
 // =============================================================================

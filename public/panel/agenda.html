@@ -566,26 +566,25 @@ function renderizarAcciones(t) {
     return '<span style="color:#94a3b8;font-size:.8rem">—</span>';
   }
 
-  // Turno sin operador tomado → solo se puede "Tomar" (asignar al que atiende)
-  // Los botones de estado aparecen DESPUÉS de que un operador tomó el turno.
-  if (!t.operador_id) {
+  // Turno sin tomar (agendado, operador_id = null) → Tomar + Cancelar
+  if (!t.operador_id && t.estado === 'agendado') {
     return `<div class="td-acciones">
       <button class="btn btn-primary" onclick="tomarTurno(${t.id})">Tomar</button>
+      <button class="btn btn-danger"  onclick="abrirCancelar(${t.id})">Cancelar</button>
     </div>`;
   }
 
-  // Turno ya tomado → mostrar botones de estado según la etapa actual
-  const btns = [];
-  if (t.estado === 'agendado') {
-    btns.push(`<button class="btn btn-success" onclick="cambiarEstado(${t.id},'presente')">Presente</button>`);
-    btns.push(`<button class="btn btn-warning" onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>`);
-    btns.push(`<button class="btn btn-danger"  onclick="abrirCancelar(${t.id})">Cancelar</button>`);
-  } else if (t.estado === 'presente') {
-    btns.push(`<button class="btn btn-ghost"   onclick="cambiarEstado(${t.id},'atendido')">Atendido</button>`);
-    btns.push(`<button class="btn btn-warning" onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>`);
+  // Turno tomado (agendado, operador asignado) → Presente + Ausente + Liberar
+  if (t.operador_id && t.estado === 'agendado') {
+    return `<div class="td-acciones">
+      <button class="btn btn-success" onclick="cambiarEstado(${t.id},'presente')">Presente</button>
+      <button class="btn btn-warning" onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>
+      <button class="btn btn-ghost"   onclick="liberarTurno(${t.id})">Liberar</button>
+    </div>`;
   }
-  if (!btns.length) return '<span style="color:#94a3b8;font-size:.8rem">—</span>';
-  return `<div class="td-acciones">${btns.join('')}</div>`;
+
+  // Estados finales o intermedios sin acciones disponibles
+  return '<span style="color:#94a3b8;font-size:.8rem">—</span>';
 }
 
 function renderizarTablaDia(turnos) {
@@ -1001,7 +1000,23 @@ async function tomarTurno(id) {
     return;
   }
   mostrarAlerta('ok', `Turno tomado por ${esc(data.operador_nombre)}.`);
-  // Recargar la vista para que aparezcan los botones Presente/Ausente/Cancelar
+  // Recargar la vista para que aparezcan los botones Presente/Ausente/Liberar
+  cargar();
+}
+
+// ─── Liberar turno ─────────────────────────────────────────────────────────
+// El operador (o un encargado) libera el turno: vuelve a quedar sin asignar.
+async function liberarTurno(id) {
+  mostrarAlerta(null);
+  const res = await apiFetch(`/panel/turno/${id}/liberar`, { method: 'PATCH' });
+  if (!res) return;
+  const data = await res.json();
+  if (!res.ok) {
+    mostrarAlerta('error', data.error || 'No se pudo liberar el turno.');
+    return;
+  }
+  mostrarAlerta('ok', 'Turno liberado. Quedó disponible para ser tomado.');
+  // Recargar la vista para mostrar el badge "Sin tomar" y botones Tomar/Cancelar
   cargar();
 }
 
