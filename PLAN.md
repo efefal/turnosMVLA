@@ -756,3 +756,59 @@ quedaba en `NULL` porque `crearCita()` no recibía el ID del empleado logueado.
 `crearCita()` usa ese ID en el INSERT de auditoría en lugar de `NULL`.
 
 **Archivos**: `motor.js`, `routes/panel.js`
+
+---
+
+### Correcciones de operación — Sesión 4 (2026-06-10)
+
+#### C3 — Operador ve turnos sin tomar de su área ✅
+
+**Problema**: el filtro de agenda para el rol `operador` usaba `operador_id = usuarioId`,
+lo que excluía los turnos con `operador_id = NULL`. El operador no veía los turnos sin
+tomar de su área y no podía tomarlos desde la agenda.
+
+**Solución**: en `GET /panel/agenda` y `GET /panel/agenda/rango`, el filtro del rol operador
+cambia de `t.operador_id = ?` a `(t.operador_id = ? OR t.operador_id IS NULL)`.
+El filtro de área (`s.area_id IN (...)`) ya aplicado antes asegura que el operador solo
+vea los turnos sin tomar de su propio área.
+
+**Archivos**: `routes/panel.js`
+
+---
+
+#### C4 — Botón Liberar turno y redefinición de acciones por estado ✅
+
+**Problema**: faltaba un mecanismo para que un operador pudiera desasignarse de un turno
+que tomó por error, o para que un encargado lo reasigne.
+
+**Solución**:
+
+`renderizarAcciones()` en `agenda.html` redefinida con tres estados excluyentes:
+- Sin tomar (`operador_id = null`, agendado): **Tomar** + **Cancelar**
+- Tomado (`operador_id` asignado, agendado): **Presente** + **Ausente** + **Liberar**
+- Cualquier otro estado: sin botones
+
+Nueva función `liberarTurno(id)` que llama a `PATCH /panel/turno/:id/liberar` y recarga la vista.
+
+Nuevo endpoint `PATCH /panel/turno/:id/liberar` en `panel.js`:
+- Solo el operador que tomó el turno puede liberarlo; encargado/sistemas pueden liberar cualquiera de su área.
+- `UPDATE turnos SET operador_id = NULL WHERE id = ?`
+- Auditoría con `operacion: 'liberar', liberado_por: nombre`.
+- Devuelve el turno actualizado (igual que `/tomar`).
+
+**Archivos**: `routes/panel.js`, `public/panel/agenda.html`
+
+---
+
+#### C5 — Cancelación de turno abierta a cualquier operador del área ✅
+
+**Problema**: `DELETE /panel/turno/:id` verificaba `operador_id = req.usuario.id`, lo que
+impedía cancelar un turno tomado por otro operador o uno sin tomar en el que el operador
+logueado no era el asignado.
+
+**Solución**: eliminada la verificación restrictiva. Ahora cualquier operador, encargado o
+sistemas que pertenezca al área del servicio (`tieneAccesoAlArea`) puede cancelar cualquier
+turno agendado de esa área, sin importar si tiene o no operador asignado. La auditoría
+registra `cancelado_por` y `motivo` en todos los casos.
+
+**Archivos**: `routes/panel.js`
