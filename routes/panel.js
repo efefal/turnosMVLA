@@ -647,10 +647,6 @@ router.delete('/turno/:id', async (req, res) => {
       return res.status(403).json({ error: 'Sin permiso para cancelar este turno.' });
     }
 
-    if (!esEncargado(req) && turno.operador_id !== req.usuario.id) {
-      return res.status(403).json({ error: 'Solo podés cancelar tus propios turnos.' });
-    }
-
     const motivoTrim = motivo.trim();
 
     // Transacción para que el UPDATE y la auditoría sean atómicos.
