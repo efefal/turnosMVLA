@@ -151,10 +151,10 @@ router.get('/agenda/rango', async (req, res) => {
       params.push(...areaIds);
     }
 
-    // Operador: solo sus propios turnos.
+    // Operador: sus propios turnos + los sin tomar de su área (para poder tomarlos).
     // Encargado, directivo y sistemas: todos los del área, con filtro opcional por operador.
     if (req.usuario.rol === 'operador') {
-      condiciones.push('t.operador_id = ?');
+      condiciones.push('(t.operador_id = ? OR t.operador_id IS NULL)');
       params.push(req.usuario.id);
     } else if (operadorId) {
       condiciones.push('t.operador_id = ?');
@@ -208,10 +208,10 @@ router.get('/agenda', async (req, res) => {
       params.push(...areaIds);
     }
 
-    // Operador → solo sus propios turnos (incluye turnos sin operador asignado aún)
-    // Encargado, directivo y sistemas → todos los del área, con filtro opcional por operador
+    // Operador → sus propios turnos + los sin tomar de su área (para poder tomarlos).
+    // Encargado, directivo y sistemas → todos los del área, con filtro opcional por operador.
     if (req.usuario.rol === 'operador') {
-      condiciones.push('t.operador_id = ?');
+      condiciones.push('(t.operador_id = ? OR t.operador_id IS NULL)');
       params.push(req.usuario.id);
     } else if (operadorId) {
       condiciones.push('t.operador_id = ?');
