@@ -292,9 +292,16 @@ async function obtenerDisponibilidadServicio(serviceId, fecha) {
   // --- PASO 2: Operadores con horario para este servicio este día + datos del servicio ---
   const [[operadoresHorarios], [servicioRows]] = await Promise.all([
     db.query(
+      // Solo incluir operadores con atiende_turnos = TRUE en el área del servicio.
+      // Los encargados pueden tener horarios configurados pero no ocupan slots —
+      // atiende_turnos = FALSE los excluye del cálculo de disponibilidad.
       `SELECT h.usuario_id AS id, h.hora_inicio, h.hora_fin
        FROM horarios h
-       INNER JOIN usuarios u ON u.id = h.usuario_id AND u.activo = TRUE
+       INNER JOIN usuarios u  ON u.id = h.usuario_id AND u.activo = TRUE
+       INNER JOIN servicios s ON s.id = h.servicio_id
+       INNER JOIN usuario_areas ua ON ua.usuario_id = h.usuario_id
+                                   AND ua.area_id = s.area_id
+                                   AND ua.atiende_turnos = TRUE
        WHERE h.servicio_id = ? AND h.dia_semana = ? AND h.activo = TRUE
        ORDER BY h.usuario_id`,
       [serviceId, diaSemanaDB]

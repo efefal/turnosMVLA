@@ -110,9 +110,12 @@ async function main() {
     );
     const usuarioId = insertUsuario.insertId;
 
+    // Los operadores atienden turnos y ocupan slots de disponibilidad.
+    // Los encargados administran pero no atienden — atiende_turnos = FALSE por defecto.
+    const atiendeT = args.rol === 'operador' ? 1 : 0;
     await conn.query(
-      'INSERT INTO usuario_areas (usuario_id, area_id, rol) VALUES (?, ?, ?)',
-      [usuarioId, areaId, args.rol]
+      'INSERT INTO usuario_areas (usuario_id, area_id, rol, atiende_turnos) VALUES (?, ?, ?, ?)',
+      [usuarioId, areaId, args.rol, atiendeT]
     );
 
     // Registrar en auditoría

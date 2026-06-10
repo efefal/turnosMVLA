@@ -36,7 +36,9 @@
     .btn-primary { background: #1A3C4B; color: white; }
     .btn-ghost   { background: white; color: #374151; border: 1px solid #d1d5db; }
     .btn-danger  { background: #dc2626; color: white; }
+    .btn-success { background: #16a34a; color: white; }
     .btn-sm      { padding: 0.25rem 0.6rem; font-size: 0.75rem; }
+    .btn-xs      { padding: 0.18rem 0.45rem; font-size: 0.72rem; }
 
     /* Alerta */
     .alerta { padding: 0.7rem 1rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
@@ -55,9 +57,6 @@
 
     /* Badges */
     .badge { display: inline-block; padding: 0.18rem 0.55rem; border-radius: 99px; font-size: 0.72rem; font-weight: 600; }
-    .badge-operador  { background: #dbeafe; color: #1e40af; }
-    .badge-encargado { background: #fef3c7; color: #92400e; }
-    .badge-sistemas  { background: #ede9fe; color: #6d28d9; }
     .badge-activo    { background: #dcfce7; color: #166534; }
     .badge-inactivo  { background: #fee2e2; color: #b91c1c; }
 
@@ -65,22 +64,69 @@
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
     @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
     .form-grupo { display: flex; flex-direction: column; gap: 0.3rem; }
+    .form-grupo.full { grid-column: 1 / -1; }
     .form-grupo label { font-size: 0.82rem; font-weight: 500; color: #374151; }
     .form-grupo input, .form-grupo select { padding: 0.4rem 0.65rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: white; }
     .form-grupo input:focus, .form-grupo select:focus { outline: none; border-color: #1A3C4B; box-shadow: 0 0 0 2px rgba(26,60,75,.1); }
     .form-pie { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
     .form-hint { font-size: 0.78rem; color: #64748b; margin-top: 0.25rem; }
+    .form-seccion-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+
+    /* B2+B3: Checkboxes de área */
+    .area-check-lista { display: flex; flex-direction: column; gap: 0.35rem; }
+    .area-check-item {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.45rem 0.65rem; border: 1px solid #e2e8f0; border-radius: 6px;
+      cursor: pointer; transition: background 0.1s; user-select: none;
+    }
+    .area-check-item:hover { background: #f8fafc; }
+    .area-check-item.checked { background: #f0f9ff; border-color: #bae6fd; }
+    .area-check-item input[type="checkbox"] { cursor: pointer; accent-color: #1A3C4B; flex-shrink: 0; }
+    .area-check-nombre { flex: 1; font-size: 0.875rem; color: #1e293b; }
+    .atiende-turnos-group {
+      display: none; align-items: center; gap: 0.3rem;
+      font-size: 0.75rem; color: #64748b; white-space: nowrap;
+    }
+    .atiende-turnos-group.visible { display: flex; }
+    .atiende-turnos-group input[type="checkbox"] { accent-color: #16a34a; }
 
     /* Modal */
-    .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; overflow-y: auto; }
     .modal-fondo.abierto { display: flex; }
-    .modal-caja { background: white; border-radius: 10px; padding: 1.5rem; max-width: 480px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+    .modal-caja { background: white; border-radius: 10px; padding: 1.5rem; max-width: 600px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.25); max-height: 90vh; overflow-y: auto; }
     .modal-caja h3 { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-size: 1rem; color: #1e293b; margin-bottom: 1rem; }
-    .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+    .modal-seccion { border-top: 1px solid #f1f5f9; padding-top: 1rem; margin-top: 1rem; }
+    .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 1rem; }
+
+    /* B4: Horarios */
+    .horarios-lista { display: flex; flex-direction: column; gap: 1rem; }
+    .horarios-servicio {}
+    .horarios-srv-nombre { font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+    .horarios-filas { display: flex; flex-direction: column; gap: 0.3rem; }
+    .horario-fila { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+    .horario-fila select, .horario-fila input[type="time"] {
+      padding: 0.3rem 0.5rem; border: 1px solid #d1d5db; border-radius: 5px;
+      font-size: 0.8rem; font-family: inherit; background: white;
+    }
+    .horario-fila select:focus, .horario-fila input[type="time"]:focus {
+      outline: none; border-color: #1A3C4B;
+    }
+    .horarios-empty { font-size: 0.8rem; color: #94a3b8; font-style: italic; margin-bottom: 0.4rem; }
+    .horarios-footer { display: flex; gap: 0.5rem; margin-top: 1rem; }
+
+    /* B9: Selector de área */
+    .area-selector { margin-bottom: 0.75rem; display: none; }
+    .area-selector.visible { display: block; }
+    .area-selector-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .area-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .area-chip { display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border: 2px solid #e2e8f0; border-radius: 99px; cursor: pointer; font-size: 0.78rem; font-weight: 500; color: #475569; background: white; transition: all 0.15s; user-select: none; }
+    .area-chip:hover { border-color: #1A3C4B; color: #1A3C4B; }
+    .area-chip.activo { border-color: #1A3C4B; background: #1A3C4B; color: white; }
 
     /* Misc */
     .cargando { text-align: center; color: #94a3b8; padding: 3rem; font-style: italic; }
     .vacio    { text-align: center; color: #94a3b8; padding: 3rem; }
+    .separador { border: none; border-top: 1px solid #f1f5f9; margin: 0.75rem 0; }
   </style>
 </head>
 <body>
@@ -115,6 +161,12 @@
       <span>Usuarios del panel</span>
       <button class="btn btn-ghost btn-sm" onclick="cargarUsuarios()">↻ Actualizar</button>
     </div>
+    <!-- B9: chips de área para filtrar la lista -->
+    <div class="area-selector" id="selector-areas-usu">
+      <div class="area-selector-titulo">Filtrar por área</div>
+      <div class="area-chips" id="chips-areas-usu"></div>
+    </div>
+
     <div class="alerta alerta-error" id="error-lista"></div>
     <div class="alerta alerta-ok"    id="ok-lista"></div>
     <div class="tabla-wrapper">
@@ -147,7 +199,7 @@
         <input type="text" id="nuevo-nombre" placeholder="Ej: Sofía Romero">
       </div>
       <div class="form-grupo">
-        <label for="nuevo-email">Email (se usa para iniciar sesión) <span style="color:#dc2626">*</span></label>
+        <label for="nuevo-email">Email (para iniciar sesión) <span style="color:#dc2626">*</span></label>
         <input type="email" id="nuevo-email" placeholder="ejemplo@municipio.gov.ar">
       </div>
       <div class="form-grupo">
@@ -156,19 +208,21 @@
         <span class="form-hint">El usuario deberá cambiarla al primer acceso.</span>
       </div>
       <div class="form-grupo">
-        <label for="nuevo-area">Área <span style="color:#dc2626">*</span></label>
-        <select id="nuevo-area">
-          <option value="">— Seleccioná un área —</option>
-        </select>
-      </div>
-      <div class="form-grupo">
         <label for="nuevo-rol">Rol <span style="color:#dc2626">*</span></label>
-        <select id="nuevo-rol">
+        <select id="nuevo-rol" onchange="onNuevoRolChange()">
           <option value="">— Seleccioná un rol —</option>
           <option value="operador">Operador</option>
           <option value="encargado">Encargado</option>
-          <!-- sistemas: solo visible para el rol sistemas -->
+          <!-- sistemas: se agrega si el usuario logueado es sistemas -->
         </select>
+        <span class="form-hint" id="hint-rol-nuevo"></span>
+      </div>
+      <!-- B2: multi-área checkboxes -->
+      <div class="form-grupo full">
+        <div class="form-seccion-titulo">Áreas asignadas <span style="color:#dc2626">*</span></div>
+        <div class="area-check-lista" id="nuevo-areas-lista">
+          <span style="color:#94a3b8;font-size:.85rem;font-style:italic">Cargando áreas...</span>
+        </div>
       </div>
     </div>
     <div class="form-pie">
@@ -181,8 +235,10 @@
 <!-- Modal de edición -->
 <div class="modal-fondo" id="modal-fondo">
   <div class="modal-caja">
-    <h3>Editar usuario</h3>
+    <h3 id="modal-titulo">Editar usuario</h3>
     <div class="alerta alerta-error" id="error-modal"></div>
+
+    <!-- Datos básicos -->
     <div class="form-grid">
       <div class="form-grupo">
         <label for="edit-nombre">Nombre completo</label>
@@ -190,10 +246,9 @@
       </div>
       <div class="form-grupo">
         <label for="edit-rol">Rol</label>
-        <select id="edit-rol">
+        <select id="edit-rol" onchange="onEditRolChange()">
           <option value="operador">Operador</option>
           <option value="encargado">Encargado</option>
-          <!-- sistemas: se agrega dinámicamente si el usuario logueado es sistemas -->
         </select>
       </div>
       <div class="form-grupo">
@@ -204,6 +259,27 @@
         </select>
       </div>
     </div>
+
+    <!-- B2+B3: Áreas con atiende_turnos -->
+    <div class="modal-seccion">
+      <div class="form-seccion-titulo">Áreas asignadas</div>
+      <div class="area-check-lista" id="edit-areas-lista">
+        <span style="color:#94a3b8;font-size:.85rem;font-style:italic">Cargando áreas...</span>
+      </div>
+    </div>
+
+    <!-- B4: Horarios de atención (visible solo si algún área tiene atiende_turnos=TRUE) -->
+    <div class="modal-seccion" id="seccion-horarios" style="display:none">
+      <div class="form-seccion-titulo" style="margin-bottom:.6rem">Horarios de atención</div>
+      <div id="horarios-lista" class="horarios-lista">
+        <span class="cargando" style="padding:1rem">Cargando horarios...</span>
+      </div>
+      <div class="alerta alerta-error" id="error-horarios"></div>
+      <div class="horarios-footer">
+        <button class="btn btn-success" onclick="guardarHorarios()">Guardar horarios</button>
+      </div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarEdicion()">Guardar cambios</button>
@@ -239,7 +315,7 @@ function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt
 
 function mostrarAlerta(idError, idOk, tipo, msg) {
   const errEl = document.getElementById(idError);
-  const okEl  = document.getElementById(idOk);
+  const okEl  = idOk ? document.getElementById(idOk) : null;
   if (errEl) errEl.classList.remove('visible');
   if (okEl)  okEl.classList.remove('visible');
   if (!msg) return;
@@ -256,13 +332,11 @@ function mostrarAlertaModal(tipo, msg) {
 
 function formatFecha(ts) {
   if (!ts) return '—';
-  // El timestamp puede venir como "2026-06-09 18:00:00" o "2026-06-09T18:00:00Z"
   const s = String(ts).replace('T', ' ').split(' ')[0];
   const [y, m, d] = s.split('-');
   return `${d}/${m}/${y}`;
 }
 
-// Badge de rol en navbar (color diferenciado)
 function rolBadgeHTML(rol) {
   const cfg = {
     operador:  { bg: '#1e40af', label: 'Operador' },
@@ -274,7 +348,6 @@ function rolBadgeHTML(rol) {
   return `<span class="badge-rol" style="background:${bg};color:white">${label}</span>`;
 }
 
-// Badge de rol en tabla de usuarios
 function badgeRol(rol) {
   const cfg = {
     operador:  { bg: '#dbeafe', color: '#1e40af', label: 'Operador' },
@@ -286,8 +359,204 @@ function badgeRol(rol) {
   return `<span class="badge" style="background:${bg};color:${color}">${esc(label)}</span>`;
 }
 
-// ─── Estado de edición ─────────────────────────────────────────────────────
-let idEditando = null;
+// ─── Estado global ─────────────────────────────────────────────────────────
+let idEditando       = null;
+let areasGlobales    = [];  // todas las áreas accesibles: [{ id, nombre }]
+let todosLosUsuarios = [];  // caché de todos los usuarios cargados (para filtro B9)
+let serviciosMap     = {};  // { servicio_id: { id, nombre } } — para el picker de horarios
+let horariosEditar   = [];  // copia editable de los horarios del usuario en edición
+
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+// ─── B9: Chips de área para la lista de usuarios ───────────────────────────
+function inicializarChipsUsuarios() {
+  const selector  = document.getElementById('selector-areas-usu');
+  const container = document.getElementById('chips-areas-usu');
+  if (areasGlobales.length <= 1) return;
+
+  selector.classList.add('visible');
+
+  const chipTodas = document.createElement('span');
+  chipTodas.className   = 'area-chip activo';
+  chipTodas.textContent = 'Todas';
+  chipTodas.dataset.id  = 'todas';
+  chipTodas.onclick = () => {
+    container.querySelectorAll('.area-chip').forEach(c => c.classList.remove('activo'));
+    chipTodas.classList.add('activo');
+    aplicarFiltroAreaUsuarios();
+  };
+  container.appendChild(chipTodas);
+
+  areasGlobales.forEach(a => {
+    const chip = document.createElement('span');
+    chip.className   = 'area-chip';
+    chip.textContent = a.nombre;
+    chip.dataset.id  = String(a.id);
+    chip.onclick = () => {
+      chipTodas.classList.remove('activo');
+      chip.classList.toggle('activo');
+      const hayActivos = container.querySelectorAll('.area-chip.activo:not([data-id="todas"])').length > 0;
+      if (!hayActivos) chipTodas.classList.add('activo');
+      aplicarFiltroAreaUsuarios();
+    };
+    container.appendChild(chip);
+  });
+}
+
+// Filtra todosLosUsuarios por las áreas activas y re-renderiza la tabla.
+function aplicarFiltroAreaUsuarios() {
+  const container = document.getElementById('chips-areas-usu');
+  let filtrados = todosLosUsuarios;
+
+  if (container && container.children.length > 0) {
+    const chipTodas = container.querySelector('[data-id="todas"]');
+    if (!chipTodas?.classList.contains('activo')) {
+      const idsActivos = new Set(
+        [...container.querySelectorAll('.area-chip.activo:not([data-id="todas"])')].map(c => Number(c.dataset.id))
+      );
+      filtrados = todosLosUsuarios.filter(u =>
+        (u.areas || []).some(a => idsActivos.has(a.area_id))
+      );
+    }
+  }
+
+  renderUsuarios(filtrados);
+}
+
+// Renderiza la tabla con el array de usuarios recibido.
+function renderUsuarios(data) {
+  const usuarioLogueado = getUsuario();
+
+  if (!data.length) {
+    document.getElementById('tbody-usuarios').innerHTML =
+      '<tr><td colspan="7" class="vacio">No hay usuarios en las áreas seleccionadas.</td></tr>';
+    return;
+  }
+
+  document.getElementById('tbody-usuarios').innerHTML = data.map(u => {
+    const areas       = (u.areas || []).map(a => esc(a.area_nombre)).join(', ') || '—';
+    const puedeEditar = usuarioLogueado.rol !== 'directivo' &&
+      (usuarioLogueado.rol === 'sistemas' || u.rol !== 'sistemas');
+
+    return `<tr>
+      <td style="font-weight:500">${esc(u.nombre)}</td>
+      <td style="color:#64748b">${esc(u.email)}</td>
+      <td>${badgeRol(u.rol)}</td>
+      <td style="color:#64748b;font-size:.8rem">${areas}</td>
+      <td><span class="badge ${u.activo ? 'badge-activo' : 'badge-inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td style="color:#64748b">${formatFecha(u.ultimo_acceso)}</td>
+      <td class="td-acciones">
+        ${puedeEditar
+          ? `<button class="btn btn-ghost btn-sm" onclick="abrirModal(${u.id})">Editar</button>`
+          : '<span style="color:#94a3b8;font-size:.78rem">Sin permiso</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── B2+B3: Construir lista de checkboxes de área ─────────────────────────
+// containerid: id del div donde insertar los checkboxes
+// areasSeleccionadas: array de { area_id, atiende_turnos } (para modo edición)
+// rolActual: rol del usuario a crear/editar (determina si mostrar atiende_turnos)
+function construirAreaCheckboxes(containerId, areasSeleccionadas = [], rolActual = '') {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+
+  if (!areasGlobales.length) {
+    container.innerHTML = '<span style="color:#94a3b8;font-size:.85rem">No hay áreas disponibles.</span>';
+    return;
+  }
+
+  const selMap = {};
+  areasSeleccionadas.forEach(a => { selMap[a.area_id] = a; });
+
+  areasGlobales.forEach(area => {
+    const enSel  = selMap[area.id];
+    const checked = !!enSel;
+    // atiende_turnos default: TRUE para operador, FALSE para encargado/otros
+    const atiendeDefault = enSel
+      ? (enSel.atiende_turnos ? true : false)
+      : (rolActual === 'operador');
+
+    const item = document.createElement('div');
+    item.className = `area-check-item${checked ? ' checked' : ''}`;
+    item.dataset.areaId = area.id;
+    item.innerHTML = `
+      <input type="checkbox" ${checked ? 'checked' : ''} data-area-id="${area.id}">
+      <span class="area-check-nombre">${esc(area.nombre)}</span>
+      <span class="atiende-turnos-group${checked ? ' visible' : ''}" data-area-id="${area.id}">
+        <input type="checkbox" ${atiendeDefault ? 'checked' : ''} title="Atiende turnos">
+        <span>Atiende turnos</span>
+      </span>
+    `;
+
+    // Toggle del checkbox de área
+    const chkArea = item.querySelector('input[type="checkbox"][data-area-id]');
+    chkArea.addEventListener('change', () => {
+      const activo = chkArea.checked;
+      item.classList.toggle('checked', activo);
+      const atiendeGrp = item.querySelector('.atiende-turnos-group');
+      atiendeGrp.classList.toggle('visible', activo);
+      // En modo edición: verificar si debemos mostrar/ocultar sección horarios
+      if (containerId === 'edit-areas-lista') actualizarSeccionHorarios();
+    });
+
+    container.appendChild(item);
+  });
+}
+
+// Lee las áreas chequeadas del container y devuelve:
+// { areas: [ids...], atiendeAreas: [{ area_id, atiende_turnos }] }
+function leerAreasSeleccionadas(containerId) {
+  const container = document.getElementById(containerId);
+  const areas = [], atiendeAreas = [];
+  container.querySelectorAll('.area-check-item').forEach(item => {
+    const chk = item.querySelector('input[type="checkbox"][data-area-id]');
+    if (!chk.checked) return;
+    const areaId = parseInt(item.dataset.areaId, 10);
+    areas.push(areaId);
+    const atiendeChk = item.querySelector('.atiende-turnos-group input[type="checkbox"]');
+    atiendeAreas.push({ area_id: areaId, atiende_turnos: atiendeChk?.checked ?? false });
+  });
+  return { areas, atiendeAreas };
+}
+
+// ─── Evento: cambio de rol en el formulario de nuevo usuario ───────────────
+function onNuevoRolChange() {
+  const rol = document.getElementById('nuevo-rol').value;
+  const hints = {
+    operador:  'Atiende al público. Ocupa un slot por turno. Puede bloquearse a sí mismo.',
+    encargado: 'Administra el área. No ocupa slots. Puede ver toda la agenda y crear bloqueos.',
+    sistemas:  'Acceso total al sistema. Sin restricción de área.',
+  };
+  document.getElementById('hint-rol-nuevo').textContent = hints[rol] || '';
+  // Actualizar defaults de atiende_turnos en los checkboxes
+  document.querySelectorAll('#nuevo-areas-lista .area-check-item').forEach(item => {
+    const atiendeChk = item.querySelector('.atiende-turnos-group input[type="checkbox"]');
+    if (atiendeChk) atiendeChk.checked = (rol === 'operador');
+  });
+}
+
+// Evento: cambio de rol en modal de edición
+function onEditRolChange() {
+  const rol = document.getElementById('edit-rol').value;
+  document.querySelectorAll('#edit-areas-lista .area-check-item').forEach(item => {
+    const atiendeChk = item.querySelector('.atiende-turnos-group input[type="checkbox"]');
+    if (atiendeChk) atiendeChk.checked = (rol === 'operador');
+  });
+  actualizarSeccionHorarios();
+}
+
+// ─── B4: Mostrar/ocultar sección horarios según atiende_turnos ─────────────
+function actualizarSeccionHorarios() {
+  const hayAtiende = [...document.querySelectorAll('#edit-areas-lista .area-check-item')].some(item => {
+    const chkArea   = item.querySelector('input[type="checkbox"][data-area-id]');
+    const atiendeChk = item.querySelector('.atiende-turnos-group input[type="checkbox"]');
+    return chkArea?.checked && atiendeChk?.checked;
+  });
+  document.getElementById('seccion-horarios').style.display = hayAtiende ? '' : 'none';
+  if (hayAtiende) renderHorarios();
+}
 
 // ─── Cargar usuarios ───────────────────────────────────────────────────────
 async function cargarUsuarios() {
@@ -304,71 +573,9 @@ async function cargarUsuarios() {
     return;
   }
 
-  if (!data.length) {
-    document.getElementById('tbody-usuarios').innerHTML =
-      '<tr><td colspan="7" class="vacio">No hay usuarios en tu área.</td></tr>';
-    return;
-  }
-
-  const usuario = getUsuario();
-
-  document.getElementById('tbody-usuarios').innerHTML = data.map(u => {
-    const areas     = (u.areas || []).map(a => esc(a.area_nombre)).join(', ') || '—';
-    const esSistemas = u.rol === 'sistemas';
-    // Directivo no puede editar. Encargado no puede editar usuarios sistemas.
-    const puedeEditar = usuario.rol !== 'directivo' && (usuario.rol === 'sistemas' || !esSistemas);
-
-    return `<tr>
-      <td style="font-weight:500">${esc(u.nombre)}</td>
-      <td style="color:#64748b">${esc(u.email)}</td>
-      <td>${badgeRol(u.rol)}</td>
-      <td style="color:#64748b;font-size:.8rem">${areas}</td>
-      <td><span class="badge ${u.activo ? 'badge-activo' : 'badge-inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
-      <td style="color:#64748b">${formatFecha(u.ultimo_acceso)}</td>
-      <td class="td-acciones">
-        ${puedeEditar
-          ? `<button class="btn btn-ghost btn-sm" onclick="abrirModal(${u.id}, '${esc(u.nombre)}', '${esc(u.rol)}', ${u.activo ? 1 : 0})">Editar</button>`
-          : '<span style="color:#94a3b8;font-size:.78rem">Sin permiso</span>'}
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-// ─── Cargar áreas para el select ──────────────────────────────────────────
-async function cargarAreas() {
-  // Reusar el endpoint de operadores (que devuelve áreas del usuario)
-  // pero necesitamos áreas, no operadores. Usamos /panel/servicios para obtener area_id.
-  // Como no hay endpoint de áreas, usamos una consulta inteligente:
-  // el endpoint /panel/servicios devuelve area_id en cada servicio.
-  const res = await apiFetch('/panel/servicios');
-  if (!res || !res.ok) return;
-  const servicios = await res.json();
-
-  const areas = {};
-  servicios.forEach(s => { if (s.area_id) areas[s.area_id] = s.nombre; });
-
-  const select = document.getElementById('nuevo-area');
-  select.innerHTML = '<option value="">— Seleccioná un área —</option>';
-  Object.entries(areas).forEach(([id]) => {
-    // Para el nombre del área usamos lo que sabemos del servicio — pero necesitamos el nombre del área.
-    // Como el endpoint de servicios no devuelve area_nombre, pedimos a servicios/admin.
-    // Si falla, al menos mostramos el ID.
-  });
-
-  // Usar el endpoint admin que sí devuelve area_nombre
-  const resAdmin = await apiFetch('/panel/servicios/admin');
-  if (!resAdmin || !resAdmin.ok) return;
-  const serviciosAdmin = await resAdmin.json();
-
-  const areasMap = {};
-  serviciosAdmin.forEach(s => { areasMap[s.area_id] = s.area_nombre; });
-
-  select.innerHTML = '<option value="">— Seleccioná un área —</option>';
-  Object.entries(areasMap).forEach(([id, nombre]) => {
-    const opt = document.createElement('option');
-    opt.value = id; opt.textContent = nombre;
-    select.appendChild(opt);
-  });
+  // Guardar en caché y renderizar respetando el filtro de área activo (B9)
+  todosLosUsuarios = data;
+  aplicarFiltroAreaUsuarios();
 }
 
 // ─── Crear usuario ─────────────────────────────────────────────────────────
@@ -377,54 +584,78 @@ async function crearUsuario() {
   const nombre   = document.getElementById('nuevo-nombre').value.trim();
   const email    = document.getElementById('nuevo-email').value.trim();
   const password = document.getElementById('nuevo-password').value;
-  const area_id  = document.getElementById('nuevo-area').value;
   const rol      = document.getElementById('nuevo-rol').value;
+  const { areas, atiendeAreas } = leerAreasSeleccionadas('nuevo-areas-lista');
 
-  if (!nombre || !email || !password || !area_id || !rol) {
-    mostrarAlerta('error-form', null, 'error', 'Completá todos los campos obligatorios.');
-    return;
+  if (!nombre || !email || !password || !rol) {
+    mostrarAlerta('error-form', null, 'error', 'Completá todos los campos obligatorios.'); return;
+  }
+  if (!areas.length) {
+    mostrarAlerta('error-form', null, 'error', 'Seleccioná al menos un área.'); return;
   }
   if (password.length < 6) {
-    mostrarAlerta('error-form', null, 'error', 'La contraseña debe tener al menos 6 caracteres.');
-    return;
+    mostrarAlerta('error-form', null, 'error', 'La contraseña debe tener al menos 6 caracteres.'); return;
   }
 
   const res = await apiFetch('/panel/usuarios', {
     method: 'POST',
-    body: JSON.stringify({ nombre, email, password, area_id, rol }),
+    body: JSON.stringify({ nombre, email, password, rol, areas, atiendeAreas }),
   });
   if (!res) return;
   const data = await res.json();
 
   if (!res.ok) {
-    mostrarAlerta('error-form', null, 'error', data.error || 'Error al crear el usuario.');
-    return;
+    mostrarAlerta('error-form', null, 'error', data.error || 'Error al crear el usuario.'); return;
   }
 
-  // Limpiar formulario
   document.getElementById('nuevo-nombre').value   = '';
   document.getElementById('nuevo-email').value    = '';
   document.getElementById('nuevo-password').value = '';
-  document.getElementById('nuevo-area').value     = '';
   document.getElementById('nuevo-rol').value      = '';
+  construirAreaCheckboxes('nuevo-areas-lista');
 
   mostrarAlerta('error-lista', 'ok-lista', 'ok', 'Usuario creado correctamente.');
   cargarUsuarios();
 }
 
 // ─── Modal de edición ──────────────────────────────────────────────────────
-function abrirModal(id, nombre, rol, activo) {
+// Abre el modal y carga los datos del usuario indicado.
+// Los datos (nombre, rol, activo, areas con atiende_turnos) vienen de la tabla.
+async function abrirModal(id) {
   idEditando = id;
-  document.getElementById('edit-nombre').value = nombre;
-  document.getElementById('edit-rol').value    = rol;
-  document.getElementById('edit-activo').value = activo;
   mostrarAlertaModal(null, '');
   document.getElementById('modal-fondo').classList.add('abierto');
+  document.getElementById('seccion-horarios').style.display = 'none';
+  document.getElementById('horarios-lista').innerHTML = '<span class="cargando" style="padding:1rem">Cargando...</span>';
+
+  // Buscar el usuario en la tabla renderizada
+  // Como necesitamos los datos frescos, hacemos una llamada GET
+  const res = await apiFetch('/panel/usuarios');
+  if (!res || !res.ok) { mostrarAlertaModal('error', 'No se pudo cargar el usuario.'); return; }
+  const lista = await res.json();
+  const u = lista.find(x => x.id === id);
+  if (!u) { mostrarAlertaModal('error', 'Usuario no encontrado.'); return; }
+
+  document.getElementById('modal-titulo').textContent = `Editar: ${u.nombre}`;
+  document.getElementById('edit-nombre').value = u.nombre;
+  document.getElementById('edit-rol').value    = u.rol;
+  document.getElementById('edit-activo').value = u.activo ? '1' : '0';
+
+  // B2+B3: cargar checkboxes de área con estado actual
+  construirAreaCheckboxes('edit-areas-lista', u.areas || [], u.rol);
+
+  // B4: verificar si algún área tiene atiende_turnos=TRUE → mostrar horarios
+  const hayAtiende = (u.areas || []).some(a => a.atiende_turnos);
+  if (hayAtiende) {
+    document.getElementById('seccion-horarios').style.display = '';
+    await cargarHorarios(id);
+  }
 }
 
 function cerrarModal() {
   document.getElementById('modal-fondo').classList.remove('abierto');
   idEditando = null;
+  horariosEditar = [];
 }
 
 async function guardarEdicion() {
@@ -434,24 +665,190 @@ async function guardarEdicion() {
   const nombre = document.getElementById('edit-nombre').value.trim();
   const rol    = document.getElementById('edit-rol').value;
   const activo = document.getElementById('edit-activo').value === '1';
+  const { areas, atiendeAreas } = leerAreasSeleccionadas('edit-areas-lista');
 
   if (!nombre) { mostrarAlertaModal('error', 'El nombre no puede estar vacío.'); return; }
+  if (!areas.length) { mostrarAlertaModal('error', 'El usuario debe tener al menos un área asignada.'); return; }
 
   const res = await apiFetch(`/panel/usuarios/${idEditando}`, {
     method: 'PATCH',
-    body: JSON.stringify({ nombre, rol, activo }),
+    body: JSON.stringify({ nombre, rol, activo, areas, atiendeAreas }),
   });
   if (!res) return;
   const data = await res.json();
 
-  if (!res.ok) {
-    mostrarAlertaModal('error', data.error || 'Error al guardar cambios.');
-    return;
-  }
+  if (!res.ok) { mostrarAlertaModal('error', data.error || 'Error al guardar cambios.'); return; }
 
   cerrarModal();
   mostrarAlerta('error-lista', 'ok-lista', 'ok', 'Usuario actualizado correctamente.');
   cargarUsuarios();
+}
+
+// ─── B4: Cargar horarios del usuario ──────────────────────────────────────
+async function cargarHorarios(usuarioId) {
+  const res = await apiFetch(`/panel/usuarios/${usuarioId}/horarios`);
+  if (!res || !res.ok) {
+    document.getElementById('horarios-lista').innerHTML =
+      '<span style="color:#dc2626;font-size:.85rem">No se pudieron cargar los horarios.</span>';
+    return;
+  }
+  horariosEditar = await res.json();
+  // Cargar servicios disponibles para poder agregar horarios nuevos
+  await cargarServiciosParaHorarios(usuarioId);
+  renderHorarios();
+}
+
+// Carga los servicios de las áreas del usuario (para el selector de servicio al agregar).
+async function cargarServiciosParaHorarios(usuarioId) {
+  const res = await apiFetch('/panel/servicios/admin');
+  if (!res || !res.ok) return;
+  const todos = await res.json();
+  // Filtrar por las áreas actualmente asignadas al usuario en edición
+  const { areas: areasActivas } = leerAreasSeleccionadas('edit-areas-lista');
+  serviciosMap = {};
+  todos.filter(s => areasActivas.includes(s.area_id) && s.activo).forEach(s => {
+    if (!serviciosMap[s.id]) serviciosMap[s.id] = { id: s.id, nombre: s.nombre };
+  });
+}
+
+// ─── B4: Renderizar lista de horarios ──────────────────────────────────────
+// Agrupa los horarios por servicio y muestra filas editables.
+function renderHorarios() {
+  const container = document.getElementById('horarios-lista');
+
+  // Obtener servicios disponibles (puede que el usuario no tenga ningún horario aún)
+  const todosServiciosArray = Object.values(serviciosMap);
+  // Agregar también servicios que tienen horarios existentes (por si cambió la asignación)
+  horariosEditar.forEach(h => {
+    if (!serviciosMap[h.servicio_id]) {
+      serviciosMap[h.servicio_id] = { id: h.servicio_id, nombre: h.servicio_nombre || `Servicio ${h.servicio_id}` };
+    }
+  });
+  const serviciosAMostrar = Object.values(serviciosMap);
+
+  if (!serviciosAMostrar.length) {
+    container.innerHTML = '<span class="horarios-empty">No hay servicios disponibles para configurar horarios.</span>';
+    return;
+  }
+
+  container.innerHTML = serviciosAMostrar.map(srv => {
+    const filas = horariosEditar.filter(h => h.servicio_id === srv.id);
+    const filasHtml = filas.map((h, idx) => {
+      const key = `${srv.id}-${idx}`;
+      return `
+        <div class="horario-fila" data-key="${key}" data-srv-id="${srv.id}">
+          <select class="dia-sel" data-key="${key}" onchange="onHorarioChange('${key}', 'dia', this.value)">
+            ${DIAS.map((d, i) => `<option value="${i+1}" ${h.dia_semana === i+1 ? 'selected' : ''}>${d}</option>`).join('')}
+          </select>
+          <input type="time" value="${(h.hora_inicio||'').substring(0,5)}" step="1800"
+                 onchange="onHorarioChange('${key}', 'inicio', this.value)">
+          <span style="font-size:.8rem;color:#64748b">—</span>
+          <input type="time" value="${(h.hora_fin||'').substring(0,5)}" step="1800"
+                 onchange="onHorarioChange('${key}', 'fin', this.value)">
+          <button class="btn btn-danger btn-xs" onclick="eliminarHorario('${key}')">✕</button>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="horarios-servicio">
+        <div class="horarios-srv-nombre">${esc(srv.nombre)}</div>
+        <div class="horarios-filas" id="filas-${srv.id}">
+          ${filas.length ? filasHtml : '<span class="horarios-empty">Sin horarios. Agregá uno abajo.</span>'}
+        </div>
+        <button class="btn btn-ghost btn-xs" style="margin-top:.35rem" onclick="agregarHorario(${srv.id})">+ Agregar horario</button>
+      </div>
+    `;
+  }).join('<hr class="separador">');
+}
+
+// Cuando el usuario edita un campo de una fila existente, actualiza horariosEditar
+function onHorarioChange(key, campo, valor) {
+  const [srvId, idx] = key.split('-').map(Number);
+  const filas = horariosEditar.filter(h => h.servicio_id === srvId);
+  if (!filas[idx]) return;
+  const h = filas[idx];
+  if (campo === 'dia')    h.dia_semana  = parseInt(valor, 10);
+  if (campo === 'inicio') h.hora_inicio = valor;
+  if (campo === 'fin')    h.hora_fin    = valor;
+}
+
+// Agrega una fila nueva para el servicio indicado
+function agregarHorario(servicioId) {
+  horariosEditar.push({
+    servicio_id:     servicioId,
+    servicio_nombre: serviciosMap[servicioId]?.nombre || '',
+    dia_semana:      1,
+    hora_inicio:     '08:00',
+    hora_fin:        '13:00',
+    activo:          true,
+  });
+  renderHorarios();
+}
+
+// Elimina la fila indicada (por key "servicioId-indexEnServicio")
+function eliminarHorario(key) {
+  const [srvId, idx] = key.split('-').map(Number);
+  // Encontrar el índice global en horariosEditar
+  let count = 0;
+  const idxGlobal = horariosEditar.findIndex(h => {
+    if (h.servicio_id !== srvId) return false;
+    if (count === idx) return true;
+    count++;
+    return false;
+  });
+  if (idxGlobal >= 0) horariosEditar.splice(idxGlobal, 1);
+  renderHorarios();
+}
+
+// ─── B4: Guardar horarios ──────────────────────────────────────────────────
+async function guardarHorarios() {
+  if (!idEditando) return;
+  mostrarAlerta('error-horarios', null, null, '');
+
+  // Validar que todas las filas tengan hora_inicio < hora_fin
+  for (const h of horariosEditar) {
+    if (!h.hora_inicio || !h.hora_fin) {
+      mostrarAlerta('error-horarios', null, 'error', 'Todos los horarios deben tener hora de inicio y fin.'); return;
+    }
+    if (h.hora_inicio >= h.hora_fin) {
+      mostrarAlerta('error-horarios', null, 'error', 'La hora de fin debe ser posterior a la de inicio en todos los horarios.'); return;
+    }
+  }
+
+  const payload = horariosEditar.map(h => ({
+    servicio_id: h.servicio_id,
+    dia_semana:  h.dia_semana,
+    hora_inicio: h.hora_inicio,
+    hora_fin:    h.hora_fin,
+    activo:      true,
+  }));
+
+  const btn = document.querySelector('#seccion-horarios .btn-success');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+
+  const res = await apiFetch(`/panel/usuarios/${idEditando}/horarios`, {
+    method: 'PUT',
+    body: JSON.stringify({ horarios: payload }),
+  });
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Guardar horarios'; }
+
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) {
+    mostrarAlerta('error-horarios', null, 'error', data.error || 'Error al guardar horarios.'); return;
+  }
+
+  // Recargar horarios guardados para que el render refleje IDs asignados
+  await cargarHorarios(idEditando);
+  mostrarAlertaModal('ok', '');
+  // Mostrar ok inline en la sección horarios
+  const errEl = document.getElementById('error-horarios');
+  errEl.textContent = 'Horarios guardados correctamente.';
+  errEl.className = 'alerta alerta-ok visible';
+  setTimeout(() => { errEl.classList.remove('visible'); errEl.className = 'alerta alerta-error'; }, 3000);
 }
 
 // ─── Init ──────────────────────────────────────────────────────────────────
@@ -462,8 +859,7 @@ async function guardarEdicion() {
   const usuario = getUsuario();
 
   if (!['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
-    window.location.href = '/panel/agenda.html';
-    return;
+    window.location.href = '/panel/agenda.html'; return;
   }
 
   const nombreEl = document.getElementById('nav-nombre');
@@ -474,29 +870,34 @@ async function guardarEdicion() {
     if (el) el.style.display = '';
   });
 
-  // Directivo = solo lectura: ocultar el formulario de nuevo usuario
+  // Directivo = solo lectura
   if (usuario.rol === 'directivo') {
     document.getElementById('card-nuevo-usuario').style.display = 'none';
   }
 
-  // Si el usuario logueado es sistemas, agregar la opción "sistemas" al select de rol
+  // Sistemas puede asignar rol sistemas
   if (usuario.rol === 'sistemas') {
-    const selNuevo = document.getElementById('nuevo-rol');
-    const optSist  = document.createElement('option');
-    optSist.value = 'sistemas'; optSist.textContent = 'Sistemas';
-    selNuevo.appendChild(optSist);
-
-    const selEdit = document.getElementById('edit-rol');
-    const optSist2 = document.createElement('option');
-    optSist2.value = 'sistemas'; optSist2.textContent = 'Sistemas';
-    selEdit.appendChild(optSist2);
+    [document.getElementById('nuevo-rol'), document.getElementById('edit-rol')].forEach(sel => {
+      if (!sel) return;
+      const opt = document.createElement('option');
+      opt.value = 'sistemas'; opt.textContent = 'Sistemas';
+      sel.appendChild(opt);
+    });
   }
 
   document.getElementById('modal-fondo').addEventListener('click', e => {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
   });
 
-  await Promise.all([cargarUsuarios(), cargarAreas()]);
+  // Cargar áreas accesibles (B2: checkboxes en formulario; B9: chips filtro de lista)
+  const resAreas = await apiFetch('/panel/areas');
+  if (resAreas && resAreas.ok) {
+    areasGlobales = await resAreas.json(); // [{ id, nombre }]
+  }
+
+  construirAreaCheckboxes('nuevo-areas-lista');
+  inicializarChipsUsuarios(); // B9: chips visibles si hay >1 área
+  await cargarUsuarios();
 })();
 </script>
 </body>

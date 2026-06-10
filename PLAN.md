@@ -812,3 +812,149 @@ turno agendado de esa área, sin importar si tiene o no operador asignado. La au
 registra `cancelado_por` y `motivo` en todos los casos.
 
 **Archivos**: `routes/panel.js`
+
+---
+
+### Multi-área y horarios de operadores — Sesión B (2026-06-10)
+
+#### B1 — Bypass de filtro de área para sistemas/directivo ✅
+
+**Problema**: `GET /panel/agenda` y `GET /panel/agenda/rango` siempre filtraban por las áreas
+del usuario logueado. Los roles `sistemas` y `directivo` necesitan ver todos los turnos sin
+importar el área.
+
+**Solución**: `resolverAreaIds(req, areasQuery)` devuelve `null` para sistemas/directivo
+(sin filtro) y el array de áreas del usuario para el resto. Los endpoints aplican el filtro
+de área solo cuando `resolverAreaIds` no devuelve `null`.
+
+**Archivos**: `routes/panel.js`
+
+---
+
+#### B2 — Múltiples áreas por usuario (checkboxes en lugar de dropdown) ✅
+
+**Problema**: un usuario solo podía pertenecer a un área. Los operadores que atienden en
+varias ventanillas no podían representarse con el modelo anterior (un área por usuario).
+
+**Solución**:
+- `POST /panel/usuarios` y `PATCH /panel/usuarios/:id` aceptan `areas` como array de IDs.
+- `GET /panel/usuarios` devuelve `areas` como array de objetos `{ area_id, area_nombre, rol, atiende_turnos }`.
+- `usuarios.html`: sección "Áreas asignadas" con checkboxes (una fila por área existente)
+  en lugar del dropdown de área única.
+
+**Archivos**: `routes/panel.js`, `public/panel/usuarios.html`
+
+---
+
+#### B3 — Campo `atiende_turnos` por área ✅
+
+**Problema**: no existía distinción entre un operador que atiende vecinos en ventanilla y
+un encargado de área que tiene acceso de gestión pero no genera slots de disponibilidad.
+
+**Solución**:
+- `ALTER TABLE usuario_areas ADD COLUMN atiende_turnos BOOLEAN NOT NULL DEFAULT FALSE`
+- `motor.js`: `obtenerDisponibilidadServicio()` filtra por `atiende_turnos = TRUE` para
+  contar los operadores que generan oferta de slots.
+- `usuarios.html`: sub-checkbox "Atiende turnos" visible por cada área marcada en B2.
+
+**Nota de diseño (B8)**: N operadores con `atiende_turnos = TRUE` asignados a un servicio
+= N slots simultáneos disponibles en cada franja horaria. Esto es el comportamiento correcto
+por diseño: cada operador ocupa una ventanilla distinta. No es un bug ni requiere cambio.
+
+**Archivos**: `motor.js`, `routes/panel.js`, `public/panel/usuarios.html`, `db/motor_turnos_mvla.sql`
+
+---
+
+#### B4 — Horarios de atención por usuario ✅
+
+**Problema**: no existía forma de configurar en qué días y franjas horarias atiende cada
+operador. El motor usaba disponibilidad genérica del servicio sin considerar ausencias
+planificadas por día de semana.
+
+**Solución**:
+- Tabla `horarios`: `usuario_id, servicio_id, dia_semana (1=lunes..7=domingo), hora_inicio, hora_fin, activo`.
+- `GET /panel/usuarios/:id/horarios` — devuelve horarios del usuario.
+- `PUT /panel/usuarios/:id/horarios` — reemplaza todos los horarios del usuario (delete + insert).
+- `usuarios.html`: sección "Horarios de atención" visible cuando al menos un área del usuario
+  tiene `atiende_turnos = TRUE`. Grilla por servicio con filas editables de día/hora.
+
+**Archivos**: `routes/panel.js`, `public/panel/usuarios.html`
+
+---
+
+#### B5 — Selector de área en bloqueos para usuarios multi-área ✅
+
+**Problema**: el formulario de alta de bloqueo en `bloqueos.html` no tenía selector de área,
+lo que impedía a un usuario con varias áreas elegir a qué área pertenece el bloqueo.
+
+**Solución**:
+- `GET /panel/operadores` acepta `?areaId=N` para filtrar operadores por área.
+- En el formulario de nuevo bloqueo, el selector de área aparece antes del selector de
+  operador. Al cambiar el área, el dropdown de operadores se recarga con `cargarOperadoresPorArea()`.
+- Para sistemas y usuarios con múltiples áreas, el selector de área del formulario es visible.
+
+**Archivos**: `routes/panel.js`, `public/panel/bloqueos.html`
+
+---
+
+#### B6 — Campo `descripcion` en auditoría ✅
+
+**Problema**: la tabla de auditoría mostraba `entidad` e `entidad_id` pero no describía
+de forma legible qué objeto fue afectado (p.ej. "Turno #42 — Juan Pérez, 10:00").
+
+**Solución**:
+- `GET /panel/auditoria` enriquece cada registro con el campo `descripcion` generado
+  a partir de la entidad y su ID (consulta JOIN según el tipo de entidad).
+- `auditoria.html`: columna "Referencia" con el texto de `descripcion`.
+
+**Archivos**: `routes/panel.js`, `public/panel/auditoria.html`
+
+---
+
+#### B7 — Filtros múltiples en auditoría (checkbox panels) ✅
+
+**Problema**: los filtros de auditoría eran dropdowns de valor único, lo que requería
+ejecutar búsquedas separadas para comparar actividad entre varios usuarios o acciones.
+
+**Solución**:
+- `GET /panel/auditoria` acepta `usuarios[]`, `acciones[]`, `entidades[]` como arrays
+  (multi-valor via query string repetido: `?usuarios[]=1&usuarios[]=2`).
+- `auditoria.html`: dropdowns reemplazados por paneles de checkboxes desplegables,
+  uno por cada dimensión de filtro.
+
+**Archivos**: `routes/panel.js`, `public/panel/auditoria.html`
+
+---
+
+#### B8 — Documentación: N operadores = N slots es comportamiento correcto ✅
+
+**Aclaración de diseño**: cuando N operadores tienen `atiende_turnos = TRUE` para un
+servicio en el mismo horario, el sistema ofrece N slots simultáneos (uno por ventanilla).
+Esto no es un error de duplicación: es el modelo correcto para una municipalidad con
+múltiples ventanillas de atención paralela.
+
+No requirió cambios de código. Queda documentado aquí como referencia para no
+"corregirlo" en el futuro por error.
+
+---
+
+#### B9 — Chips de área en todas las pantallas del panel ✅
+
+**Problema**: en todas las pantallas del panel, un usuario con múltiples áreas no podía
+filtrar la vista por área. Veía datos mezclados de todas sus áreas sin forma de acotarlos.
+
+**Solución**: patrón uniforme de "chips de área" implementado en las 7 pantallas del panel:
+- `agenda.html` — chips + `areasParam()` pasado a `/panel/agenda` y `/panel/agenda/rango`
+- `dashboard.html` — chips + `areasParam()` pasado a `/panel/estadisticas`
+- `auditoria.html` — chips + `areasParam()` pasado a `/panel/auditoria`
+- `bloqueos.html` — chips + `areasParam()` pasado a `/panel/bloqueos`
+- `servicios-admin.html` — chips + filtrado client-side sobre `todosLosServicios`
+- `usuarios.html` — chips + filtrado client-side sobre `todosLosUsuarios`
+- `presencial.html` — chips + filtrado client-side sobre `serviciosDisponibles`
+
+Los chips "Todas las áreas" + uno por área; click alterna activo/inactivo; al menos
+uno siempre activo. Para sistemas/directivo se muestran todas las áreas del sistema.
+
+**Archivos**: `routes/panel.js`, `public/panel/agenda.html`, `public/panel/dashboard.html`,
+`public/panel/auditoria.html`, `public/panel/bloqueos.html`, `public/panel/servicios-admin.html`,
+`public/panel/usuarios.html`, `public/panel/presencial.html`

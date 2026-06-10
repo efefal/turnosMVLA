@@ -78,6 +78,18 @@
     .btn-full    { width: 100%; }
     .cargando    { text-align: center; color: #94a3b8; padding: 2rem; font-style: italic; }
 
+    /* Navbar badge de rol */
+    .badge-rol { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+
+    /* B9: Selector de área */
+    .area-selector { margin-bottom: 1rem; display: none; }
+    .area-selector.visible { display: block; }
+    .area-selector-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .area-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .area-chip { display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border: 2px solid #e2e8f0; border-radius: 99px; cursor: pointer; font-size: 0.78rem; font-weight: 500; color: #475569; background: white; transition: all 0.15s; user-select: none; }
+    .area-chip:hover { border-color: #1A3C4B; color: #1A3C4B; }
+    .area-chip.activo { border-color: #1A3C4B; background: #1A3C4B; color: white; }
+
     /* Checkbox día completo */
     .checkbox-label {
       display: flex; align-items: center; gap: 0.5rem;
@@ -133,6 +145,12 @@
       <button class="btn btn-ghost" onclick="cargarBloqueos()">↻ Actualizar</button>
     </div>
 
+    <!-- B9: chips de área para filtrar la lista (visible con >1 área o sistemas) -->
+    <div class="area-selector" id="selector-areas-lista">
+      <div class="area-selector-titulo">Filtrar por área</div>
+      <div class="area-chips" id="chips-areas-lista"></div>
+    </div>
+
     <div class="alerta alerta-error" id="error-lista"></div>
     <div class="alerta alerta-ok"    id="ok-lista"></div>
 
@@ -166,18 +184,18 @@
       </p>
     </div>
 
+    <!-- B5: Área — al inicio del formulario; visible para sistemas o usuarios con >1 área -->
+    <div class="form-grupo" id="grupo-area" style="display:none">
+      <label for="sel-area">Área</label>
+      <select id="sel-area" onchange="onAreaFormChange()"></select>
+    </div>
+
     <!-- Operador (solo si individual) -->
     <div class="form-grupo" id="grupo-operador">
       <label for="sel-operador">Operador afectado</label>
       <select id="sel-operador">
         <option value="">— Seleccioná un operador —</option>
       </select>
-    </div>
-
-    <!-- Área (solo si el usuario tiene más de una) -->
-    <div class="form-grupo" id="grupo-area" style="display:none">
-      <label for="sel-area">Área</label>
-      <select id="sel-area"></select>
     </div>
 
     <hr class="separador">
@@ -289,12 +307,64 @@ function formatPeriodo(b) {
   return ini === fin ? ini : `${ini} al ${fin}`;
 }
 
+// ─── B9: Chips de área para la lista de bloqueos ───────────────────────────
+// Se construyen con el array todasLasAreas (llenado en init).
+// Al hacer click en un chip se recarga la lista filtrada por ese área.
+let todasLasAreas = [];
+
+function inicializarChipsLista() {
+  const selector  = document.getElementById('selector-areas-lista');
+  const container = document.getElementById('chips-areas-lista');
+  if (todasLasAreas.length <= 1) return; // mono-área: no mostramos chips
+
+  selector.classList.add('visible');
+
+  // Chip "Todas" activo por defecto
+  const chipTodas = document.createElement('span');
+  chipTodas.className   = 'area-chip activo';
+  chipTodas.textContent = 'Todas';
+  chipTodas.dataset.id  = 'todas';
+  chipTodas.onclick = () => {
+    container.querySelectorAll('.area-chip').forEach(c => c.classList.remove('activo'));
+    chipTodas.classList.add('activo');
+    cargarBloqueos();
+  };
+  container.appendChild(chipTodas);
+
+  todasLasAreas.forEach(a => {
+    const chip = document.createElement('span');
+    chip.className   = 'area-chip';
+    chip.textContent = a.area_nombre;
+    chip.dataset.id  = String(a.area_id);
+    chip.onclick = () => {
+      chipTodas.classList.remove('activo');
+      chip.classList.toggle('activo');
+      // Si no quedó ningún chip activo, volver a "Todas"
+      const hayActivos = container.querySelectorAll('.area-chip.activo:not([data-id="todas"])').length > 0;
+      if (!hayActivos) chipTodas.classList.add('activo');
+      cargarBloqueos();
+    };
+    container.appendChild(chip);
+  });
+}
+
 // ─── Lista de bloqueos ─────────────────────────────────────────────────────
 async function cargarBloqueos() {
   mostrarAlertaLista(null);
   document.getElementById('tabla-bloqueos').innerHTML = '<div class="cargando">Cargando...</div>';
 
-  const res = await apiFetch('/panel/bloqueos');
+  // Armar URL con áreas seleccionadas (B9)
+  const container = document.getElementById('chips-areas-lista');
+  let url = '/panel/bloqueos';
+  if (container && container.children.length > 0) {
+    const chipTodas = container.querySelector('[data-id="todas"]');
+    if (!chipTodas?.classList.contains('activo')) {
+      const activos = [...container.querySelectorAll('.area-chip.activo:not([data-id="todas"])')];
+      if (activos.length) url += '?' + activos.map(c => `areas[]=${c.dataset.id}`).join('&');
+    }
+  }
+
+  const res = await apiFetch(url);
   if (!res) return;
   const data = await res.json();
 
@@ -304,48 +374,41 @@ async function cargarBloqueos() {
 
   if (!data.length) {
     document.getElementById('tabla-bloqueos').innerHTML =
-      '<div class="vacio">No hay bloqueos vigentes en tu área.</div>';
+      '<div class="vacio">No hay bloqueos vigentes en las áreas seleccionadas.</div>';
     return;
   }
 
-  const filas = data.map(b => {
-    const puedeEliminar = usuario.rol === 'encargado' ||
-      (b.tipo === 'individual' && b.operador_nombre === usuario.nombre);
+  const puedeEliminarBloqueo = (b) =>
+    ['encargado','sistemas'].includes(usuario.rol) ||
+    (b.tipo === 'individual' && b.operador_nombre === usuario.nombre);
 
-    return `
-      <tr>
-        <td><span class="badge badge-${b.tipo}">${b.tipo === 'individual' ? 'Individual' : 'Oficina'}</span></td>
-        <td>${b.tipo === 'individual' ? esc(b.operador_nombre || '—') : '<em style="color:#64748b">Toda el área</em>'}</td>
-        <td>${esc(b.area_nombre)}</td>
-        <td style="white-space:nowrap">${formatPeriodo(b)}</td>
-        <td>
-          ${b.hora_inicio
-            ? `${b.hora_inicio.substring(0,5)} — ${(b.hora_fin||'').substring(0,5)}`
-            : '<span class="badge badge-dia-completo">Día completo</span>'}
-        </td>
-        <td>${esc(b.motivo)}</td>
-        <td>${esc(b.creado_por_nombre)}</td>
-        <td>
-          ${puedeEliminar
-            ? `<button class="btn btn-danger" onclick="eliminarBloqueo(${b.id})">Eliminar</button>`
-            : '<span style="color:#94a3b8;font-size:.8rem">—</span>'}
-        </td>
-      </tr>
-    `;
-  }).join('');
+  const filas = data.map(b => `
+    <tr>
+      <td><span class="badge badge-${b.tipo}">${b.tipo === 'individual' ? 'Individual' : 'Oficina'}</span></td>
+      <td>${b.tipo === 'individual' ? esc(b.operador_nombre || '—') : '<em style="color:#64748b">Toda el área</em>'}</td>
+      <td>${esc(b.area_nombre)}</td>
+      <td style="white-space:nowrap">${formatPeriodo(b)}</td>
+      <td>
+        ${b.hora_inicio
+          ? `${b.hora_inicio.substring(0,5)} — ${(b.hora_fin||'').substring(0,5)}`
+          : '<span class="badge badge-dia-completo">Día completo</span>'}
+      </td>
+      <td>${esc(b.motivo)}</td>
+      <td>${esc(b.creado_por_nombre)}</td>
+      <td>
+        ${puedeEliminarBloqueo(b)
+          ? `<button class="btn btn-danger" onclick="eliminarBloqueo(${b.id})">Eliminar</button>`
+          : '<span style="color:#94a3b8;font-size:.8rem">—</span>'}
+      </td>
+    </tr>
+  `).join('');
 
   document.getElementById('tabla-bloqueos').innerHTML = `
     <table>
       <thead>
         <tr>
-          <th>Tipo</th>
-          <th>Operador</th>
-          <th>Área</th>
-          <th>Período</th>
-          <th>Horario</th>
-          <th>Motivo</th>
-          <th>Creado por</th>
-          <th>Acciones</th>
+          <th>Tipo</th><th>Operador</th><th>Área</th><th>Período</th>
+          <th>Horario</th><th>Motivo</th><th>Creado por</th><th>Acciones</th>
         </tr>
       </thead>
       <tbody>${filas}</tbody>
@@ -357,11 +420,9 @@ async function cargarBloqueos() {
 async function eliminarBloqueo(id) {
   if (!confirm('¿Eliminás este bloqueo?')) return;
   mostrarAlertaLista(null);
-
   const res = await apiFetch(`/panel/bloqueos/${id}`, { method: 'DELETE' });
   if (!res) return;
   const data = await res.json();
-
   if (!res.ok) { mostrarAlertaLista('error', data.error || 'No se pudo eliminar el bloqueo.'); return; }
   mostrarAlertaLista('ok', 'Bloqueo eliminado correctamente.');
   cargarBloqueos();
@@ -375,14 +436,60 @@ function onTipoChange() {
 }
 
 // ─── Día completo change ───────────────────────────────────────────────────
-// Cuando el checkbox se tilda, oculta los campos de hora y los vacía para que
-// el backend reciba hora_inicio: null y hora_fin: null (bloqueo de día completo).
+// Cuando se tilda "Día completo", oculta los campos de hora y los vacía para
+// que el backend reciba hora_inicio: null y hora_fin: null.
 function onDiaCompletoChange() {
   const esDiaCompleto = document.getElementById('dia-completo').checked;
   document.getElementById('grupo-horas').style.display = esDiaCompleto ? 'none' : 'grid';
   if (esDiaCompleto) {
     document.getElementById('hora-inicio').value = '';
     document.getElementById('hora-fin').value    = '';
+  }
+}
+
+// ─── B5: Cambio de área en el formulario ───────────────────────────────────
+// Cuando el usuario cambia el área en el selector del formulario,
+// recargamos los operadores filtrados por esa área.
+async function onAreaFormChange() {
+  const areaId = parseInt(document.getElementById('sel-area').value, 10) || null;
+  await cargarOperadoresPorArea(areaId);
+}
+
+// Carga los operadores del área indicada en el selector del formulario.
+// Si areaId es null, carga todos (solo para sistemas sin área seleccionada).
+async function cargarOperadoresPorArea(areaId) {
+  const sel       = document.getElementById('sel-operador');
+  const usuario   = getUsuario();
+  const valorPrev = sel.value;
+
+  sel.innerHTML = '<option value="">Cargando...</option>';
+  sel.disabled  = true;
+
+  const url = areaId ? `/panel/operadores?areaId=${areaId}` : '/panel/operadores';
+  const res  = await apiFetch(url);
+
+  sel.innerHTML = '<option value="">— Seleccioná un operador —</option>';
+
+  if (res && res.ok) {
+    const operadores = await res.json();
+    operadores.forEach(op => {
+      const opt = document.createElement('option');
+      opt.value       = op.id;
+      opt.textContent = op.nombre;
+      sel.appendChild(opt);
+    });
+  }
+
+  // Operador: solo puede bloquearse a sí mismo
+  if (usuario.rol === 'operador') {
+    sel.value    = usuario.id;
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+    // Restaurar selección anterior si ese operador sigue en la lista
+    if (valorPrev && [...sel.options].some(o => o.value === valorPrev)) {
+      sel.value = valorPrev;
+    }
   }
 }
 
@@ -393,9 +500,9 @@ async function crearBloqueo() {
   const tipo        = document.querySelector('input[name="tipo"]:checked')?.value;
   const operadorId  = document.getElementById('sel-operador').value;
   const areaEl      = document.getElementById('sel-area');
+  const grupoArea   = document.getElementById('grupo-area');
   const fechaInicio = document.getElementById('fecha-inicio').value;
   const fechaFin    = document.getElementById('fecha-fin').value;
-  // Si está tildado "Día completo", las horas van como null al backend
   const diaCompleto = document.getElementById('dia-completo').checked;
   const horaInicio  = diaCompleto ? '' : document.getElementById('hora-inicio').value;
   const horaFin     = diaCompleto ? '' : document.getElementById('hora-fin').value;
@@ -415,10 +522,13 @@ async function crearBloqueo() {
   }
   if (motivo.length < 5) { mostrarAlertaForm('error', 'El motivo es obligatorio (mínimo 5 caracteres).'); return; }
 
-  const usuario   = getUsuario();
-  const area_id   = usuario.areaIds.length === 1
-    ? usuario.areaIds[0]
-    : (areaEl.value || usuario.areaIds[0]);
+  const usuario = getUsuario();
+  // Si el selector de área del formulario está visible, usarlo; si no, la única área del usuario
+  const area_id = (grupoArea.style.display !== 'none' && areaEl.value)
+    ? parseInt(areaEl.value, 10)
+    : (usuario.areaIds?.[0] ?? null);
+
+  if (!area_id) { mostrarAlertaForm('error', 'No se pudo determinar el área. Seleccioná un área.'); return; }
 
   const body = {
     tipo, area_id, motivo,
@@ -434,23 +544,21 @@ async function crearBloqueo() {
   btn.textContent = 'Creando...';
 
   const res = await apiFetch('/panel/bloqueos', { method: 'POST', body: JSON.stringify(body) });
-
   btn.disabled    = false;
   btn.textContent = 'Crear bloqueo';
 
   if (!res) return;
   const data = await res.json();
-
   if (!res.ok) { mostrarAlertaForm('error', data.error || 'No se pudo crear el bloqueo.'); return; }
 
-  document.getElementById('tipo-individual').checked = true;
-  document.getElementById('sel-operador').value  = '';
-  document.getElementById('fecha-inicio').value  = '';
-  document.getElementById('fecha-fin').value     = '';
-  document.getElementById('hora-inicio').value   = '';
-  document.getElementById('hora-fin').value      = '';
-  document.getElementById('motivo').value        = '';
-  document.getElementById('dia-completo').checked = false;
+  document.getElementById('tipo-individual').checked   = true;
+  document.getElementById('sel-operador').value        = '';
+  document.getElementById('fecha-inicio').value        = '';
+  document.getElementById('fecha-fin').value           = '';
+  document.getElementById('hora-inicio').value         = '';
+  document.getElementById('hora-fin').value            = '';
+  document.getElementById('motivo').value              = '';
+  document.getElementById('dia-completo').checked      = false;
   onTipoChange();
   onDiaCompletoChange();
 
@@ -463,7 +571,7 @@ async function crearBloqueo() {
   const token = getToken();
   if (!token) return;
 
-  const usuario = getUsuario();
+  const usuario  = getUsuario();
   const nombreEl = document.getElementById('nav-nombre');
   nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
 
@@ -479,17 +587,34 @@ async function crearBloqueo() {
     document.getElementById('btn-crear').style.display = 'none';
   }
 
-  if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {
+  // Operadores no pueden crear bloqueos de oficina, solo de su propia agenda
+  if (!['encargado', 'sistemas'].includes(usuario.rol)) {
     document.getElementById('opcion-oficina').style.display = 'none';
     document.getElementById('hint-tipo').textContent =
       'Podés bloquear días de tu propia agenda (ej: licencia, capacitación).';
   }
 
-  if (usuario.areaIds?.length > 1 && usuario.areas) {
+  // ── Cargar lista de áreas accesibles (B5 + B9) ──────────────────────────
+  // /panel/areas devuelve todas las áreas del usuario (o todas para sistemas)
+  const resAreas = await apiFetch('/panel/areas');
+  if (resAreas && resAreas.ok) {
+    todasLasAreas = await resAreas.json(); // [{ id, nombre }, ...]
+    // normalizar a { area_id, area_nombre } para compatibilidad con chips
+    todasLasAreas = todasLasAreas.map(a => ({ area_id: a.id, area_nombre: a.nombre }));
+  } else {
+    // fallback: usar las áreas del token de sesión
+    todasLasAreas = (usuario.areas || []);
+  }
+
+  // B9: chips de área para la lista (solo si hay más de una)
+  inicializarChipsLista();
+
+  // B5: selector de área en el formulario (sistemas o multi-área)
+  if (todasLasAreas.length > 1 || usuario.rol === 'sistemas') {
     const grupoArea = document.getElementById('grupo-area');
     const selArea   = document.getElementById('sel-area');
     grupoArea.style.display = 'block';
-    usuario.areas.forEach(a => {
+    todasLasAreas.forEach(a => {
       const opt = document.createElement('option');
       opt.value       = a.area_id;
       opt.textContent = a.area_nombre;
@@ -497,21 +622,11 @@ async function crearBloqueo() {
     });
   }
 
-  const resOp = await apiFetch('/panel/operadores');
-  if (resOp && resOp.ok) {
-    const operadores = await resOp.json();
-    const sel = document.getElementById('sel-operador');
-    operadores.forEach(op => {
-      const opt = document.createElement('option');
-      opt.value       = op.id;
-      opt.textContent = op.nombre;
-      sel.appendChild(opt);
-    });
-    if (usuario.rol !== 'encargado') {
-      sel.value    = usuario.id;
-      sel.disabled = true;
-    }
-  }
+  // ── Cargar operadores del área por defecto ───────────────────────────────
+  // Si el selector de área está visible, usamos el primer área seleccionado;
+  // si no, cargamos operadores sin filtro (que el backend acotará al área del usuario)
+  const areaInicial = todasLasAreas.length > 0 ? todasLasAreas[0].area_id : null;
+  await cargarOperadoresPorArea(areaInicial);
 
   const hoy = new Date().toISOString().substring(0, 10);
   document.getElementById('fecha-inicio').min = hoy;

@@ -122,6 +122,15 @@
     .exito-detalle p span { font-weight: 600; color: #1e293b; }
     .exito-mensaje { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 7px; padding: 0.9rem 1rem; font-size: 0.85rem; color: #1e40af; margin-top: 1rem; line-height: 1.5; }
     .cargando { text-align: center; color: #94a3b8; padding: 1.5rem; font-style: italic; }
+
+    /* B9: Selector de área */
+    .area-selector { margin-bottom: 0.85rem; display: none; }
+    .area-selector.visible { display: block; }
+    .area-selector-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .area-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .area-chip { display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border: 2px solid #e2e8f0; border-radius: 99px; cursor: pointer; font-size: 0.78rem; font-weight: 500; color: #475569; background: white; transition: all 0.15s; user-select: none; }
+    .area-chip:hover { border-color: #1A3C4B; color: #1A3C4B; }
+    .area-chip.activo { border-color: #1A3C4B; background: #1A3C4B; color: white; }
   </style>
 </head>
 <body>
@@ -217,6 +226,12 @@
       <div class="alerta alerta-error" id="error-2"></div>
 
       <!-- Trámite y fecha en dos columnas -->
+      <!-- B9: chips de área para filtrar el selector de trámites -->
+      <div class="area-selector" id="selector-areas-presencial">
+        <div class="area-selector-titulo">Filtrar por área</div>
+        <div class="area-chips" id="chips-areas-presencial"></div>
+      </div>
+
       <div class="form-fila">
         <div class="form-grupo" style="margin-bottom:0">
           <label for="servicio">Trámite</label>
@@ -313,7 +328,73 @@ const datos = {
   turnosActivosServicioIds: [], // IDs de servicios con turno activo del vecino buscado
 };
 let serviciosDisponibles = [];
+let todasLasAreas        = []; // B9: áreas accesibles
 let vecinoEncontrado = false; // true si el vecino ya existe en la BD
+
+// ─── B9: Chips de área para filtrar trámites ───────────────────────────────
+function inicializarChipsPresencial() {
+  const selector  = document.getElementById('selector-areas-presencial');
+  const container = document.getElementById('chips-areas-presencial');
+  if (todasLasAreas.length <= 1) return;
+
+  selector.classList.add('visible');
+
+  const chipTodas = document.createElement('span');
+  chipTodas.className   = 'area-chip activo';
+  chipTodas.textContent = 'Todas';
+  chipTodas.dataset.id  = 'todas';
+  chipTodas.onclick = () => {
+    container.querySelectorAll('.area-chip').forEach(c => c.classList.remove('activo'));
+    chipTodas.classList.add('activo');
+    filtrarServiciosPorArea();
+  };
+  container.appendChild(chipTodas);
+
+  todasLasAreas.forEach(a => {
+    const chip = document.createElement('span');
+    chip.className   = 'area-chip';
+    chip.textContent = a.nombre;
+    chip.dataset.id  = String(a.id);
+    chip.onclick = () => {
+      chipTodas.classList.remove('activo');
+      chip.classList.toggle('activo');
+      const hayActivos = container.querySelectorAll('.area-chip.activo:not([data-id="todas"])').length > 0;
+      if (!hayActivos) chipTodas.classList.add('activo');
+      filtrarServiciosPorArea();
+    };
+    container.appendChild(chip);
+  });
+}
+
+// Filtra el dropdown de servicios según las áreas activas en los chips.
+function filtrarServiciosPorArea() {
+  const container = document.getElementById('chips-areas-presencial');
+  let serviciosFiltrados = serviciosDisponibles;
+
+  if (container && container.children.length > 0) {
+    const chipTodas = container.querySelector('[data-id="todas"]');
+    if (!chipTodas?.classList.contains('activo')) {
+      const idsActivos = new Set(
+        [...container.querySelectorAll('.area-chip.activo:not([data-id="todas"])')].map(c => Number(c.dataset.id))
+      );
+      serviciosFiltrados = serviciosDisponibles.filter(s => idsActivos.has(s.area_id));
+    }
+  }
+
+  const sel = document.getElementById('servicio');
+  const valorAnterior = sel.value;
+  sel.innerHTML = '<option value="">— Seleccioná —</option>';
+  serviciosFiltrados.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value       = s.id;
+    opt.textContent = s.nombre;
+    sel.appendChild(opt);
+  });
+  // Restaurar selección si el servicio sigue disponible
+  if (valorAnterior && [...sel.options].some(o => o.value === valorAnterior)) {
+    sel.value = valorAnterior;
+  }
+}
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -668,13 +749,14 @@ function reiniciar() {
     return;
   }
   serviciosDisponibles = await res.json();
-  const select = document.getElementById('servicio');
-  serviciosDisponibles.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value       = s.id;
-    opt.textContent = s.nombre;
-    select.appendChild(opt);
-  });
+
+  // B9: cargar áreas y construir chips; luego poblar el dropdown usando filtrarServiciosPorArea()
+  const resAreas = await apiFetch('/panel/areas');
+  if (resAreas && resAreas.ok) {
+    todasLasAreas = await resAreas.json();
+    inicializarChipsPresencial();
+  }
+  filtrarServiciosPorArea(); // poblar el dropdown (muestra todos por defecto)
 
   mostrarPaso(1);
 })();

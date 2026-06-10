@@ -206,6 +206,15 @@
     .vacio { text-align: center; color: #94a3b8; padding: 3rem; }
     .vacio p { margin-top: 0.5rem; font-size: 0.85rem; }
 
+    /* B9: Selector de área */
+    .area-selector { margin-bottom: 0.75rem; display: none; }
+    .area-selector.visible { display: block; }
+    .area-selector-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .area-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .area-chip { display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border: 2px solid #e2e8f0; border-radius: 99px; cursor: pointer; font-size: 0.78rem; font-weight: 500; color: #475569; background: white; transition: all 0.15s; user-select: none; }
+    .area-chip:hover { border-color: #1A3C4B; color: #1A3C4B; }
+    .area-chip.activo { border-color: #1A3C4B; background: #1A3C4B; color: white; }
+
     /* Modal cancelar */
     .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
     .modal-fondo.abierto { display: flex; }
@@ -288,6 +297,12 @@
 
   </div>
 
+  <!-- B9: chips de área (visible cuando el usuario accede a >1 área) -->
+  <div class="area-selector" id="selector-areas-agenda">
+    <div class="area-selector-titulo">Filtrar por área</div>
+    <div class="area-chips" id="chips-areas-agenda"></div>
+  </div>
+
   <p class="fecha-label" id="fecha-label"></p>
 
   <div class="stats" id="stats"></div>
@@ -337,6 +352,54 @@ let vista          = 'dia';    // 'dia' | 'semana' | 'mes'
 let turnosActuales = [];
 let turnoACancelar = null;
 let usuarioRol     = '';       // se fija en init(); usado por renderizarAcciones
+let todasLasAreas  = [];       // B9: áreas accesibles, llenadas en init()
+
+// ─── B9: Chips de área ─────────────────────────────────────────────────────
+// Construye los chips de área en el selector y recarga la agenda al cambiar.
+function inicializarChipsAgenda() {
+  const selector  = document.getElementById('selector-areas-agenda');
+  const container = document.getElementById('chips-areas-agenda');
+  if (todasLasAreas.length <= 1) return;
+
+  selector.classList.add('visible');
+
+  const chipTodas = document.createElement('span');
+  chipTodas.className   = 'area-chip activo';
+  chipTodas.textContent = 'Todas';
+  chipTodas.dataset.id  = 'todas';
+  chipTodas.onclick = () => {
+    container.querySelectorAll('.area-chip').forEach(c => c.classList.remove('activo'));
+    chipTodas.classList.add('activo');
+    cargar();
+  };
+  container.appendChild(chipTodas);
+
+  todasLasAreas.forEach(a => {
+    const chip = document.createElement('span');
+    chip.className   = 'area-chip';
+    chip.textContent = a.nombre;
+    chip.dataset.id  = String(a.id);
+    chip.onclick = () => {
+      chipTodas.classList.remove('activo');
+      chip.classList.toggle('activo');
+      const hayActivos = container.querySelectorAll('.area-chip.activo:not([data-id="todas"])').length > 0;
+      if (!hayActivos) chipTodas.classList.add('activo');
+      cargar();
+    };
+    container.appendChild(chip);
+  });
+}
+
+// Devuelve los parámetros de área como string "&areas[]=N&areas[]=M" o "" si "Todas".
+function areasParam() {
+  const container = document.getElementById('chips-areas-agenda');
+  if (!container || container.children.length === 0) return '';
+  const chipTodas = container.querySelector('[data-id="todas"]');
+  if (chipTodas?.classList.contains('activo')) return '';
+  const activos = [...container.querySelectorAll('.area-chip.activo:not([data-id="todas"])')];
+  if (!activos.length) return '';
+  return activos.map(c => `&areas[]=${c.dataset.id}`).join('');
+}
 
 // Genera el HTML del badge de rol con el color institucional según el rol.
 // Se llama desde init() y se usa en todas las pantallas.
@@ -662,7 +725,7 @@ async function cargarDia() {
   document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
 
   const operadorId = document.getElementById('select-operador')?.value || '';
-  let url = `/panel/agenda?fecha=${fechaActual}`;
+  let url = `/panel/agenda?fecha=${fechaActual}${areasParam()}`;
   if (operadorId) url += `&operadorId=${operadorId}`;
 
   // Cargar turnos y días especiales en paralelo — misma técnica que semana y mes
@@ -837,7 +900,7 @@ async function cargarSemana() {
   document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
 
   const operadorId = document.getElementById('select-operador')?.value || '';
-  let url = `/panel/agenda/rango?desde=${lunes}&hasta=${domingo}`;
+  let url = `/panel/agenda/rango?desde=${lunes}&hasta=${domingo}${areasParam()}`;
   if (operadorId) url += `&operadorId=${operadorId}`;
 
   // Cargamos los turnos y los días especiales (feriados/bloqueos) en paralelo
@@ -956,7 +1019,7 @@ async function cargarMes() {
   const hasta     = `${año}-${String(mes).padStart(2,'0')}-${String(ultimoDia).padStart(2,'0')}`;
 
   const operadorId = document.getElementById('select-operador')?.value || '';
-  let url = `/panel/agenda/rango?desde=${desde}&hasta=${hasta}`;
+  let url = `/panel/agenda/rango?desde=${desde}&hasta=${hasta}${areasParam()}`;
   if (operadorId) url += `&operadorId=${operadorId}`;
 
   // Igual que en cargarSemana: turnos y días especiales se piden al mismo tiempo
@@ -1130,6 +1193,13 @@ async function cargarOperadores() {
       const el = document.getElementById(id);
       if (el) el.style.display = '';
     });
+  }
+
+  // B9: cargar áreas accesibles y construir chips si hay más de una
+  const resAreas = await apiFetch('/panel/areas');
+  if (resAreas && resAreas.ok) {
+    todasLasAreas = await resAreas.json();
+    inicializarChipsAgenda();
   }
 
   document.getElementById('fecha-input').value = fechaActual;

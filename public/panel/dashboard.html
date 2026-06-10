@@ -78,6 +78,15 @@
     .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
     .cargando { text-align: center; color: #94a3b8; padding: 2rem; font-style: italic; }
     .vacio    { text-align: center; color: #94a3b8; padding: 1.5rem; font-size: 0.875rem; }
+
+    /* B9: Selector de área */
+    .area-selector { margin-bottom: 1rem; display: none; }
+    .area-selector.visible { display: block; }
+    .area-selector-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .area-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .area-chip { display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border: 2px solid #e2e8f0; border-radius: 99px; cursor: pointer; font-size: 0.78rem; font-weight: 500; color: #475569; background: white; transition: all 0.15s; user-select: none; }
+    .area-chip:hover { border-color: #1A3C4B; color: #1A3C4B; }
+    .area-chip.activo { border-color: #1A3C4B; background: #1A3C4B; color: white; }
   </style>
 </head>
 <body>
@@ -124,6 +133,12 @@
     </div>
   </div>
 
+  <!-- B9: chips de área -->
+  <div class="area-selector" id="selector-areas-dash">
+    <div class="area-selector-titulo">Filtrar por área</div>
+    <div class="area-chips" id="chips-areas-dash"></div>
+  </div>
+
   <div class="alerta alerta-error" id="alerta-error"></div>
 
   <div id="contenido"><div class="card cargando">Cargando estadísticas...</div></div>
@@ -151,6 +166,55 @@ async function apiFetch(url, opts = {}) {
 async function cerrarSesion() {
   try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
   sessionStorage.clear(); window.location.href = '/panel/login.html';
+}
+
+// ─── Estado global B9 ─────────────────────────────────────────────────────
+let todasLasAreas = [];
+
+// Construye los chips de área para el dashboard.
+function inicializarChipsDash() {
+  const selector  = document.getElementById('selector-areas-dash');
+  const container = document.getElementById('chips-areas-dash');
+  if (todasLasAreas.length <= 1) return;
+
+  selector.classList.add('visible');
+
+  const chipTodas = document.createElement('span');
+  chipTodas.className   = 'area-chip activo';
+  chipTodas.textContent = 'Todas';
+  chipTodas.dataset.id  = 'todas';
+  chipTodas.onclick = () => {
+    container.querySelectorAll('.area-chip').forEach(c => c.classList.remove('activo'));
+    chipTodas.classList.add('activo');
+    cargar();
+  };
+  container.appendChild(chipTodas);
+
+  todasLasAreas.forEach(a => {
+    const chip = document.createElement('span');
+    chip.className   = 'area-chip';
+    chip.textContent = a.nombre;
+    chip.dataset.id  = String(a.id);
+    chip.onclick = () => {
+      chipTodas.classList.remove('activo');
+      chip.classList.toggle('activo');
+      const hayActivos = container.querySelectorAll('.area-chip.activo:not([data-id="todas"])').length > 0;
+      if (!hayActivos) chipTodas.classList.add('activo');
+      cargar();
+    };
+    container.appendChild(chip);
+  });
+}
+
+// Devuelve "&areas[]=N&areas[]=M" según chips activos, o "" si "Todas".
+function areasParam() {
+  const container = document.getElementById('chips-areas-dash');
+  if (!container || container.children.length === 0) return '';
+  const chipTodas = container.querySelector('[data-id="todas"]');
+  if (chipTodas?.classList.contains('activo')) return '';
+  const activos = [...container.querySelectorAll('.area-chip.activo:not([data-id="todas"])')];
+  if (!activos.length) return '';
+  return activos.map(c => `&areas[]=${c.dataset.id}`).join('');
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -428,7 +492,7 @@ async function cargar() {
   mostrarError('');
   document.getElementById('contenido').innerHTML = '<div class="card cargando">Cargando estadísticas...</div>';
 
-  const res = await apiFetch(`/panel/estadisticas?desde=${desdeActual}&hasta=${hastaActual}`);
+  const res = await apiFetch(`/panel/estadisticas?desde=${desdeActual}&hasta=${hastaActual}${areasParam()}`);
   if (!res) return;
 
   const data = await res.json();
@@ -456,6 +520,13 @@ async function cargar() {
     const el = document.getElementById(id);
     if (el) el.style.display = '';
   });
+
+  // B9: cargar áreas accesibles y construir chips si hay más de una
+  const resAreas = await apiFetch('/panel/areas');
+  if (resAreas && resAreas.ok) {
+    todasLasAreas = await resAreas.json();
+    inicializarChipsDash();
+  }
 
   const { desde, hasta } = rangoFechas('mes');
   desdeActual = desde; hastaActual = hasta;

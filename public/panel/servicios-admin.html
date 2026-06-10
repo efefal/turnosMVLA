@@ -82,6 +82,15 @@
     /* Misc */
     .cargando { text-align: center; color: #94a3b8; padding: 3rem; font-style: italic; }
     .vacio    { text-align: center; color: #94a3b8; padding: 3rem; }
+
+    /* B9: Selector de área */
+    .area-selector { margin-bottom: 1rem; display: none; }
+    .area-selector.visible { display: block; }
+    .area-selector-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .area-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .area-chip { display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border: 2px solid #e2e8f0; border-radius: 99px; cursor: pointer; font-size: 0.78rem; font-weight: 500; color: #475569; background: white; transition: all 0.15s; user-select: none; }
+    .area-chip:hover { border-color: #1A3C4B; color: #1A3C4B; }
+    .area-chip.activo { border-color: #1A3C4B; background: #1A3C4B; color: white; }
   </style>
 </head>
 <body>
@@ -116,6 +125,12 @@
       <span>Servicios del área</span>
       <button class="btn btn-ghost btn-sm" onclick="cargarServicios()">↻ Actualizar</button>
     </div>
+    <!-- B9: chips de área -->
+    <div class="area-selector" id="selector-areas-srv">
+      <div class="area-selector-titulo">Filtrar por área</div>
+      <div class="area-chips" id="chips-areas-srv"></div>
+    </div>
+
     <div class="alerta alerta-error" id="error-lista"></div>
     <div class="alerta alerta-ok"    id="ok-lista"></div>
     <div class="tabla-wrapper">
@@ -268,8 +283,93 @@ function mostrarAlertaModal(tipo, msg) {
 // ─── Estado de edición ─────────────────────────────────────────────────────
 let idEditando = null;
 
-// ─── Áreas disponibles (para el select) ───────────────────────────────────
-let areasDisponibles = {}; // { id: nombre }
+// ─── Estado global ─────────────────────────────────────────────────────────
+let areasDisponibles = {}; // { id: nombre } — para el select de nuevo servicio
+let todosLosServicios = []; // caché de todos los servicios cargados (para filtro B9)
+
+// ─── B9: Chips de área ─────────────────────────────────────────────────────
+function inicializarChipsServicios(areas) {
+  const selector  = document.getElementById('selector-areas-srv');
+  const container = document.getElementById('chips-areas-srv');
+  if (areas.length <= 1) return;
+
+  selector.classList.add('visible');
+
+  const chipTodas = document.createElement('span');
+  chipTodas.className   = 'area-chip activo';
+  chipTodas.textContent = 'Todas';
+  chipTodas.dataset.id  = 'todas';
+  chipTodas.onclick = () => {
+    container.querySelectorAll('.area-chip').forEach(c => c.classList.remove('activo'));
+    chipTodas.classList.add('activo');
+    aplicarFiltroArea();
+  };
+  container.appendChild(chipTodas);
+
+  areas.forEach(a => {
+    const chip = document.createElement('span');
+    chip.className   = 'area-chip';
+    chip.textContent = a.nombre;
+    chip.dataset.id  = String(a.id);
+    chip.onclick = () => {
+      chipTodas.classList.remove('activo');
+      chip.classList.toggle('activo');
+      const hayActivos = container.querySelectorAll('.area-chip.activo:not([data-id="todas"])').length > 0;
+      if (!hayActivos) chipTodas.classList.add('activo');
+      aplicarFiltroArea();
+    };
+    container.appendChild(chip);
+  });
+}
+
+// Filtra todosLosServicios por las áreas activas en los chips y re-renderiza.
+function aplicarFiltroArea() {
+  const container = document.getElementById('chips-areas-srv');
+  if (!container || container.children.length === 0) {
+    renderServicios(todosLosServicios);
+    return;
+  }
+  const chipTodas = container.querySelector('[data-id="todas"]');
+  if (chipTodas?.classList.contains('activo')) {
+    renderServicios(todosLosServicios);
+    return;
+  }
+  const idsActivos = new Set(
+    [...container.querySelectorAll('.area-chip.activo:not([data-id="todas"])')].map(c => Number(c.dataset.id))
+  );
+  renderServicios(todosLosServicios.filter(s => idsActivos.has(s.area_id)));
+}
+
+// Renderiza la tabla con el array de servicios recibido.
+function renderServicios(servicios) {
+  const esDirectivo = getUsuario().rol === 'directivo';
+  if (!servicios.length) {
+    document.getElementById('tbody-servicios').innerHTML =
+      '<tr><td colspan="7" class="vacio">No hay servicios en las áreas seleccionadas.</td></tr>';
+    return;
+  }
+  document.getElementById('tbody-servicios').innerHTML = servicios.map(s => `
+    <tr>
+      <td style="font-weight:500">${esc(s.nombre)}</td>
+      <td style="color:#64748b">${esc(s.area_nombre)}</td>
+      <td>${s.duracion_min} min</td>
+      <td>${s.max_dias_anticipacion} días</td>
+      <td><span class="badge ${s.activo ? 'badge-activo' : 'badge-inactivo'}">${s.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="td-mensaje" title="${esc(s.mensaje_confirmacion || '')}">${s.mensaje_confirmacion ? esc(s.mensaje_confirmacion) : '<span style="color:#94a3b8">Sin mensaje</span>'}</td>
+      <td class="td-acciones">
+        ${esDirectivo ? '<span style="color:#94a3b8;font-size:.78rem">Solo lectura</span>' : `
+        <button class="btn btn-ghost btn-sm"
+                onclick="abrirModal(${s.id}, '${esc(s.nombre)}', ${s.duracion_min}, ${s.max_dias_anticipacion}, ${s.activo ? 1 : 0}, \`${(s.mensaje_confirmacion || '').replace(/`/g, '\\`')}\`)">
+          Editar
+        </button>
+        <button class="btn btn-sm ${s.activo ? 'btn-warning' : 'btn-ghost'}"
+                onclick="toggleActivo(${s.id}, ${s.activo ? 0 : 1})">
+          ${s.activo ? 'Desactivar' : 'Activar'}
+        </button>`}
+      </td>
+    </tr>
+  `).join('');
+}
 
 // ─── Cargar servicios ──────────────────────────────────────────────────────
 async function cargarServicios() {
@@ -291,34 +391,9 @@ async function cargarServicios() {
   data.forEach(s => { areasDisponibles[s.area_id] = s.area_nombre; });
   poblarSelectArea();
 
-  if (!data.length) {
-    document.getElementById('tbody-servicios').innerHTML =
-      '<tr><td colspan="7" class="vacio">No hay servicios en tu área.</td></tr>';
-    return;
-  }
-
-  const esDirectivo = getUsuario().rol === 'directivo';
-  document.getElementById('tbody-servicios').innerHTML = data.map(s => `
-    <tr>
-      <td style="font-weight:500">${esc(s.nombre)}</td>
-      <td style="color:#64748b">${esc(s.area_nombre)}</td>
-      <td>${s.duracion_min} min</td>
-      <td>${s.max_dias_anticipacion} días</td>
-      <td><span class="badge ${s.activo ? 'badge-activo' : 'badge-inactivo'}">${s.activo ? 'Activo' : 'Inactivo'}</span></td>
-      <td class="td-mensaje" title="${esc(s.mensaje_confirmacion || '')}">${s.mensaje_confirmacion ? esc(s.mensaje_confirmacion) : '<span style="color:#94a3b8">Sin mensaje</span>'}</td>
-      <td class="td-acciones">
-        ${esDirectivo ? '<span style="color:#94a3b8;font-size:.78rem">Solo lectura</span>' : `
-        <button class="btn btn-ghost btn-sm"
-                onclick="abrirModal(${s.id}, '${esc(s.nombre)}', ${s.duracion_min}, ${s.max_dias_anticipacion}, ${s.activo ? 1 : 0}, \`${(s.mensaje_confirmacion || '').replace(/`/g, '\\`')}\`)">
-          Editar
-        </button>
-        <button class="btn btn-sm ${s.activo ? 'btn-warning' : 'btn-ghost'}"
-                onclick="toggleActivo(${s.id}, ${s.activo ? 0 : 1})">
-          ${s.activo ? 'Desactivar' : 'Activar'}
-        </button>`}
-      </td>
-    </tr>
-  `).join('');
+  // Guardar en caché y renderizar respetando el filtro de área activo
+  todosLosServicios = data;
+  aplicarFiltroArea();
 }
 
 // ─── Poblar select de área ─────────────────────────────────────────────────
@@ -473,6 +548,13 @@ async function toggleActivo(id, nuevoActivo) {
   document.getElementById('modal-fondo').addEventListener('click', e => {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
   });
+
+  // B9: cargar áreas accesibles y construir chips si hay más de una
+  const resAreas = await apiFetch('/panel/areas');
+  if (resAreas && resAreas.ok) {
+    const areas = await resAreas.json();
+    inicializarChipsServicios(areas);
+  }
 
   await cargarServicios();
 })();

@@ -28,12 +28,43 @@
     /* Card */
     .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 1rem 1.25rem; margin-bottom: 1rem; }
 
+    /* B9: Selector de área */
+    .area-selector { display: none; margin-bottom: 1rem; }
+    .area-selector.visible { display: block; }
+    .area-selector-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .area-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .area-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.7rem; border: 2px solid #e2e8f0; border-radius: 99px; cursor: pointer; font-size: 0.78rem; font-weight: 500; color: #475569; background: white; transition: all 0.15s; user-select: none; }
+    .area-chip:hover { border-color: #1A3C4B; color: #1A3C4B; }
+    .area-chip.activo { border-color: #1A3C4B; background: #1A3C4B; color: white; }
+
     /* Filtros */
     .filtros { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; }
     .filtro-grupo { display: flex; flex-direction: column; gap: 0.3rem; }
     .filtro-grupo label { font-size: 0.78rem; font-weight: 500; color: #64748b; }
-    input[type="date"], select { padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: white; }
-    input[type="date"]:focus, select:focus { outline: none; border-color: #1A3C4B; }
+    input[type="date"] { padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; background: white; }
+    input[type="date"]:focus { outline: none; border-color: #1A3C4B; }
+
+    /* B7: Paneles de checkboxes */
+    .filtro-panel { position: relative; }
+    .filtro-panel-btn {
+      padding: 0.4rem 0.7rem; border: 1px solid #d1d5db; border-radius: 6px;
+      font-size: 0.875rem; font-family: inherit; background: white; cursor: pointer;
+      display: flex; align-items: center; gap: 0.4rem; min-width: 120px;
+    }
+    .filtro-panel-btn:focus { outline: none; border-color: #1A3C4B; }
+    .filtro-panel-btn.activo { border-color: #1A3C4B; background: #f0f7fb; }
+    .filtro-panel-caret { font-size: 0.6rem; margin-left: auto; }
+    .filtro-panel-dropdown {
+      display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
+      background: white; border: 1px solid #d1d5db; border-radius: 8px; min-width: 180px;
+      max-height: 240px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.1);
+      padding: 0.25rem 0;
+    }
+    .filtro-panel-dropdown.abierto { display: block; }
+    .check-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem; }
+    .check-item:hover { background: #f8fafc; }
+    .check-item input[type="checkbox"] { accent-color: #1A3C4B; cursor: pointer; }
+    .check-todos { border-bottom: 1px solid #f1f5f9; font-weight: 600; }
 
     /* Botones */
     .btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.9rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; font-family: inherit; transition: opacity 0.15s; white-space: nowrap; }
@@ -54,7 +85,8 @@
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: #fafafa; }
     .td-fecha { white-space: nowrap; color: #64748b; }
-    .td-detalle { max-width: 300px; word-break: break-word; color: #64748b; font-size: 0.775rem; }
+    .td-detalle { max-width: 280px; word-break: break-word; color: #64748b; font-size: 0.775rem; }
+    .td-ref { max-width: 160px; font-style: italic; color: #475569; }
 
     /* Badges de acción */
     .badge-accion { display: inline-block; padding: 0.18rem 0.55rem; border-radius: 99px; font-size: 0.72rem; font-weight: 600; }
@@ -103,6 +135,12 @@
 
   <h1>Registro de auditoría</h1>
 
+  <!-- B9: Selector de área (visible solo si el usuario tiene acceso a más de un área) -->
+  <div class="area-selector card" id="area-selector">
+    <div class="area-selector-titulo">Filtrar por área</div>
+    <div class="area-chips" id="area-chips"></div>
+  </div>
+
   <!-- Filtros -->
   <div class="card">
     <div class="filtros">
@@ -114,39 +152,62 @@
         <label>Hasta</label>
         <input type="date" id="filtro-hasta">
       </div>
+
+      <!-- B7: Panel de usuarios con checkboxes -->
       <div class="filtro-grupo">
         <label>Usuario</label>
-        <select id="filtro-usuario">
-          <option value="">Todos</option>
-        </select>
+        <div class="filtro-panel" id="panel-usuarios">
+          <button class="filtro-panel-btn" onclick="togglePanel('panel-usuarios')">
+            <span id="lbl-usuarios">Todos</span>
+            <span class="filtro-panel-caret">▼</span>
+          </button>
+          <div class="filtro-panel-dropdown" id="drop-usuarios">
+            <label class="check-item check-todos">
+              <input type="checkbox" id="chk-todos-usuarios" checked onchange="toggleTodos('usuarios')"> Todos
+            </label>
+            <div id="lista-usuarios"></div>
+          </div>
+        </div>
       </div>
+
+      <!-- B7: Panel de acciones con checkboxes -->
       <div class="filtro-grupo">
         <label>Acción</label>
-        <select id="filtro-accion">
-          <option value="">Todas</option>
-          <option value="crear">Crear</option>
-          <option value="modificar">Modificar</option>
-          <option value="cancelar">Cancelar</option>
-          <option value="eliminar">Eliminar</option>
-          <option value="bloquear">Bloquear</option>
-          <option value="desbloquear">Desbloquear</option>
-          <option value="login">Login</option>
-          <option value="logout">Logout</option>
-        </select>
+        <div class="filtro-panel" id="panel-acciones">
+          <button class="filtro-panel-btn" onclick="togglePanel('panel-acciones')">
+            <span id="lbl-acciones">Todas</span>
+            <span class="filtro-panel-caret">▼</span>
+          </button>
+          <div class="filtro-panel-dropdown" id="drop-acciones">
+            <label class="check-item check-todos">
+              <input type="checkbox" id="chk-todos-acciones" checked onchange="toggleTodos('acciones')"> Todas
+            </label>
+            <div id="lista-acciones">
+              <!-- se rellena en JS -->
+            </div>
+          </div>
+        </div>
       </div>
+
+      <!-- B7: Panel de entidades con checkboxes -->
       <div class="filtro-grupo">
         <label>Entidad</label>
-        <select id="filtro-entidad">
-          <option value="">Todas</option>
-          <option value="turno">Turno</option>
-          <option value="servicio">Servicio</option>
-          <option value="bloqueo">Bloqueo</option>
-          <option value="usuario">Usuario</option>
-          <option value="area">Área</option>
-          <option value="feriado">Feriado</option>
-          <option value="horario">Horario</option>
-        </select>
+        <div class="filtro-panel" id="panel-entidades">
+          <button class="filtro-panel-btn" onclick="togglePanel('panel-entidades')">
+            <span id="lbl-entidades">Todas</span>
+            <span class="filtro-panel-caret">▼</span>
+          </button>
+          <div class="filtro-panel-dropdown" id="drop-entidades">
+            <label class="check-item check-todos">
+              <input type="checkbox" id="chk-todos-entidades" checked onchange="toggleTodos('entidades')"> Todas
+            </label>
+            <div id="lista-entidades">
+              <!-- se rellena en JS -->
+            </div>
+          </div>
+        </div>
       </div>
+
       <button class="btn btn-primary" onclick="buscar()">Buscar</button>
       <button class="btn btn-ghost"   onclick="limpiarFiltros()">Limpiar</button>
     </div>
@@ -164,7 +225,7 @@
             <th>Usuario</th>
             <th>Acción</th>
             <th>Entidad</th>
-            <th>ID</th>
+            <th>Referencia</th>
             <th>Canal</th>
             <th>Detalle</th>
           </tr>
@@ -223,7 +284,6 @@ function rolBadgeHTML(rol) {
 
 function formatFecha(ts) {
   if (!ts) return '—';
-  // ts viene como "YYYY-MM-DD HH:MM:SS"
   const [fecha, hora] = String(ts).split('T').length > 1 ? String(ts).split('T') : String(ts).split(' ');
   const [y, m, d] = fecha.split('-');
   return `${d}/${m}/${y} ${hora ? hora.substring(0, 5) : ''}`;
@@ -237,6 +297,140 @@ function mostrarError(msg) {
   const el = document.getElementById('alerta-error');
   if (msg) { el.textContent = msg; el.classList.add('visible'); }
   else      { el.classList.remove('visible'); }
+}
+
+// ─── B9: Selector de área ─────────────────────────────────────────────────
+let areasSeleccionadas = new Set(); // IDs de áreas activas (vacío = todas)
+
+function inicializarSelectorArea(areas) {
+  const usuario = getUsuario();
+  const tieneMultiArea = areas.length > 1 ||
+    usuario.rol === 'sistemas' || usuario.rol === 'directivo';
+
+  if (!tieneMultiArea) return; // operador/encargado de un área: no mostrar
+
+  const contenedor = document.getElementById('area-selector');
+  const chipsEl    = document.getElementById('area-chips');
+  contenedor.classList.add('visible');
+
+  // Chip "Todas"
+  const chipTodas = document.createElement('span');
+  chipTodas.className  = 'area-chip activo';
+  chipTodas.dataset.id = 'todas';
+  chipTodas.textContent = 'Todas las áreas';
+  chipTodas.onclick = () => seleccionarArea('todas', areas);
+  chipsEl.appendChild(chipTodas);
+
+  areas.forEach(a => {
+    const chip = document.createElement('span');
+    chip.className   = 'area-chip';
+    chip.dataset.id  = a.id;
+    chip.textContent = a.nombre;
+    chip.onclick = () => seleccionarArea(a.id, areas);
+    chipsEl.appendChild(chip);
+  });
+}
+
+function seleccionarArea(id, areas) {
+  const chips = document.querySelectorAll('.area-chip');
+  if (id === 'todas') {
+    areasSeleccionadas.clear();
+    chips.forEach(c => c.classList.toggle('activo', c.dataset.id === 'todas'));
+  } else {
+    const chipTodas = document.querySelector('.area-chip[data-id="todas"]');
+    chipTodas.classList.remove('activo');
+    const chip = document.querySelector(`.area-chip[data-id="${id}"]`);
+    if (areasSeleccionadas.has(id)) {
+      areasSeleccionadas.delete(id);
+      chip.classList.remove('activo');
+      if (areasSeleccionadas.size === 0) {
+        areasSeleccionadas.clear();
+        chipTodas.classList.add('activo');
+      }
+    } else {
+      areasSeleccionadas.add(id);
+      chip.classList.add('activo');
+    }
+  }
+  cargar(1);
+}
+
+// ─── B7: Paneles de checkboxes ────────────────────────────────────────────
+
+// Cierra todos los paneles cuando se hace clic fuera
+document.addEventListener('click', e => {
+  if (!e.target.closest('.filtro-panel')) {
+    document.querySelectorAll('.filtro-panel-dropdown').forEach(d => d.classList.remove('abierto'));
+  }
+});
+
+function togglePanel(panelId) {
+  const panel = document.getElementById(panelId);
+  const drop  = panel.querySelector('.filtro-panel-dropdown');
+  const abierto = drop.classList.contains('abierto');
+  // Cerrar todos los demás
+  document.querySelectorAll('.filtro-panel-dropdown').forEach(d => d.classList.remove('abierto'));
+  if (!abierto) drop.classList.add('abierto');
+}
+
+// Tilda/destilda todos los checkboxes de un panel
+function toggleTodos(tipo) {
+  const todosChk = document.getElementById(`chk-todos-${tipo}`);
+  const items = document.querySelectorAll(`#lista-${tipo} input[type="checkbox"]`);
+  items.forEach(i => { i.checked = todosChk.checked; });
+  actualizarEtiqueta(tipo);
+}
+
+// Cuando cambia un checkbox individual: actualizar el "Todos"
+function onCheckChange(tipo) {
+  const items  = Array.from(document.querySelectorAll(`#lista-${tipo} input[type="checkbox"]`));
+  const todos  = items.every(i => i.checked);
+  const ninguno = items.every(i => !i.checked);
+  document.getElementById(`chk-todos-${tipo}`).checked = todos;
+  actualizarEtiqueta(tipo);
+}
+
+// Actualiza el texto del botón del panel según la selección actual
+function actualizarEtiqueta(tipo) {
+  const items    = Array.from(document.querySelectorAll(`#lista-${tipo} input[type="checkbox"]`));
+  const activos  = items.filter(i => i.checked);
+  const etiqueta = {
+    usuarios: { todos: 'Todos', uno: u => u, n: n => `${n} usuarios` },
+    acciones: { todos: 'Todas', uno: u => u, n: n => `${n} acciones` },
+    entidades: { todos: 'Todas', uno: u => u, n: n => `${n} entidades` },
+  }[tipo];
+
+  let texto;
+  if (activos.length === 0 || activos.length === items.length) {
+    texto = etiqueta.todos;
+  } else if (activos.length === 1) {
+    texto = etiqueta.uno(activos[0].dataset.label || activos[0].value);
+  } else {
+    texto = etiqueta.n(activos.length);
+  }
+  document.getElementById(`lbl-${tipo}`).textContent = texto;
+  const btn = document.querySelector(`#panel-${tipo} .filtro-panel-btn`);
+  btn.classList.toggle('activo', activos.length > 0 && activos.length < items.length);
+}
+
+// Obtiene los valores seleccionados de un panel (vacío = todos)
+function getSeleccionados(tipo) {
+  const items   = Array.from(document.querySelectorAll(`#lista-${tipo} input[type="checkbox"]`));
+  const activos = items.filter(i => i.checked).map(i => i.value);
+  // Si están todos o ninguno activos, no se filtra
+  if (activos.length === 0 || activos.length === items.length) return [];
+  return activos;
+}
+
+// Agrega un item de checkbox a un panel
+function agregarCheckItem(listaId, value, label, checked = true) {
+  const div   = document.getElementById(listaId);
+  const lbl   = document.createElement('label');
+  const tipo  = listaId.replace('lista-', '');
+  lbl.className = 'check-item';
+  lbl.innerHTML = `<input type="checkbox" value="${esc(value)}" data-label="${esc(label)}"
+    ${checked ? 'checked' : ''} onchange="onCheckChange('${tipo}')"> ${esc(label)}`;
+  div.appendChild(lbl);
 }
 
 // ─── Estado ────────────────────────────────────────────────────────────────
@@ -254,18 +448,23 @@ async function cargar(pagina = 1) {
   document.getElementById('btn-anterior').disabled  = true;
   document.getElementById('btn-siguiente').disabled = true;
 
-  const desde      = document.getElementById('filtro-desde').value;
-  const hasta      = document.getElementById('filtro-hasta').value;
-  const usuarioId  = document.getElementById('filtro-usuario').value;
-  const accion     = document.getElementById('filtro-accion').value;
-  const entidadTipo= document.getElementById('filtro-entidad').value;
+  const desde    = document.getElementById('filtro-desde').value;
+  const hasta    = document.getElementById('filtro-hasta').value;
+
+  // B7: obtener arrays de los paneles de checkboxes
+  const usuarios  = getSeleccionados('usuarios');
+  const acciones  = getSeleccionados('acciones');
+  const entidades = getSeleccionados('entidades');
 
   const params = new URLSearchParams({ pagina });
-  if (desde)       params.set('desde',       desde);
-  if (hasta)       params.set('hasta',        hasta);
-  if (usuarioId)   params.set('usuarioId',   usuarioId);
-  if (accion)      params.set('accion',       accion);
-  if (entidadTipo) params.set('entidadTipo', entidadTipo);
+  if (desde) params.set('desde', desde);
+  if (hasta) params.set('hasta', hasta);
+  usuarios.forEach(v  => params.append('usuarios[]',  v));
+  acciones.forEach(v  => params.append('acciones[]',  v));
+  entidades.forEach(v => params.append('entidades[]', v));
+
+  // B9: áreas seleccionadas
+  areasSeleccionadas.forEach(id => params.append('areas[]', id));
 
   const res = await apiFetch(`/panel/auditoria?${params}`);
   if (!res) return;
@@ -285,7 +484,6 @@ async function cargar(pagina = 1) {
   }
 
   document.getElementById('tbody').innerHTML = data.registros.map(r => {
-    // detalle: viene como objeto JSON de MySQL, mostrar como string legible
     let detalleStr = '—';
     if (r.detalle) {
       try {
@@ -297,39 +495,42 @@ async function cargar(pagina = 1) {
       } catch { detalleStr = String(r.detalle); }
     }
 
+    // B6: mostrar descripcion legible en lugar del ID numérico
+    const refText = r.descripcion
+      ? esc(r.descripcion)
+      : `<span style="color:#94a3b8">#${r.entidad_id}</span>`;
+
     return `<tr>
       <td class="td-fecha">${formatFecha(r.timestamp)}</td>
       <td>${r.usuario_nombre ? esc(r.usuario_nombre) : '<span style="color:#94a3b8">Sistema</span>'}</td>
       <td>${badgeAccion(r.accion)}</td>
       <td>${esc(r.entidad_tipo)}</td>
-      <td style="color:#64748b">${r.entidad_id}</td>
+      <td class="td-ref">${refText}</td>
       <td style="color:#64748b">${esc(r.canal)}</td>
       <td class="td-detalle">${esc(detalleStr)}</td>
     </tr>`;
   }).join('');
 
-  const desde2 = (paginaActual - 1) * 50 + 1;
-  const hasta2 = Math.min(paginaActual * 50, data.total);
+  const d2 = (paginaActual - 1) * 50 + 1;
+  const h2 = Math.min(paginaActual * 50, data.total);
   document.getElementById('pag-info').textContent =
-    `Mostrando ${desde2}–${hasta2} de ${data.total} registros (pág. ${paginaActual} / ${totalPaginas})`;
+    `Mostrando ${d2}–${h2} de ${data.total} registros (pág. ${paginaActual} / ${totalPaginas})`;
 
   document.getElementById('btn-anterior').disabled  = paginaActual <= 1;
   document.getElementById('btn-siguiente').disabled = paginaActual >= totalPaginas;
 }
 
 function buscar() { cargar(1); }
-
-function irPagina(n) {
-  if (n < 1 || n > totalPaginas) return;
-  cargar(n);
-}
+function irPagina(n) { if (n >= 1 && n <= totalPaginas) cargar(n); }
 
 function limpiarFiltros() {
-  document.getElementById('filtro-desde').value    = '';
-  document.getElementById('filtro-hasta').value    = '';
-  document.getElementById('filtro-usuario').value  = '';
-  document.getElementById('filtro-accion').value   = '';
-  document.getElementById('filtro-entidad').value  = '';
+  document.getElementById('filtro-desde').value = '';
+  document.getElementById('filtro-hasta').value = '';
+  // Resetear todos los panels: tildar todos los checkboxes
+  ['usuarios', 'acciones', 'entidades'].forEach(tipo => {
+    document.querySelectorAll(`#lista-${tipo} input, #chk-todos-${tipo}`).forEach(i => i.checked = true);
+    actualizarEtiqueta(tipo);
+  });
   cargar(1);
 }
 
@@ -338,13 +539,25 @@ async function cargarUsuarios() {
   const res = await apiFetch('/panel/auditoria/usuarios');
   if (!res || !res.ok) return;
   const data = await res.json();
-  const select = document.getElementById('filtro-usuario');
-  data.forEach(u => {
-    const opt = document.createElement('option');
-    opt.value       = u.id;
-    opt.textContent = u.nombre;
-    select.appendChild(opt);
-  });
+  data.forEach(u => agregarCheckItem('lista-usuarios', u.id, u.nombre));
+  actualizarEtiqueta('usuarios');
+}
+
+// ─── Rellenar acciones y entidades (listas estáticas) ────────────────────
+function rellenarAcciones() {
+  const acciones = ['crear','modificar','cancelar','eliminar','bloquear','desbloquear','login','logout'];
+  const labels   = { crear:'Crear', modificar:'Modificar', cancelar:'Cancelar', eliminar:'Eliminar',
+                     bloquear:'Bloquear', desbloquear:'Desbloquear', login:'Login', logout:'Logout' };
+  acciones.forEach(a => agregarCheckItem('lista-acciones', a, labels[a] || a));
+  actualizarEtiqueta('acciones');
+}
+
+function rellenarEntidades() {
+  const entidades = ['turno','servicio','bloqueo','usuario','area','feriado','horario'];
+  const labels    = { turno:'Turno', servicio:'Servicio', bloqueo:'Bloqueo', usuario:'Usuario',
+                      area:'Área', feriado:'Feriado', horario:'Horario' };
+  entidades.forEach(e => agregarCheckItem('lista-entidades', e, labels[e] || e));
+  actualizarEtiqueta('entidades');
 }
 
 // ─── Init ──────────────────────────────────────────────────────────────────
@@ -354,7 +567,6 @@ async function cargarUsuarios() {
 
   const usuario = getUsuario();
 
-  // Solo roles con acceso al backoffice pueden ver esta página
   if (!['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
     window.location.href = '/panel/agenda.html';
     return;
@@ -368,11 +580,21 @@ async function cargarUsuarios() {
     if (el) el.style.display = '';
   });
 
-  // Fecha por defecto: último mes
+  // Fecha por defecto: mes actual
   const hoy   = new Date();
   const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   document.getElementById('filtro-hasta').value = hoy.toISOString().substring(0, 10);
   document.getElementById('filtro-desde').value = inicio.toISOString().substring(0, 10);
+
+  rellenarAcciones();
+  rellenarEntidades();
+
+  // B9: cargar áreas disponibles para el selector
+  const resAreas = await apiFetch('/panel/areas');
+  if (resAreas && resAreas.ok) {
+    const areas = await resAreas.json();
+    inicializarSelectorArea(areas);
+  }
 
   await Promise.all([cargarUsuarios(), cargar(1)]);
 })();
