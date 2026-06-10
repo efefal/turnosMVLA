@@ -19,7 +19,7 @@
     .nav-user span { color: rgba(255,255,255,.85); }
     .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
     .btn-logout:hover { background: rgba(255,255,255,.2); }
-    .badge-rol { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+    .badge-rol { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
 
     /* Layout */
     .container { max-width: 1200px; margin: 0 auto; padding: 1.25rem 1.5rem; }
@@ -210,6 +210,17 @@ async function cerrarSesion() {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+function rolBadgeHTML(rol) {
+  const cfg = {
+    operador:  { bg: '#1e40af', label: 'Operador' },
+    encargado: { bg: '#166534', label: 'Encargado' },
+    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
+    directivo: { bg: '#374151', label: 'Solo lectura' },
+  };
+  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
+  return `<span class="badge-rol" style="background:${bg};color:white">${label}</span>`;
+}
+
 function formatFecha(ts) {
   if (!ts) return '—';
   // ts viene como "YYYY-MM-DD HH:MM:SS"
@@ -343,29 +354,19 @@ async function cargarUsuarios() {
 
   const usuario = getUsuario();
 
-  // Solo encargados y sistemas pueden acceder a esta página
-  if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {
+  // Solo roles con acceso al backoffice pueden ver esta página
+  if (!['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
     window.location.href = '/panel/agenda.html';
     return;
   }
 
   const nombreEl = document.getElementById('nav-nombre');
-  nombreEl.innerHTML = esc(usuario.nombre);
-  const labelRol = usuario.rol === 'sistemas' ? 'Sistemas' : 'Encargado';
-  nombreEl.innerHTML += ` <span class="badge-rol">${labelRol}</span>`;
+  nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
 
-  // Mostrar links de admin en el navbar
-  if (usuario.rol === 'sistemas') {
-    ['nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = '';
-    });
-  } else {
-    ['nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = '';
-    });
-  }
+  ['nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = '';
+  });
 
   // Fecha por defecto: último mes
   const hoy   = new Date();

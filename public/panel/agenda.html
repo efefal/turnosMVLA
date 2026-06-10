@@ -88,7 +88,10 @@
     .badge-presente { background: #dcfce7; color: #15803d; }
     .badge-ausente  { background: #fee2e2; color: #b91c1c; }
     .badge-atendido { background: #f3f4f6; color: #4b5563; }
-    .badge-encargado { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+    /* Badge de rol en el navbar — color de fondo e ícono se inyectan por JS según el rol */
+    .badge-rol { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+    /* Badge para turnos sin operador asignado todavía */
+    .badge-sin-tomar { background: #e2e8f0; color: #64748b; font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 99px; display: inline-block; }
 
     /* ── VISTA SEMANA ─────────────────────────────────────────── */
     .tabla-semana-wrapper { overflow-x: auto; }
@@ -333,6 +336,20 @@ let fechaActual    = new Date().toISOString().substring(0, 10);
 let vista          = 'dia';    // 'dia' | 'semana' | 'mes'
 let turnosActuales = [];
 let turnoACancelar = null;
+let usuarioRol     = '';       // se fija en init(); usado por renderizarAcciones
+
+// Genera el HTML del badge de rol con el color institucional según el rol.
+// Se llama desde init() y se usa en todas las pantallas.
+function rolBadgeHTML(rol) {
+  const cfg = {
+    operador:  { bg: '#1e40af', label: 'Operador' },
+    encargado: { bg: '#166534', label: 'Encargado' },
+    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
+    directivo: { bg: '#374151', label: 'Solo lectura' },
+  };
+  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
+  return `<span class="badge-rol" style="background:${bg};color:white">${label}</span>`;
+}
 
 // Días especiales para las tres vistas (día, semana, mes).
 // Se precarga junto con los turnos para que el renderizado los tenga disponibles.
@@ -544,6 +561,20 @@ function renderizarStats(turnos) {
 
 // ─── Vista DÍA ─────────────────────────────────────────────────────────────
 function renderizarAcciones(t) {
+  // El directivo solo puede ver, no actuar
+  if (usuarioRol === 'directivo') {
+    return '<span style="color:#94a3b8;font-size:.8rem">—</span>';
+  }
+
+  // Turno sin operador tomado → solo se puede "Tomar" (asignar al que atiende)
+  // Los botones de estado aparecen DESPUÉS de que un operador tomó el turno.
+  if (!t.operador_id) {
+    return `<div class="td-acciones">
+      <button class="btn btn-primary" onclick="tomarTurno(${t.id})">Tomar</button>
+    </div>`;
+  }
+
+  // Turno ya tomado → mostrar botones de estado según la etapa actual
   const btns = [];
   if (t.estado === 'agendado') {
     btns.push(`<button class="btn btn-success" onclick="cambiarEstado(${t.id},'presente')">Presente</button>`);
@@ -571,7 +602,7 @@ function renderizarTablaDia(turnos) {
         <div class="dni-vecino">DNI ${esc(t.vecino_dni)}</div>
       </td>
       <td>${esc(t.servicio_nombre)}</td>
-      <td>${esc(t.operador_nombre)}</td>
+      <td>${t.operador_nombre ? esc(t.operador_nombre) : '<span class="badge-sin-tomar">Sin tomar</span>'}</td>
       <td><span class="badge badge-${t.estado}">${ESTADOS[t.estado] || t.estado}</span></td>
       <td>${renderizarAcciones(t)}</td>
     </tr>
@@ -957,6 +988,23 @@ function irADiaDesdeCalendario(fecha) {
   document.getElementById('fecha-input').value = fechaActual;
 }
 
+// ─── Tomar turno ──────────────────────────────────────────────────────────
+// El operador presiona "Tomar" cuando el vecino llega a la ventanilla.
+// Asigna el operador al turno y recarga la vista día para mostrar los botones de acción.
+async function tomarTurno(id) {
+  mostrarAlerta(null);
+  const res = await apiFetch(`/panel/turno/${id}/tomar`, { method: 'PATCH' });
+  if (!res) return;
+  const data = await res.json();
+  if (!res.ok) {
+    mostrarAlerta('error', data.error || 'No se pudo tomar el turno.');
+    return;
+  }
+  mostrarAlerta('ok', `Turno tomado por ${esc(data.operador_nombre)}.`);
+  // Recargar la vista para que aparezcan los botones Presente/Ausente/Cancelar
+  cargar();
+}
+
 // ─── Cambiar estado de turno ────────────────────────────────────────────────
 async function cambiarEstado(id, estado) {
   mostrarAlerta(null);
@@ -1049,19 +1097,20 @@ async function cargarOperadores() {
   if (!token) return;
 
   const usuario = getUsuario();
+  usuarioRol = usuario.rol;  // guardar en variable global para renderizarAcciones()
+
+  // Badge de rol junto al nombre — se muestra para todos los roles
   const nombreEl = document.getElementById('nav-nombre');
-  nombreEl.innerHTML = esc(usuario.nombre);
-  if (usuario.rol === 'encargado') {
-    nombreEl.innerHTML += ' <span class="badge-encargado">Encargado</span>';
-    document.getElementById('filtro-operador').style.display = 'flex';
-    await cargarOperadores();
-  } else if (usuario.rol === 'sistemas') {
-    nombreEl.innerHTML += ' <span class="badge-encargado">Sistemas</span>';
+  nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
+
+  // Filtro de operador visible para quien puede ver todos los turnos
+  if (['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
     document.getElementById('filtro-operador').style.display = 'flex';
     await cargarOperadores();
   }
-  // Mostrar links de administración para encargados y sistemas
-  if (usuario.rol === 'encargado' || usuario.rol === 'sistemas') {
+
+  // Links de administración para roles con acceso al backoffice
+  if (['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
     ['nav-auditoria', 'nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = '';

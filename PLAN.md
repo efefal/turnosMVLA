@@ -693,3 +693,66 @@ Nota: ya existe `GET /panel/servicios` para el dropdown de turnos — usar una r
 el ABM para no romper el comportamiento del formulario presencial.
 **Frontend**: página nueva `public/panel/servicios.html`.
 **Archivos**: `routes/panel.js`, `public/panel/servicios.html`
+
+---
+
+### Mejoras de operación — Sesión 3 (2026-06-10)
+
+#### M1 — Turnos sin operador asignado al momento de la reserva ✅
+
+**Problema**: el modelo anterior asignaba un operador (round-robin) al crear el turno desde el
+selector web o el bot. Esto no refleja la realidad operativa: cualquier ventanilla disponible
+atiende al vecino que llega.
+
+**Solución**: el operador se asigna recién cuando el vecino llega y el empleado presiona "Tomar".
+- `obtenerDisponibilidadServicio()` ya no hace round-robin — compara oferta (operadores con horario)
+  contra demanda (turnos activos) por slot. `mapaHorarioOperador` devuelve `null` en todos los valores.
+- `crearCita()` inserta con `operador_id = NULL`. Ya no necesita `providerId`.
+- Nueva función `tomarTurno(turnoId, usuarioId)` en `motor.js`: `UPDATE ... SET operador_id = ? WHERE operador_id IS NULL` (concurrencia segura, falla si ya fue tomado).
+- `PATCH /panel/turno/:id/tomar` en `routes/panel.js`: llama a `tomarTurno()`, devuelve el turno actualizado.
+- `agenda.html`: badge "Sin tomar" cuando `operador_id IS NULL`; botón "Tomar" que llama al endpoint y recarga la vista.
+
+**Archivos**: `motor.js`, `routes/panel.js`, `public/panel/agenda.html`, `db/motor_turnos_mvla.sql`
+
+---
+
+#### M2 — Nuevo rol `directivo` (solo lectura) ✅
+
+**Problema**: el directivo municipal necesita ver el estado de la agenda y las estadísticas
+sin poder crear, editar ni cancelar nada.
+
+**Solución**:
+- `routes/auth.js`: jerarquía de roles actualizada — `sistemas > encargado > directivo > operador`.
+- `routes/panel.js`: helper `esDirectivo(req)` + `rechazarDirectivo(res)`. Todos los endpoints
+  POST/PATCH/DELETE verifican y bloquean al directivo con `403`.
+- `GET /panel/agenda` y `GET /panel/agenda/rango`: directivo ve todos los turnos (igual que encargado).
+- Todas las páginas del panel: directivo puede acceder a auditoria, dashboard, usuarios y servicios
+  (redirigía a agenda antes). Botones de creación/edición ocultos o deshabilitados para directivo.
+
+**Archivos**: `routes/auth.js`, `routes/panel.js`, todas las páginas en `public/panel/`
+
+---
+
+#### M3 — Badge de rol en navbar para todos los roles ✅
+
+**Problema**: solo encargado y sistemas veían su badge de rol en el navbar. El operador no veía nada.
+
+**Solución**: función `rolBadgeHTML(rol)` en cada página del panel con colores diferenciados:
+- Operador: `#1e40af` (azul)
+- Encargado: `#166534` (verde)
+- Sistemas: `#6b21a8` (violeta)
+- Directivo: `#374151` (gris, label "Solo lectura")
+
+**Archivos**: todas las páginas en `public/panel/`
+
+---
+
+#### M4 — Corrección de auditoría en `POST /panel/turno` ✅
+
+**Problema**: al crear un turno desde el panel, el campo `usuario_panel_id` en la auditoría
+quedaba en `NULL` porque `crearCita()` no recibía el ID del empleado logueado.
+
+**Solución**: `POST /panel/turno` pasa `usuarioPanelId: req.usuario.id` a `crearCita()`.
+`crearCita()` usa ese ID en el INSERT de auditoría en lugar de `NULL`.
+
+**Archivos**: `motor.js`, `routes/panel.js`

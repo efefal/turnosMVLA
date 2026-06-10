@@ -38,10 +38,23 @@ function esEncargado(req) {
   return req.usuario.rol === 'encargado';
 }
 
+// Retorna true si el usuario tiene rol 'directivo' (solo lectura, sin modificaciones)
+function esDirectivo(req) {
+  return req.usuario.rol === 'directivo';
+}
+
 // Retorna true si el usuario tiene rol 'encargado' O 'sistemas'
-// Usar esta función para endpoints que deben excluir a operadores pero admitir a ambos roles superiores
+// Usar esta función para endpoints que deben excluir a operadores y directivos
 function esEncargadoOSistemas(req) {
   return req.usuario.rol === 'encargado' || req.usuario.rol === 'sistemas';
+}
+
+// Respuesta estándar para el rol directivo cuando intenta modificar datos.
+// Se llama al inicio de cualquier endpoint POST, PATCH o DELETE.
+function rechazarDirectivo(res) {
+  return res.status(403).json({
+    error: 'Acceso de solo lectura. Este rol no puede realizar modificaciones.'
+  });
 }
 
 // Retorna true si el areaId dado está entre las áreas del usuario.
@@ -138,7 +151,9 @@ router.get('/agenda/rango', async (req, res) => {
       params.push(...areaIds);
     }
 
-    if (!esEncargado(req)) {
+    // Operador: solo sus propios turnos.
+    // Encargado, directivo y sistemas: todos los del área, con filtro opcional por operador.
+    if (req.usuario.rol === 'operador') {
       condiciones.push('t.operador_id = ?');
       params.push(req.usuario.id);
     } else if (operadorId) {
@@ -160,7 +175,7 @@ router.get('/agenda/rango', async (req, res) => {
       FROM turnos t
       JOIN vecinos   v ON t.vecino_id   = v.id
       JOIN servicios s ON t.servicio_id = s.id
-      JOIN usuarios  u ON t.operador_id = u.id
+      LEFT JOIN usuarios  u ON t.operador_id = u.id
       WHERE ${condiciones.join(' AND ')}
       ORDER BY t.fecha ASC, t.hora_inicio ASC
     `, params);
@@ -193,9 +208,9 @@ router.get('/agenda', async (req, res) => {
       params.push(...areaIds);
     }
 
-    // Operador → solo sus propios turnos
-    // Encargado → todos los de sus áreas, con filtro opcional por operador
-    if (!esEncargado(req)) {
+    // Operador → solo sus propios turnos (incluye turnos sin operador asignado aún)
+    // Encargado, directivo y sistemas → todos los del área, con filtro opcional por operador
+    if (req.usuario.rol === 'operador') {
       condiciones.push('t.operador_id = ?');
       params.push(req.usuario.id);
     } else if (operadorId) {
@@ -217,14 +232,14 @@ router.get('/agenda', async (req, res) => {
         v.telefono   AS vecino_telefono,
         s.id         AS servicio_id,
         s.nombre     AS servicio_nombre,
-        u.id         AS operador_id,
+        t.operador_id,
         u.nombre     AS operador_nombre,
         a.id         AS area_id,
         a.nombre     AS area_nombre
       FROM turnos t
       JOIN vecinos   v ON t.vecino_id   = v.id
       JOIN servicios s ON t.servicio_id = s.id
-      JOIN usuarios  u ON t.operador_id = u.id
+      LEFT JOIN usuarios  u ON t.operador_id = u.id
       JOIN areas     a ON s.area_id     = a.id
       WHERE ${condiciones.join(' AND ')}
       ORDER BY t.hora_inicio ASC
@@ -369,6 +384,70 @@ router.get('/feriados-bloqueos', async (req, res) => {
 
 
 // =============================================================================
+// TURNOS — tomar turno (asignar operador)
+// =============================================================================
+
+// PATCH /panel/turno/:id/tomar
+// El operador presiona "Tomar" cuando el vecino llega a la ventanilla.
+// Asigna operador_id = usuario logueado en el turno (que tenía operador_id NULL).
+// Si otro operador ya lo tomó (race condition), el UPDATE no afecta filas y lanzamos error.
+// Solo el área del servicio puede tomar el turno.
+router.patch('/turno/:id/tomar', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
+
+  const id = parseInt(req.params.id, 10);
+
+  try {
+    // Verificar existencia del turno y acceso al área
+    const [rows] = await pool.query(`
+      SELECT t.id, t.operador_id, t.estado, s.area_id
+      FROM   turnos t
+      JOIN   servicios s ON t.servicio_id = s.id
+      WHERE  t.id = ?
+    `, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Turno no encontrado.' });
+    }
+
+    const turno = rows[0];
+
+    if (!tieneAccesoAlArea(req, turno.area_id)) {
+      return res.status(403).json({ error: 'Sin permiso para tomar este turno.' });
+    }
+
+    // Ejecutar la asignación en motor.js (con UPDATE condicional + auditoría)
+    await motor.tomarTurno(id, req.usuario.id);
+
+    // Devolver el turno actualizado con el nombre del operador para que el frontend
+    // pueda actualizar la fila sin recargar toda la página.
+    const [turnosActualizados] = await pool.query(`
+      SELECT
+        t.id, t.fecha, t.hora_inicio, t.hora_fin, t.estado, t.canal_origen,
+        v.dni        AS vecino_dni,
+        v.nombre     AS vecino_nombre,
+        s.id         AS servicio_id,
+        s.nombre     AS servicio_nombre,
+        u.id         AS operador_id,
+        u.nombre     AS operador_nombre
+      FROM   turnos    t
+      JOIN   vecinos   v ON t.vecino_id   = v.id
+      JOIN   servicios s ON t.servicio_id = s.id
+      LEFT JOIN usuarios u ON t.operador_id = u.id
+      WHERE  t.id = ?
+    `, [id]);
+
+    logger.info(`[panel] Turno ${id} tomado por ${req.usuario.nombre}`);
+    res.json(turnosActualizados[0]);
+
+  } catch (err) {
+    logger.error('[panel] Error al tomar turno:', err);
+    res.status(409).json({ error: err.message || 'No se pudo tomar el turno.' });
+  }
+});
+
+
+// =============================================================================
 // TURNOS — modificar estado
 // =============================================================================
 
@@ -377,6 +456,8 @@ router.get('/feriados-bloqueos', async (req, res) => {
 // NO permite cancelar desde acá — la cancelación usa DELETE /panel/turno/:id.
 // Registra el estado anterior en auditoría para tener trazabilidad completa.
 router.patch('/turno/:id/estado', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
+
   const id    = parseInt(req.params.id, 10);
   const { estado } = req.body;
 
@@ -457,6 +538,8 @@ router.patch('/turno/:id/estado', async (req, res) => {
 // Nota: NO llama a motor.cancelarCita() porque ese usa canal='bot' y usuario_id=NULL.
 //   Acá necesitamos canal='panel' y el ID del empleado que cancela.
 router.delete('/turno/:id', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
+
   const id     = parseInt(req.params.id, 10);
   const { motivo } = req.body;
 
@@ -544,6 +627,7 @@ router.delete('/turno/:id', async (req, res) => {
 // IMPORTANTE: esta ruta DEBE ir antes de DELETE /turno/:id para que Express
 // no confunda "masivo" con un ID numérico.
 router.delete('/turnos/masivo', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
   if (!esEncargado(req)) {
     return res.status(403).json({ error: 'Solo los encargados pueden hacer cancelaciones masivas.' });
   }
@@ -655,6 +739,8 @@ router.delete('/turnos/masivo', async (req, res) => {
 // exactamente igual que el bot de WhatsApp y el selector web.
 // Canal de origen: 'presencial'. El canal en auditoría es 'panel' (lo maneja motor.js).
 router.post('/turno', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
+
   const { dni, nombre, telefono, serviceId, fecha, horario } = req.body;
 
   if (!dni || !nombre || !serviceId || !fecha || !horario) {
@@ -667,7 +753,6 @@ router.post('/turno', async (req, res) => {
     const serviceIdNum = parseInt(serviceId, 10);
 
     // Verificar si el vecino ya tiene un turno activo para este trámite.
-    // Sin esta guarda, cargar dos veces el mismo vecino y trámite genera un doble turno silencioso.
     const [turnosActivos] = await pool.query(`
       SELECT id FROM turnos
       WHERE vecino_id = (SELECT id FROM vecinos WHERE dni = ?)
@@ -683,11 +768,11 @@ router.post('/turno', async (req, res) => {
       });
     }
 
-    // Obtener la disponibilidad para saber qué operador corresponde al slot (round-robin)
+    // Verificar que el slot está disponible.
+    // En el nuevo modelo, mapaHorarioOperador tiene null en los valores —
+    // usamos horariosLibres para saber si el slot tiene cupo.
     const disponibilidad = await motor.obtenerDisponibilidadServicio(serviceIdNum, fecha);
-    const providerId     = disponibilidad.mapaHorarioOperador[horario];
-
-    if (!providerId) {
+    if (!disponibilidad.horariosLibres.includes(horario)) {
       return res.status(409).json({
         error: `El horario ${horario} no está disponible para el servicio en la fecha ${fecha}.`
       });
@@ -700,23 +785,22 @@ router.post('/turno', async (req, res) => {
       return res.status(404).json({ error: 'Servicio no encontrado.' });
     }
 
-    // Construir fechaHora y fechaHoraFin en formato "YYYY-MM-DD HH:MM:SS"
     const [hh, mm]    = horario.split(':').map(Number);
     const finMinutos  = hh * 60 + mm + servicio.duration;
     const finHH       = String(Math.floor(finMinutos / 60)).padStart(2, '0');
     const finMM       = String(finMinutos % 60).padStart(2, '0');
-    const fechaHora   = `${fecha} ${horario}:00`;
+    const fechaHora    = `${fecha} ${horario}:00`;
     const fechaHoraFin = `${fecha} ${finHH}:${finMM}:00`;
 
-    // crearCita() con canal 'presencial' activa canal_origen='presencial'
-    // y registra auditoría con canal='panel' (manejo interno de motor.js)
+    // crearCita() registra auditoría con usuario_id = usuarioPanelId (el empleado que carga).
+    // Cambio 4: el panel pasa el ID del empleado para que la auditoría no quede con NULL.
     const cita = await motor.crearCita({
       dni, nombre, telefono: telefono || null,
       serviceId: serviceIdNum,
-      providerId,
       fechaHora,
       fechaHoraFin,
       canal: 'presencial',
+      usuarioPanelId: req.usuario.id,
     });
 
     logger.info(
@@ -726,9 +810,9 @@ router.post('/turno', async (req, res) => {
 
   } catch (err) {
     logger.error('[panel] Error al crear turno presencial:', err);
-    // Errores de negocio (slot ocupado, vecino ya tiene turno) → 409 Conflict
-    const esErrorNegocio = err.message?.includes('ya fue reservado') ||
-                           err.message?.includes('ya tiene un turno');
+    const esErrorNegocio = err.message?.includes('ya tiene un turno') ||
+                           err.message?.includes('cupo del turno') ||
+                           err.message?.includes('disponibilidad para ese horario');
     const status = esErrorNegocio ? 409 : 500;
     res.status(status).json({ error: err.message || 'No se pudo crear el turno.' });
   }
@@ -831,6 +915,8 @@ router.get('/bloqueos', async (req, res) => {
 // Operador: solo puede bloquearse a sí mismo (tipo='individual').
 // Encargado: puede crear bloqueos de oficina (tipo='oficina', usuario_id=null).
 router.post('/bloqueos', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
+
   const {
     tipo, usuario_id, servicio_id, area_id,
     fecha_inicio, fecha_fin, hora_inicio, hora_fin, motivo,
@@ -901,6 +987,8 @@ router.post('/bloqueos', async (req, res) => {
 // Operador: solo puede eliminar sus propios bloqueos individuales.
 // Encargado: puede eliminar cualquier bloqueo de su área.
 router.delete('/bloqueos/:id', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
+
   const id = parseInt(req.params.id, 10);
 
   try {
@@ -976,6 +1064,7 @@ router.get('/servicios/:id/mensaje', async (req, res) => {
 // Actualiza el mensaje de confirmación. Solo encargados.
 // El mensaje se muestra al vecino después de confirmar el turno.
 router.patch('/servicios/:id/mensaje', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
   if (!esEncargado(req)) {
     return res.status(403).json({
       error: 'Solo los encargados pueden modificar mensajes de confirmación.'
@@ -1247,12 +1336,12 @@ router.get('/estadisticas', async (req, res) => {
       baseParams
     );
 
-    // Operador con más turnos atendidos — requiere JOIN explícito a usuarios
+    // Operador con más turnos atendidos — LEFT JOIN por si algunos turnos aún no tienen operador
     const [porOperadorFinal] = await pool.query(`
-      SELECT u.nombre AS operador, COUNT(*) AS atendidos
+      SELECT COALESCE(u.nombre, 'Sin asignar') AS operador, COUNT(*) AS atendidos
       FROM turnos t
       JOIN servicios s ON t.servicio_id = s.id
-      JOIN usuarios  u ON t.operador_id = u.id
+      LEFT JOIN usuarios  u ON t.operador_id = u.id
       WHERE t.fecha BETWEEN ? AND ?
         AND t.estado = 'atendido'
         ${areaFiltro}
@@ -1388,6 +1477,7 @@ router.get('/usuarios', async (req, res) => {
 // El encargado solo puede asignarlo a sus propias áreas y con rol <= encargado.
 // Sistemas puede asignar cualquier área y rol.
 router.post('/usuarios', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
   if (!esEncargadoOSistemas(req)) {
     return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
   }
@@ -1400,7 +1490,7 @@ router.post('/usuarios', async (req, res) => {
     });
   }
 
-  const rolesValidos = ['operador', 'encargado', 'sistemas'];
+  const rolesValidos = ['operador', 'encargado', 'sistemas', 'directivo'];
   if (!rolesValidos.includes(rol)) {
     return res.status(400).json({ error: `Rol inválido. Valores permitidos: ${rolesValidos.join(', ')}.` });
   }
@@ -1467,6 +1557,7 @@ router.post('/usuarios', async (req, res) => {
 // El encargado no puede modificar usuarios de otras áreas ni usuarios con rol sistemas.
 // Sistemas puede modificar cualquier usuario.
 router.patch('/usuarios/:id', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
   if (!esEncargadoOSistemas(req)) {
     return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
   }
@@ -1515,7 +1606,7 @@ router.patch('/usuarios/:id', async (req, res) => {
 
     // Validar rol si se envía
     if (rol !== undefined) {
-      const rolesValidos = ['operador', 'encargado', 'sistemas'];
+      const rolesValidos = ['operador', 'encargado', 'sistemas', 'directivo'];
       if (!rolesValidos.includes(rol)) {
         return res.status(400).json({ error: `Rol inválido. Valores permitidos: ${rolesValidos.join(', ')}.` });
       }
@@ -1602,6 +1693,7 @@ router.get('/servicios/admin', async (req, res) => {
 
 // POST /panel/servicios — crear servicio nuevo
 router.post('/servicios', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
   if (!esEncargadoOSistemas(req)) {
     return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
   }
@@ -1649,6 +1741,7 @@ router.post('/servicios', async (req, res) => {
 
 // PATCH /panel/servicios/:id — editar cualquier campo del servicio (incluyendo activar/desactivar)
 router.patch('/servicios/:id', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
   if (!esEncargadoOSistemas(req)) {
     return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
   }

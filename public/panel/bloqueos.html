@@ -254,6 +254,17 @@ async function cerrarSesion() {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+function rolBadgeHTML(rol) {
+  const cfg = {
+    operador:  { bg: '#1e40af', label: 'Operador' },
+    encargado: { bg: '#166534', label: 'Encargado' },
+    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
+    directivo: { bg: '#374151', label: 'Solo lectura' },
+  };
+  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
+  return `<span class="badge-rol" style="background:${bg};color:white;font-size:0.7rem;padding:0.15rem 0.5rem;border-radius:99px;font-weight:600;margin-left:0.4rem">${label}</span>`;
+}
+
 function mostrarAlertaLista(tipo, msg) {
   const errEl = document.getElementById('error-lista');
   const okEl  = document.getElementById('ok-lista');
@@ -453,13 +464,19 @@ async function crearBloqueo() {
   if (!token) return;
 
   const usuario = getUsuario();
-  document.getElementById('nav-nombre').textContent = usuario.nombre;
+  const nombreEl = document.getElementById('nav-nombre');
+  nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
 
-  if (usuario.rol === 'encargado' || usuario.rol === 'sistemas') {
+  if (['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
     ['nav-auditoria', 'nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = '';
     });
+  }
+
+  // Directivo = solo lectura, no puede crear bloqueos
+  if (usuario.rol === 'directivo') {
+    document.getElementById('btn-crear').style.display = 'none';
   }
 
   if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {

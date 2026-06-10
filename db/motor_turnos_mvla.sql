@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS usuario_areas (
   id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   usuario_id  INT UNSIGNED  NOT NULL,
   area_id     INT UNSIGNED  NOT NULL,
-  rol         ENUM('operador', 'encargado', 'sistemas') NOT NULL COMMENT 'Define qué puede hacer en esta área específica',
+  rol         ENUM('operador', 'encargado', 'sistemas', 'directivo') NOT NULL COMMENT 'Define qué puede hacer en esta área específica',
   created_at  DATETIME      NOT NULL DEFAULT NOW(),
 
   PRIMARY KEY (id),
@@ -259,7 +259,7 @@ CREATE TABLE IF NOT EXISTS turnos (
   id                   INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   vecino_id            INT UNSIGNED  NOT NULL               COMMENT 'Quién reservó el turno',
   servicio_id          INT UNSIGNED  NOT NULL               COMMENT 'Para qué trámite',
-  operador_id          INT UNSIGNED  NOT NULL               COMMENT 'Asignado automáticamente por round robin en motor.js',
+  operador_id          INT UNSIGNED  NULL                   COMMENT 'NULL hasta que el operador lo toma al llegar el vecino. Se asigna con tomarTurno().',
   fecha                DATE          NOT NULL,
   hora_inicio          TIME          NOT NULL,
   hora_fin             TIME          NOT NULL               COMMENT 'Calculado por motor.js: hora_inicio + duracion_min del servicio',

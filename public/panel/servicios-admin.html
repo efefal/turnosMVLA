@@ -19,7 +19,7 @@
     .nav-user span { color: rgba(255,255,255,.85); }
     .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
     .btn-logout:hover { background: rgba(255,255,255,.2); }
-    .badge-rol { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+    .badge-rol { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
 
     /* Layout */
     .container { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.5rem; }
@@ -139,7 +139,7 @@
   </div>
 
   <!-- Formulario nuevo servicio -->
-  <div class="card">
+  <div class="card" id="card-nuevo-servicio">
     <div class="card-titulo">Nuevo servicio</div>
     <div class="alerta alerta-error" id="error-form"></div>
     <div class="form-grid">
@@ -238,6 +238,17 @@ async function cerrarSesion() {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+function rolBadgeHTML(rol) {
+  const cfg = {
+    operador:  { bg: '#1e40af', label: 'Operador' },
+    encargado: { bg: '#166534', label: 'Encargado' },
+    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
+    directivo: { bg: '#374151', label: 'Solo lectura' },
+  };
+  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
+  return `<span class="badge-rol" style="background:${bg};color:white">${label}</span>`;
+}
+
 function mostrarAlerta(idErr, idOk, tipo, msg) {
   const errEl = document.getElementById(idErr);
   const okEl  = idOk ? document.getElementById(idOk) : null;
@@ -286,6 +297,7 @@ async function cargarServicios() {
     return;
   }
 
+  const esDirectivo = getUsuario().rol === 'directivo';
   document.getElementById('tbody-servicios').innerHTML = data.map(s => `
     <tr>
       <td style="font-weight:500">${esc(s.nombre)}</td>
@@ -295,6 +307,7 @@ async function cargarServicios() {
       <td><span class="badge ${s.activo ? 'badge-activo' : 'badge-inactivo'}">${s.activo ? 'Activo' : 'Inactivo'}</span></td>
       <td class="td-mensaje" title="${esc(s.mensaje_confirmacion || '')}">${s.mensaje_confirmacion ? esc(s.mensaje_confirmacion) : '<span style="color:#94a3b8">Sin mensaje</span>'}</td>
       <td class="td-acciones">
+        ${esDirectivo ? '<span style="color:#94a3b8;font-size:.78rem">Solo lectura</span>' : `
         <button class="btn btn-ghost btn-sm"
                 onclick="abrirModal(${s.id}, '${esc(s.nombre)}', ${s.duracion_min}, ${s.max_dias_anticipacion}, ${s.activo ? 1 : 0}, \`${(s.mensaje_confirmacion || '').replace(/`/g, '\\`')}\`)">
           Editar
@@ -302,7 +315,7 @@ async function cargarServicios() {
         <button class="btn btn-sm ${s.activo ? 'btn-warning' : 'btn-ghost'}"
                 onclick="toggleActivo(${s.id}, ${s.activo ? 0 : 1})">
           ${s.activo ? 'Desactivar' : 'Activar'}
-        </button>
+        </button>`}
       </td>
     </tr>
   `).join('');
@@ -439,20 +452,23 @@ async function toggleActivo(id, nuevoActivo) {
 
   const usuario = getUsuario();
 
-  if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {
+  if (!['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
     window.location.href = '/panel/agenda.html';
     return;
   }
 
   const nombreEl = document.getElementById('nav-nombre');
-  nombreEl.innerHTML = esc(usuario.nombre);
-  const labelRol = usuario.rol === 'sistemas' ? 'Sistemas' : 'Encargado';
-  nombreEl.innerHTML += ` <span class="badge-rol">${labelRol}</span>`;
+  nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
 
   ['nav-auditoria', 'nav-dashboard', 'nav-usuarios'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = '';
   });
+
+  // Directivo = solo lectura: ocultar el formulario de nuevo servicio
+  if (usuario.rol === 'directivo') {
+    document.getElementById('card-nuevo-servicio').style.display = 'none';
+  }
 
   document.getElementById('modal-fondo').addEventListener('click', e => {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();

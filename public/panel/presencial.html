@@ -318,6 +318,18 @@ let vecinoEncontrado = false; // true si el vecino ya existe en la BD
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+// Badge de rol con color diferenciado por rol
+function rolBadgeHTML(rol) {
+  const cfg = {
+    operador:  { bg: '#1e40af', label: 'Operador' },
+    encargado: { bg: '#166534', label: 'Encargado' },
+    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
+    directivo: { bg: '#374151', label: 'Solo lectura' },
+  };
+  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
+  return `<span class="badge-rol" style="background:${bg};color:white;font-size:0.7rem;padding:0.15rem 0.5rem;border-radius:99px;font-weight:600;margin-left:0.4rem">${label}</span>`;
+}
+
 function mostrarError(paso, msg) {
   const el = document.getElementById(`error-${paso}`);
   el.textContent = msg;
@@ -631,12 +643,19 @@ function reiniciar() {
 
   const usuario = getUsuario();
   const nombreEl = document.getElementById('nav-nombre');
-  nombreEl.textContent = usuario.nombre;
-  if (usuario.rol === 'encargado' || usuario.rol === 'sistemas') {
+  nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
+
+  if (['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
     ['nav-auditoria', 'nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = '';
     });
+  }
+
+  // Directivo = solo lectura, no puede crear turnos
+  if (usuario.rol === 'directivo') {
+    document.getElementById('btn-confirmar').disabled = true;
+    document.getElementById('btn-siguiente-1').disabled = true;
   }
 
   // Fecha mínima = hoy

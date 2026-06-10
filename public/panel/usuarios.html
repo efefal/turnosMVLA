@@ -19,7 +19,7 @@
     .nav-user span { color: rgba(255,255,255,.85); }
     .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
     .btn-logout:hover { background: rgba(255,255,255,.2); }
-    .badge-rol { background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+    .badge-rol { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
 
     /* Layout */
     .container { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.5rem; }
@@ -138,7 +138,7 @@
   </div>
 
   <!-- Formulario nuevo usuario -->
-  <div class="card">
+  <div class="card" id="card-nuevo-usuario">
     <div class="card-titulo">Nuevo usuario</div>
     <div class="alerta alerta-error" id="error-form"></div>
     <div class="form-grid">
@@ -262,10 +262,28 @@ function formatFecha(ts) {
   return `${d}/${m}/${y}`;
 }
 
+// Badge de rol en navbar (color diferenciado)
+function rolBadgeHTML(rol) {
+  const cfg = {
+    operador:  { bg: '#1e40af', label: 'Operador' },
+    encargado: { bg: '#166534', label: 'Encargado' },
+    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
+    directivo: { bg: '#374151', label: 'Solo lectura' },
+  };
+  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
+  return `<span class="badge-rol" style="background:${bg};color:white">${label}</span>`;
+}
+
+// Badge de rol en tabla de usuarios
 function badgeRol(rol) {
-  const cls = { operador: 'badge-operador', encargado: 'badge-encargado', sistemas: 'badge-sistemas' }[rol] || '';
-  const label = { operador: 'Operador', encargado: 'Encargado', sistemas: 'Sistemas' }[rol] || rol;
-  return `<span class="badge ${cls}">${esc(label)}</span>`;
+  const cfg = {
+    operador:  { bg: '#dbeafe', color: '#1e40af', label: 'Operador' },
+    encargado: { bg: '#dcfce7', color: '#166534', label: 'Encargado' },
+    sistemas:  { bg: '#f3e8ff', color: '#6b21a8', label: 'Sistemas' },
+    directivo: { bg: '#f1f5f9', color: '#374151', label: 'Directivo' },
+  };
+  const { bg, color, label } = cfg[rol] || { bg: '#f1f5f9', color: '#374151', label: rol };
+  return `<span class="badge" style="background:${bg};color:${color}">${esc(label)}</span>`;
 }
 
 // ─── Estado de edición ─────────────────────────────────────────────────────
@@ -297,8 +315,8 @@ async function cargarUsuarios() {
   document.getElementById('tbody-usuarios').innerHTML = data.map(u => {
     const areas     = (u.areas || []).map(a => esc(a.area_nombre)).join(', ') || '—';
     const esSistemas = u.rol === 'sistemas';
-    // El encargado no puede editar usuarios con rol sistemas ni de otras áreas
-    const puedeEditar = usuario.rol === 'sistemas' || (!esSistemas);
+    // Directivo no puede editar. Encargado no puede editar usuarios sistemas.
+    const puedeEditar = usuario.rol !== 'directivo' && (usuario.rol === 'sistemas' || !esSistemas);
 
     return `<tr>
       <td style="font-weight:500">${esc(u.nombre)}</td>
@@ -443,20 +461,23 @@ async function guardarEdicion() {
 
   const usuario = getUsuario();
 
-  if (usuario.rol !== 'encargado' && usuario.rol !== 'sistemas') {
+  if (!['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
     window.location.href = '/panel/agenda.html';
     return;
   }
 
   const nombreEl = document.getElementById('nav-nombre');
-  nombreEl.innerHTML = esc(usuario.nombre);
-  const labelRol = usuario.rol === 'sistemas' ? 'Sistemas' : 'Encargado';
-  nombreEl.innerHTML += ` <span class="badge-rol">${labelRol}</span>`;
+  nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
 
   ['nav-auditoria', 'nav-dashboard', 'nav-servicios'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = '';
   });
+
+  // Directivo = solo lectura: ocultar el formulario de nuevo usuario
+  if (usuario.rol === 'directivo') {
+    document.getElementById('card-nuevo-usuario').style.display = 'none';
+  }
 
   // Si el usuario logueado es sistemas, agregar la opción "sistemas" al select de rol
   if (usuario.rol === 'sistemas') {

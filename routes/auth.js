@@ -79,10 +79,14 @@ router.post('/login', async (req, res) => {
     // Filtrar NULLs que aparecen si el LEFT JOIN no encontró filas (usuario sin áreas)
     areas = (areas || []).filter(a => a && a.area_id !== null);
 
-    // Determinar el rol efectivo del usuario (orden de precedencia: sistemas > encargado > operador).
-    // 'sistemas' da acceso completo sin restricción de área — solo se asigna a administradores TI.
-    const rol = areas.some(a => a.rol === 'sistemas')  ? 'sistemas'
-              : areas.some(a => a.rol === 'encargado') ? 'encargado'
+    // Determinar el rol efectivo del usuario (orden de precedencia: sistemas > encargado > directivo > operador).
+    // 'sistemas'  → acceso completo sin restricción de área (admins TI).
+    // 'encargado' → gestión del área propia.
+    // 'directivo' → acceso de solo lectura (sin modificaciones).
+    // 'operador'  → operación de la propia agenda.
+    const rol = areas.some(a => a.rol === 'sistemas')   ? 'sistemas'
+              : areas.some(a => a.rol === 'encargado')  ? 'encargado'
+              : areas.some(a => a.rol === 'directivo')  ? 'directivo'
               : 'operador';
 
     // Lista de IDs de áreas donde trabaja este usuario

@@ -276,133 +276,157 @@ async function obtenerDisponibilidad(serviceId, providerId, fecha) {
 async function obtenerDisponibilidadServicio(serviceId, fecha) {
   serviceId = parseInt(serviceId, 10);
 
-  // --- PASO 1: Obtener los operadores que atienden este servicio ese día ---
-  //
-  // Consultamos directamente la tabla horarios en lugar de llamar a
-  // obtenerProveedores() porque necesitamos solo los IDs — no los nombres ni
-  // la lista completa de servicios. Esto es más eficiente y preciso.
-  //
-  // La condición sobre usuarios.activo garantiza que no consultemos
-  // la disponibilidad de empleados dados de baja.
-  const [operadoresRows] = await db.query(
-    `SELECT DISTINCT h.usuario_id AS id
-     FROM horarios h
-     INNER JOIN usuarios u ON u.id = h.usuario_id AND u.activo = TRUE
-     WHERE h.servicio_id = ? AND h.activo = TRUE
-     ORDER BY h.usuario_id`,
-    [serviceId]
+  // --- PASO 1: Verificar feriado ---
+  const [esFeriado] = await db.query(
+    'SELECT 1 FROM feriados WHERE fecha = ? LIMIT 1',
+    [fecha]
   );
-  // ORDER BY garantiza que cuando dos operadores empatan en carga,
-  // el de menor ID siempre gana el slot. Sin ORDER BY, el DISTINCT
-  // puede devolver el array en diferente orden entre llamadas, haciendo
-  // el desempate no determinístico (varía según el plan de ejecución de MySQL).
-
-  // Si no hay operadores con horario para este servicio, no hay disponibilidad
-  if (operadoresRows.length === 0) {
-    logger.info(`[motor] obtenerDisponibilidadServicio: serviceId=${serviceId} sin operadores activos`);
+  if (esFeriado.length > 0) {
+    logger.info(`[motor] obtenerDisponibilidadServicio: ${fecha} es feriado → sin slots`);
     return { horariosLibres: [], mapaHorarioOperador: {} };
   }
 
-  // --- PASO 2: Consultar disponibilidad de todos los operadores en paralelo ---
+  const diaSemanaJS = new Date(`${fecha}T12:00:00`).getDay();
+  const diaSemanaDB = diaSemanaJS === 0 ? 7 : diaSemanaJS;
+
+  // --- PASO 2: Operadores con horario para este servicio este día + datos del servicio ---
+  const [[operadoresHorarios], [servicioRows]] = await Promise.all([
+    db.query(
+      `SELECT h.usuario_id AS id, h.hora_inicio, h.hora_fin
+       FROM horarios h
+       INNER JOIN usuarios u ON u.id = h.usuario_id AND u.activo = TRUE
+       WHERE h.servicio_id = ? AND h.dia_semana = ? AND h.activo = TRUE
+       ORDER BY h.usuario_id`,
+      [serviceId, diaSemanaDB]
+    ),
+    db.query('SELECT duracion_min, area_id FROM servicios WHERE id = ?', [serviceId]),
+  ]);
+
+  if (operadoresHorarios.length === 0 || servicioRows.length === 0) {
+    logger.info(`[motor] obtenerDisponibilidadServicio: serviceId=${serviceId} sin operadores o servicio no encontrado`);
+    return { horariosLibres: [], mapaHorarioOperador: {} };
+  }
+
+  const { duracion_min: duracion, area_id: areaId } = servicioRows[0];
+
+  // --- PASO 3: Bloqueos de OFICINA que aplican a este servicio y fecha ---
+  // Se obtienen una sola vez y se aplican a todos los operadores por igual.
+  const [bloqueosOficina] = await db.query(
+    `SELECT hora_inicio, hora_fin
+     FROM bloqueos
+     WHERE area_id = ? AND tipo = 'oficina'
+       AND fecha_inicio <= ? AND fecha_fin >= ?
+       AND (servicio_id = ? OR servicio_id IS NULL)`,
+    [areaId, fecha, fecha, serviceId]
+  );
+
+  // Si hay un bloqueo de oficina de día completo, no hay disponibilidad para nadie
+  if (bloqueosOficina.some((b) => b.hora_inicio === null)) {
+    logger.info(`[motor] obtenerDisponibilidadServicio: bloqueo de oficina día completo → sin slots`);
+    return { horariosLibres: [], mapaHorarioOperador: {} };
+  }
+
+  // --- PASO 4: Calcular slots libres de CADA operador en paralelo ---
   //
-  // Promise.all lanza todas las consultas al mismo tiempo. Si hay 3 operadores,
-  // las 3 consultas viajan juntas en lugar de ir una por una — mucho más rápido.
-  //
-  // Estructura de resultado: [{ providerId, slots: ["08:00", ...] }, ...]
+  // "Libre" = tiene el slot en su horario, no está bloqueado individualmente,
+  // y el bloqueo de oficina (si lo hay) no cubre ese slot.
+  // La lista de resultados es [{ slots: ["08:00", ...] }, ...] — los IDs no importan
+  // porque en el nuevo modelo los turnos no pre-asignan operador.
   const resultados = await Promise.all(
-    operadoresRows.map(async (op) => {
-      const slots = await obtenerDisponibilidad(serviceId, op.id, fecha);
-      return { providerId: op.id, slots };
+    operadoresHorarios.map(async (op) => {
+      let slots = generarSlots(op.hora_inicio, op.hora_fin, duracion);
+
+      // Aplicar bloqueos de oficina parciales (hora específica)
+      for (const b of bloqueosOficina) {
+        if (slots.length === 0) break;
+        const bIni = horaAMinutos(b.hora_inicio);
+        const bFin = horaAMinutos(b.hora_fin);
+        slots = slots.filter((s) => {
+          const si = horaAMinutos(s);
+          return !(si < bFin && (si + duracion) > bIni);
+        });
+      }
+
+      // Aplicar bloqueos INDIVIDUALES del operador
+      const [bloqueosInd] = await db.query(
+        `SELECT hora_inicio, hora_fin
+         FROM bloqueos
+         WHERE tipo = 'individual' AND usuario_id = ? AND area_id = ?
+           AND fecha_inicio <= ? AND fecha_fin >= ?
+           AND (servicio_id = ? OR servicio_id IS NULL)`,
+        [op.id, areaId, fecha, fecha, serviceId]
+      );
+
+      for (const b of bloqueosInd) {
+        if (slots.length === 0) break;
+        if (b.hora_inicio === null) { slots = []; break; }
+        const bIni = horaAMinutos(b.hora_inicio);
+        const bFin = horaAMinutos(b.hora_fin);
+        slots = slots.filter((s) => {
+          const si = horaAMinutos(s);
+          return !(si < bFin && (si + duracion) > bIni);
+        });
+      }
+
+      return slots;
     })
   );
 
-  // Si todos los operadores devolvieron arrays vacíos, no hay nada que armar
-  const haySlots = resultados.some((r) => r.slots.length > 0);
-  if (!haySlots) {
-    logger.info(`[motor] obtenerDisponibilidadServicio: serviceId=${serviceId} fecha=${fecha} sin slots disponibles`);
-    return { horariosLibres: [], mapaHorarioOperador: {} };
-  }
-
-  // --- PASO 3: Contar turnos activos de cada operador en esa fecha ---
-  //
-  // Este conteo es la base del round-robin por carga real.
-  // En lugar de asignar al primero que aparezca (FIFO como hacía ea.js),
-  // asignamos al que tiene menos turnos ese día.
-  // Una sola query trae el conteo de todos los operadores juntos.
-  const operadorIds = operadoresRows.map((op) => op.id);
-  const [conteos] = await db.query(
-    `SELECT operador_id, COUNT(*) AS total_turnos
-     FROM turnos
-     WHERE fecha = ?
-       AND operador_id IN (?)
-       AND estado != 'cancelado'
-     GROUP BY operador_id`,
-    [fecha, operadorIds]
-  );
-
-  // Construimos un mapa { providerId → cantidad de turnos } para acceso O(1)
-  // Los operadores sin turnos ese día no aparecen en la query → los inicializamos en 0
-  const cargaPorOperador = {};
-  for (const op of operadoresRows) {
-    cargaPorOperador[op.id] = 0;
-  }
-  for (const fila of conteos) {
-    cargaPorOperador[fila.operador_id] = fila.total_turnos;
-  }
-
-  // --- PASO 4: Construir mapaHorarioOperador con round-robin por carga ---
-  //
-  // Para cada slot único disponible (en cualquier operador):
-  //   1. Encontrar todos los operadores que tienen ese slot libre
-  //   2. Elegir el que tiene menos turnos ese día
-  //   3. Asignarle el slot en el mapa
-  //   4. Incrementar su contador para que el SIGUIENTE slot empate se reparta
-  //      al otro operador — así se distribuye la carga de forma equitativa
-  //      aunque los datos de BD todavía no reflejen estos turnos nuevos.
-
-  // Recolectamos todos los slots únicos de todos los operadores
-  const todosLosSlots = new Set();
-  for (const resultado of resultados) {
-    for (const slot of resultado.slots) {
-      todosLosSlots.add(slot);
+  // --- PASO 5: Contar cuántos operadores tienen libre cada slot (oferta) ---
+  const ofertaPorSlot = {};
+  for (const slots of resultados) {
+    for (const slot of slots) {
+      ofertaPorSlot[slot] = (ofertaPorSlot[slot] || 0) + 1;
     }
   }
 
-  // Ordenamos cronológicamente antes de iterar para que el round-robin
-  // asigne siempre en el mismo orden si se llama dos veces con los mismos datos
-  const slotsOrdenados = [...todosLosSlots].sort();
+  const todosLosSlots = Object.keys(ofertaPorSlot);
+  if (todosLosSlots.length === 0) {
+    logger.info(`[motor] obtenerDisponibilidadServicio: serviceId=${serviceId} fecha=${fecha} sin slots de horario`);
+    return { horariosLibres: [], mapaHorarioOperador: {} };
+  }
 
+  // --- PASO 6: Contar turnos ya creados por slot (demanda) ---
+  //
+  // Ya no filtramos por operador_id porque los turnos no tienen operador pre-asignado.
+  // Filtramos por servicio + fecha + hora_inicio para conocer cuánto del cupo está ocupado.
+  const [turnosExistentes] = await db.query(
+    `SELECT hora_inicio, COUNT(*) AS cantidad
+     FROM turnos
+     WHERE servicio_id = ? AND fecha = ? AND estado != 'cancelado'
+     GROUP BY hora_inicio`,
+    [serviceId, fecha]
+  );
+
+  const demandaPorSlot = {};
+  for (const t of turnosExistentes) {
+    demandaPorSlot[t.hora_inicio.substring(0, 5)] = Number(t.cantidad);
+  }
+
+  // --- PASO 7: Un slot está disponible si la oferta supera la demanda ---
+  //
+  // Ejemplo: 2 operadores libres en 09:00 y 1 turno ya reservado → queda 1 lugar.
+  // Ejemplo: 2 operadores libres en 09:30 y 2 turnos ya reservados → sin lugar.
+  //
+  // mapaHorarioOperador se mantiene por compatibilidad con el bot de WhatsApp,
+  // pero ahora tiene null en todos los valores porque el operador NO se pre-asigna.
+  // El operador se asigna cuando el vecino llega y el empleado ejecuta "Tomar turno".
+  const slotsOrdenados = todosLosSlots.sort();
   const mapaHorarioOperador = {};
 
   for (const slot of slotsOrdenados) {
-    // Operadores que tienen este slot disponible
-    const candidatos = resultados
-      .filter((r) => r.slots.includes(slot))
-      .map((r) => r.providerId);
-
-    if (candidatos.length === 0) continue;
-
-    // Elegir el candidato con menor carga actual
-    // Si empatan en carga, reduce() queda con el primero que encontró
-    // (que ya es el de menor ID por el ORDER BY del PASO 1)
-    const elegido = candidatos.reduce((minId, pId) =>
-      cargaPorOperador[pId] < cargaPorOperador[minId] ? pId : minId
-    );
-
-    mapaHorarioOperador[slot] = elegido;
-
-    // Incrementar el contador del elegido para que el próximo slot
-    // empate se distribuya a otro operador
-    cargaPorOperador[elegido]++;
+    const oferta  = ofertaPorSlot[slot]  || 0;
+    const demanda = demandaPorSlot[slot] || 0;
+    if (oferta > demanda) {
+      mapaHorarioOperador[slot] = null; // null = sin operador pre-asignado
+    }
   }
 
-  // horariosLibres son las claves del mapa — ya están ordenadas porque
-  // iteramos slotsOrdenados y Object.keys() preserva el orden de inserción en V8
   const horariosLibres = Object.keys(mapaHorarioOperador);
 
   logger.info(
     `[motor] obtenerDisponibilidadServicio: serviceId=${serviceId} fecha=${fecha} ` +
-    `→ ${horariosLibres.length} slots, ${operadoresRows.length} operador(es)`
+    `→ ${horariosLibres.length} slots disponibles, ${operadoresHorarios.length} operador(es)`
   );
 
   return { horariosLibres, mapaHorarioOperador };
@@ -410,51 +434,35 @@ async function obtenerDisponibilidadServicio(serviceId, fecha) {
 
 async function crearCita(datos) {
   // Desestructuramos con valores por defecto para los campos opcionales.
-  // El DNI viene siempre en datos.dni — no necesitamos extraerlo del email ficticio.
+  // providerId se acepta por compatibilidad con el bot de WhatsApp (que todavía lo pasa
+  // desde mapaHorarioOperador), pero ya no se usa para asignar el operador.
+  // En el nuevo modelo, el operador se asigna cuando el vecino llega usando tomarTurno().
   const {
     serviceId,
-    providerId,
     nombre,
     apellido  = '',
     dni,
     fechaHora,        // "YYYY-MM-DD HH:MM:SS"
     fechaHoraFin,     // "YYYY-MM-DD HH:MM:SS"
     notas     = '',
-    telefono  = null, // opcional — se guarda en vecinos para recordatorios WhatsApp
+    telefono  = null,
+    usuarioPanelId = null, // ID del empleado que carga el turno desde el panel (opcional)
   } = datos;
 
-  // El canal de origen viene en datos.canal si está definido, sino 'whatsapp'.
-  // Los valores válidos en la columna canal_origen son: 'whatsapp', 'web', 'presencial'.
-  const canalOrigen = datos.canal || 'whatsapp';
-
-  // La columna auditoria.canal tiene un ENUM diferente: 'bot', 'panel', 'sistema', 'web'.
-  //   'bot'   → reservas desde WhatsApp (flujo conversacional)
-  //   'web'   → reservas desde el selector web público
-  //   'panel' → carga presencial realizada por un empleado
+  const canalOrigen    = datos.canal || 'whatsapp';
   const canalAuditoria = { presencial: 'panel', web: 'web' }[canalOrigen] ?? 'bot';
 
-  // Extraemos fecha y hora del string "YYYY-MM-DD HH:MM:SS"
-  const fecha      = fechaHora.substring(0, 10);   // "YYYY-MM-DD"
-  const horaInicio = fechaHora.substring(11, 16);  // "HH:MM"
-  const horaFin    = fechaHoraFin.substring(11, 16); // "HH:MM"
+  const fecha      = fechaHora.substring(0, 10);
+  const horaInicio = fechaHora.substring(11, 16);
+  const horaFin    = fechaHoraFin.substring(11, 16);
 
-  // El nombre que guardamos en vecinos es el nombre completo.
-  // index.js pasa apellido: '' siempre, así que en la práctica es solo el nombre.
   const nombreCompleto = apellido ? `${nombre} ${apellido}`.trim() : nombre;
 
-  // --- TRANSACCIÓN ---
-  // Usamos pool.getConnection() porque la transacción necesita vivir en la
-  // MISMA conexión de principio a fin. pool.query() podría usar conexiones
-  // distintas para cada llamada, rompiendo la transacción.
   const conn = await db.getConnection();
-
   try {
     await conn.beginTransaction();
 
     // --- PASO 1: UPSERT del vecino ---
-    // Si el vecino ya existe (mismo DNI), actualizamos el nombre por si cambió.
-    // El truco LAST_INSERT_ID(id) hace que insertId siempre traiga el ID correcto,
-    // tanto para inserts nuevos como para actualizaciones de duplicados.
     const [upsertResult] = await conn.query(
       `INSERT INTO vecinos (dni, nombre, telefono, canal_registro)
        VALUES (?, ?, ?, ?)
@@ -466,54 +474,80 @@ async function crearCita(datos) {
     );
     const vecinoId = upsertResult.insertId;
 
-    // --- PASO 2: SELECT FOR UPDATE — verificar que el slot sigue libre ---
-    // Esta es la pieza clave del anti-superposición concurrente.
-    // SELECT FOR UPDATE coloca un bloqueo exclusivo sobre las filas leídas
-    // y los gaps adyacentes, de modo que si otra transacción intenta leer
-    // el mismo slot simultáneamente, queda bloqueada hasta que esta termine.
+    // --- PASO 2: Obtener datos del servicio (duración y área) ---
+    const [servicioRows] = await conn.query(
+      'SELECT area_id, duracion_min FROM servicios WHERE id = ?',
+      [parseInt(serviceId, 10)]
+    );
+    if (servicioRows.length === 0) {
+      await conn.rollback();
+      throw new Error(`Servicio ${serviceId} no encontrado.`);
+    }
+    const { area_id: areaId } = servicioRows[0];
+
+    // --- PASO 3: Verificar capacidad del slot con SELECT FOR UPDATE ---
     //
-    // NOTA: el bloqueo es más efectivo cuando existe un índice compuesto en
-    // (operador_id, fecha, hora_inicio). Con los índices actuales (separados)
-    // la ventana de race condition es muy pequeña pero no cero. Suficiente para el PoC.
-    const [turnosExistentes] = await conn.query(
+    // SELECT FOR UPDATE bloquea las filas del slot (o el gap si no hay filas)
+    // para prevenir race conditions: dos reservas simultáneas para el mismo slot.
+    //
+    // Contamos los turnos existentes del slot. Si ya alcanzaron el cupo
+    // (definido por la cantidad de operadores con horario activo para ese slot),
+    // rechazamos la reserva con un error claro.
+    const [turnosDelSlot] = await conn.query(
       `SELECT id FROM turnos
-       WHERE operador_id = ?
-         AND fecha       = ?
-         AND hora_inicio = ?
-         AND estado     != 'cancelado'
+       WHERE servicio_id = ? AND fecha = ? AND hora_inicio = ? AND estado != 'cancelado'
        FOR UPDATE`,
-      [providerId, fecha, horaInicio]
+      [parseInt(serviceId, 10), fecha, horaInicio]
     );
 
-    if (turnosExistentes.length > 0) {
-      // El slot fue tomado por otra reserva entre que el vecino eligió el horario
-      // y presionó confirmar. Hacemos rollback y avisamos con un error claro.
+    // Calcular cuántos operadores tienen este slot disponible en su horario
+    // (no contamos bloqueos aquí porque la disponibilidad ya fue verificada antes).
+    // Este conteo define el cupo máximo simultáneo del slot.
+    const diaSemanaJS = new Date(`${fecha}T12:00:00`).getDay();
+    const diaSemanaDB = diaSemanaJS === 0 ? 7 : diaSemanaJS;
+    const [horariosSlot] = await conn.query(
+      `SELECT COUNT(DISTINCT h.usuario_id) AS total
+       FROM horarios h
+       JOIN usuarios u ON u.id = h.usuario_id AND u.activo = TRUE
+       WHERE h.servicio_id = ?
+         AND h.dia_semana  = ?
+         AND h.hora_inicio <= ?
+         AND h.hora_fin    >= ?
+         AND h.activo      = TRUE`,
+      // La condición hora_fin >= horaFin garantiza que el slot cabe entero en el horario
+      [parseInt(serviceId, 10), diaSemanaDB, horaInicio, horaFin]
+    );
+    const cupoMaximo = horariosSlot[0]?.total || 0;
+
+    if (turnosDelSlot.length >= cupoMaximo) {
       await conn.rollback();
       throw new Error(
-        `El horario ${horaInicio} del ${fecha} ya fue reservado por otra persona. ` +
-        `Elegí otro horario.`
+        `No hay disponibilidad para ese horario. ` +
+        `El cupo del turno ${horaInicio} ya está completo.`
       );
     }
 
-    // --- PASO 3: INSERT del turno ---
+    // --- PASO 4: INSERT del turno SIN operador pre-asignado ---
+    // operador_id queda NULL hasta que un empleado ejecute tomarTurno() al llegar el vecino.
     const [insertResult] = await conn.query(
       `INSERT INTO turnos
          (vecino_id, servicio_id, operador_id, fecha, hora_inicio, hora_fin, estado, canal_origen)
-       VALUES (?, ?, ?, ?, ?, ?, 'agendado', ?)`,
-      [vecinoId, serviceId, providerId, fecha, horaInicio, horaFin, canalOrigen]
+       VALUES (?, ?, NULL, ?, ?, ?, 'agendado', ?)`,
+      [vecinoId, parseInt(serviceId, 10), fecha, horaInicio, horaFin, canalOrigen]
     );
     const turnoId = insertResult.insertId;
 
-    // --- PASO 4: INSERT en auditoría ---
-    // Registramos la creación para tener trazabilidad completa.
-    // usuario_id es NULL porque la acción la hace el sistema (bot o web), no un empleado.
+    // --- PASO 5: INSERT en auditoría ---
+    // usuarioPanelId viene cuando la carga la hace un empleado desde el panel presencial.
+    // Para WhatsApp y web, es NULL porque el vecino actúa directamente.
     await conn.query(
       `INSERT INTO auditoria
          (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal)
-       VALUES (NULL, 'turno', ?, 'crear', ?, ?)`,
+       VALUES (?, 'turno', ?, 'crear', ?, ?)`,
       [
+        usuarioPanelId,
         turnoId,
-        JSON.stringify({ dni, serviceId, providerId, fecha, horaInicio, horaFin, canal: canalOrigen }),
+        JSON.stringify({ dni, serviceId, fecha, horaInicio, horaFin, canal: canalOrigen }),
         canalAuditoria,
       ]
     );
@@ -521,35 +555,64 @@ async function crearCita(datos) {
     await conn.commit();
 
     logger.info(
-      `[motor] crearCita: turno ${turnoId} creado | DNI: ${dni} | ` +
-      `serviceId: ${serviceId} | providerId: ${providerId} | ${fecha} ${horaInicio}`
+      `[motor] crearCita: turno ${turnoId} creado (sin operador) | DNI: ${dni} | ` +
+      `serviceId: ${serviceId} | ${fecha} ${horaInicio}`
     );
 
-    // Retornamos el objeto con todos los campos que puede necesitar el selector web.
-    // index.js solo lee cita.id (para el log del endpoint), pero res.json(cita)
-    // envía el objeto completo al cliente web, así que incluimos los campos principales.
     return {
-      id:          turnoId,
-      start:       fechaHora,       // "YYYY-MM-DD HH:MM:SS" — formato que usa index.js
-      end:         fechaHoraFin,    // "YYYY-MM-DD HH:MM:SS"
-      serviceId:   parseInt(serviceId,  10),
-      providerId:  parseInt(providerId, 10),
+      id:        turnoId,
+      start:     fechaHora,
+      end:       fechaHoraFin,
+      serviceId: parseInt(serviceId, 10),
+      providerId: null,  // sin operador pre-asignado
       vecinoId,
-      estado:      'agendado',
-      canal:       canalOrigen,
+      estado:    'agendado',
+      canal:     canalOrigen,
     };
 
   } catch (err) {
-    // Si algo falló dentro de la transacción y no hicimos rollback explícito arriba,
-    // lo hacemos acá para no dejar la transacción colgada.
     await conn.rollback();
-    // Re-lanzamos el error para que index.js lo capture en su try/catch.
     throw err;
   } finally {
-    // SIEMPRE devolver la conexión al pool, haya habido error o no.
-    // Si no se libera, el pool se agota y el sistema se cuelga.
     conn.release();
   }
+}
+
+
+// =============================================================================
+// FUNCIÓN 8: tomarTurno(turnoId, usuarioId)
+// =============================================================================
+// Asigna el operador a un turno que todavía está sin tomar (operador_id IS NULL).
+// Se llama desde el panel cuando el vecino llega a la ventanilla y el empleado
+// presiona "Tomar turno". Evita que dos operadores tomen el mismo turno.
+//
+// Si el turno ya tiene operador asignado, lanza un error descriptivo.
+async function tomarTurno(turnoId, usuarioId) {
+  turnoId   = parseInt(turnoId,   10);
+  usuarioId = parseInt(usuarioId, 10);
+
+  // UPDATE condicional: solo actualiza si operador_id es NULL y el estado es agendado.
+  // Si otro operador ya lo tomó (race condition), affectedRows será 0.
+  const [result] = await db.query(
+    `UPDATE turnos
+       SET operador_id = ?, updated_at = NOW()
+     WHERE id = ? AND operador_id IS NULL AND estado = 'agendado'`,
+    [usuarioId, turnoId]
+  );
+
+  if (result.affectedRows === 0) {
+    throw new Error('Este turno ya fue tomado por otro operador, o no existe, o ya no está agendado.');
+  }
+
+  // Registrar en auditoría quién tomó el turno y cuándo
+  await db.query(
+    `INSERT INTO auditoria
+       (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal)
+     VALUES (?, 'turno', ?, 'modificar', ?, 'panel')`,
+    [usuarioId, turnoId, JSON.stringify({ operador_asignado: usuarioId })]
+  );
+
+  logger.info(`[motor] tomarTurno: turno ${turnoId} tomado por operador ${usuarioId}`);
 }
 
 
@@ -687,4 +750,5 @@ module.exports = {
   crearCita,
   cancelarCita,
   obtenerCitasDelCliente,
+  tomarTurno,
 };
