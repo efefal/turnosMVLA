@@ -134,9 +134,10 @@ CREATE TABLE IF NOT EXISTS usuarios (
   nombre        VARCHAR(150)  NOT NULL,
   email         VARCHAR(255)  NOT NULL               COMMENT 'Se usa como nombre de usuario para el login',
   password_hash VARCHAR(255)  NOT NULL               COMMENT 'Contraseña encriptada con bcrypt. Nunca se guarda en texto plano',
-  activo        BOOLEAN       NOT NULL DEFAULT TRUE   COMMENT 'FALSE = acceso suspendido. No se borra el usuario para conservar auditoría',
-  ultimo_acceso DATETIME      NULL                   COMMENT 'Última vez que inició sesión. Útil para detectar cuentas inactivas',
-  created_at    DATETIME      NOT NULL DEFAULT NOW(),
+  activo              BOOLEAN       NOT NULL DEFAULT TRUE   COMMENT 'FALSE = acceso suspendido. No se borra el usuario para conservar auditoría',
+  ultimo_acceso       DATETIME      NULL                   COMMENT 'Última vez que inició sesión. Útil para detectar cuentas inactivas',
+  debe_cambiar_clave  BOOLEAN       NOT NULL DEFAULT FALSE  COMMENT 'TRUE = el usuario debe cambiar su contraseña al próximo login (p.ej. clave temporal asignada por sistemas)',
+  created_at          DATETIME      NOT NULL DEFAULT NOW(),
 
   PRIMARY KEY (id),
   -- El email no puede repetirse

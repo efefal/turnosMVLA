@@ -958,3 +958,80 @@ uno siempre activo. Para sistemas/directivo se muestran todas las áreas del sis
 **Archivos**: `routes/panel.js`, `public/panel/agenda.html`, `public/panel/dashboard.html`,
 `public/panel/auditoria.html`, `public/panel/bloqueos.html`, `public/panel/servicios-admin.html`,
 `public/panel/usuarios.html`, `public/panel/presencial.html`
+
+---
+
+### Correcciones de permisos y formularios — Sesión C (2026-06-11)
+
+#### C1 — Sistemas puede crear bloqueos de cualquier tipo ✅
+
+**Problema**: `POST /panel/bloqueos` y `DELETE /panel/bloqueos/:id` usaban `!esEncargado(req)`
+como guard para bloqueos de oficina, lo que impedía que el rol `sistemas` creara o eliminara
+ese tipo de bloqueo aunque tiene acceso total al sistema.
+
+**Solución**: reemplazado `!esEncargado(req)` por `!esEncargadoOSistemas(req)` en ambos
+endpoints. El frontend ya mostraba la opción "Oficina completa" para sistemas correctamente.
+
+**Archivos**: `routes/panel.js`
+
+---
+
+#### C2 — Rol directivo en el formulario de usuarios ✅
+
+**Problema**: el dropdown de roles en los formularios de crear y editar usuario no incluía
+la opción "Directivo". Los usuarios con ese rol no podían asignarse desde el panel.
+
+**Solución**:
+- Agregada opción `<option value="directivo">Directivo</option>` en `nuevo-rol` y `edit-rol`.
+- `onNuevoRolChange()` y `onEditRolChange()` ocultan la sección "Áreas asignadas" cuando
+  se selecciona directivo (no requiere área — acceso de solo lectura global).
+- `abrirModal()` detecta el rol `directivo` del usuario y oculta la sección de áreas en el modal.
+- `crearUsuario()` y `guardarEdicion()`: validación de áreas salteada para directivo.
+- `guardarEdicion()` no envía `areas` ni `atiendeAreas` en el body cuando rol=directivo.
+- Backend `POST /panel/usuarios`: `areas.length` no requerida si `rol === 'directivo'`.
+
+**Archivos**: `routes/panel.js`, `public/panel/usuarios.html`
+
+---
+
+#### C3 — Contraseña de un solo uso y reseteo de clave ✅
+
+**Problema**: no existía mecanismo para asignar una contraseña temporal a un usuario nuevo
+ni para forzar el cambio de clave al primer login.
+
+**Solución**:
+- BD: columna `debe_cambiar_clave BOOLEAN NOT NULL DEFAULT FALSE` en tabla `usuarios`.
+- `routes/auth.js`: login incluye `debe_cambiar_clave: true` en la respuesta si el flag está activo.
+- `routes/panel.js`: nuevo endpoint `POST /panel/auth/cambiar-clave` — cambia la clave del
+  usuario autenticado y setea `debe_cambiar_clave = FALSE`. Disponible también para cambio voluntario.
+- `routes/panel.js`: nuevo endpoint `POST /panel/usuarios/:id/resetear-clave` (solo sistemas) —
+  genera clave temporal de 8 chars, la hashea, setea `debe_cambiar_clave = TRUE`, audita y
+  devuelve la clave en texto plano.
+- Nueva pantalla `public/panel/cambiar-clave.html`: sin navbar, dos campos de contraseña,
+  redirige a `agenda.html` al guardar exitosamente.
+- `public/panel/login.html`: si la respuesta incluye `debe_cambiar_clave: true`, guarda el flag
+  en sessionStorage y redirige a `cambiar-clave.html` en lugar de `agenda.html`.
+- `public/panel/usuarios.html`: botón "Resetear clave" visible solo para rol `sistemas` en cada
+  fila; modal de dos pasos (confirmación → mostrar contraseña generada).
+
+**Archivos**: `db/motor_turnos_mvla.sql`, `routes/auth.js`, `routes/panel.js`,
+`public/panel/cambiar-clave.html` (nuevo), `public/panel/login.html`, `public/panel/usuarios.html`
+
+---
+
+#### C4 — Horarios con semana completa ✅
+
+**Problema**: la sección de horarios en `usuarios.html` usaba un modelo de filas dinámicas
+con un dropdown para elegir el día. Esto no representaba visualmente qué días trabaja el
+operador y obligaba a agregar/eliminar filas manualmente.
+
+**Solución**: reemplazado el botón "+ Agregar horario" por una grilla fija de 7 días:
+- Checkbox por día para activar/desactivar. Campos hora inicio y hora fin visibles solo si está activo.
+- Al cargar horarios de un usuario sin datos para un servicio: lunes–viernes pre-activados
+  con 07:00–14:00 como punto de partida; sábado–domingo desactivados.
+- Al cargar horarios existentes: los días configurados aparecen marcados con sus horas.
+- `onDiaCheck()` agrega/elimina entradas de `horariosEditar` sin re-renderizar la grilla completa.
+- `onHorarioDiaChange()` actualiza horas en `horariosEditar` directamente.
+- `guardarHorarios()` sin cambios — ya enviaba solo los registros en `horariosEditar`.
+
+**Archivos**: `public/panel/usuarios.html`

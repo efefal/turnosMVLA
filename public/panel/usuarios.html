@@ -98,20 +98,23 @@
     .modal-seccion { border-top: 1px solid #f1f5f9; padding-top: 1rem; margin-top: 1rem; }
     .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 1rem; }
 
-    /* B4: Horarios */
+    /* B4: Horarios — grilla semanal */
     .horarios-lista { display: flex; flex-direction: column; gap: 1rem; }
     .horarios-servicio {}
-    .horarios-srv-nombre { font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
-    .horarios-filas { display: flex; flex-direction: column; gap: 0.3rem; }
-    .horario-fila { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-    .horario-fila select, .horario-fila input[type="time"] {
+    .horarios-srv-nombre { font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.5rem; }
+    .horarios-grilla { display: flex; flex-direction: column; gap: 0.3rem; }
+    .horario-dia-fila { display: flex; align-items: center; gap: 0.75rem; padding: 0.25rem 0; }
+    .horario-dia-check { display: flex; align-items: center; gap: 0.4rem; min-width: 115px; cursor: pointer; }
+    .horario-dia-check input[type="checkbox"] { accent-color: #1A3C4B; cursor: pointer; }
+    .horario-dia-label { font-size: 0.85rem; color: #374151; user-select: none; }
+    .horario-dia-horas { display: flex; align-items: center; gap: 0.35rem; }
+    .horario-sep { font-size: 0.8rem; color: #94a3b8; }
+    .horario-hora-ini, .horario-hora-fin {
       padding: 0.3rem 0.5rem; border: 1px solid #d1d5db; border-radius: 5px;
       font-size: 0.8rem; font-family: inherit; background: white;
     }
-    .horario-fila select:focus, .horario-fila input[type="time"]:focus {
-      outline: none; border-color: #1A3C4B;
-    }
-    .horarios-empty { font-size: 0.8rem; color: #94a3b8; font-style: italic; margin-bottom: 0.4rem; }
+    .horario-hora-ini:focus, .horario-hora-fin:focus { outline: none; border-color: #1A3C4B; }
+    .horarios-empty { font-size: 0.8rem; color: #94a3b8; font-style: italic; }
     .horarios-footer { display: flex; gap: 0.5rem; margin-top: 1rem; }
 
     /* B9: Selector de área */
@@ -213,13 +216,14 @@
           <option value="">— Seleccioná un rol —</option>
           <option value="operador">Operador</option>
           <option value="encargado">Encargado</option>
+          <option value="directivo">Directivo</option>
           <!-- sistemas: se agrega si el usuario logueado es sistemas -->
         </select>
         <span class="form-hint" id="hint-rol-nuevo"></span>
       </div>
-      <!-- B2: multi-área checkboxes -->
-      <div class="form-grupo full">
-        <div class="form-seccion-titulo">Áreas asignadas <span style="color:#dc2626">*</span></div>
+      <!-- B2: multi-área checkboxes (oculto si rol=directivo) -->
+      <div class="form-grupo full" id="nuevo-areas-seccion">
+        <div class="form-seccion-titulo" id="nuevo-areas-titulo">Áreas asignadas <span style="color:#dc2626">*</span></div>
         <div class="area-check-lista" id="nuevo-areas-lista">
           <span style="color:#94a3b8;font-size:.85rem;font-style:italic">Cargando áreas...</span>
         </div>
@@ -249,6 +253,7 @@
         <select id="edit-rol" onchange="onEditRolChange()">
           <option value="operador">Operador</option>
           <option value="encargado">Encargado</option>
+          <option value="directivo">Directivo</option>
         </select>
       </div>
       <div class="form-grupo">
@@ -260,8 +265,8 @@
       </div>
     </div>
 
-    <!-- B2+B3: Áreas con atiende_turnos -->
-    <div class="modal-seccion">
+    <!-- B2+B3: Áreas con atiende_turnos (oculto si rol=directivo) -->
+    <div class="modal-seccion" id="edit-areas-seccion">
       <div class="form-seccion-titulo">Áreas asignadas</div>
       <div class="area-check-lista" id="edit-areas-lista">
         <span style="color:#94a3b8;font-size:.85rem;font-style:italic">Cargando áreas...</span>
@@ -283,6 +288,40 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarEdicion()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de reseteo de contraseña (solo sistemas) -->
+<div class="modal-fondo" id="modal-reset-fondo">
+  <div class="modal-caja" style="max-width:440px">
+    <h3 id="modal-reset-titulo">Resetear contraseña</h3>
+
+    <!-- Paso 1: confirmación -->
+    <div id="reset-paso-confirmar">
+      <p style="color:#475569;font-size:.875rem;margin-bottom:1rem" id="reset-texto-confirmar"></p>
+      <div class="modal-footer" style="margin-top:0">
+        <button class="btn btn-ghost" onclick="cerrarModalReset()">Cancelar</button>
+        <button class="btn btn-danger" id="btn-confirmar-reset" onclick="ejecutarReset()">Resetear contraseña</button>
+      </div>
+    </div>
+
+    <!-- Paso 2: resultado con la contraseña temporal -->
+    <div id="reset-paso-resultado" style="display:none">
+      <p style="color:#475569;font-size:.875rem;margin-bottom:.75rem">
+        La contraseña temporal es:
+      </p>
+      <div id="reset-clave-display" style="
+        background:#f0fdf4; border:2px solid #86efac; border-radius:8px;
+        padding:.75rem 1rem; font-size:1.4rem; font-weight:700; letter-spacing:.15em;
+        color:#166534; text-align:center; margin-bottom:1rem; font-family:monospace;
+      "></div>
+      <p style="color:#64748b;font-size:.8rem;margin-bottom:1rem">
+        Comunicá esta clave al usuario. Al iniciar sesión se le pedirá que la cambie.
+      </p>
+      <div class="modal-footer" style="margin-top:0">
+        <button class="btn btn-primary" onclick="cerrarModalReset()">Listo</button>
+      </div>
     </div>
   </div>
 </div>
@@ -361,6 +400,7 @@ function badgeRol(rol) {
 
 // ─── Estado global ─────────────────────────────────────────────────────────
 let idEditando       = null;
+let idResetando      = null;  // ID del usuario al que se le va a resetear la clave
 let areasGlobales    = [];  // todas las áreas accesibles: [{ id, nombre }]
 let todosLosUsuarios = [];  // caché de todos los usuarios cargados (para filtro B9)
 let serviciosMap     = {};  // { servicio_id: { id, nombre } } — para el picker de horarios
@@ -449,6 +489,10 @@ function renderUsuarios(data) {
         ${puedeEditar
           ? `<button class="btn btn-ghost btn-sm" onclick="abrirModal(${u.id})">Editar</button>`
           : '<span style="color:#94a3b8;font-size:.78rem">Sin permiso</span>'}
+        ${usuarioLogueado.rol === 'sistemas'
+          ? `<button class="btn btn-ghost btn-sm" style="color:#dc2626;border-color:#fca5a5"
+               onclick="resetearClave(${u.id}, ${JSON.stringify(esc(u.nombre))})">Resetear clave</button>`
+          : ''}
       </td>
     </tr>`;
   }).join('');
@@ -527,9 +571,15 @@ function onNuevoRolChange() {
   const hints = {
     operador:  'Atiende al público. Ocupa un slot por turno. Puede bloquearse a sí mismo.',
     encargado: 'Administra el área. No ocupa slots. Puede ver toda la agenda y crear bloqueos.',
+    directivo: 'Solo lectura. Ve agenda, estadísticas y auditoría sin poder modificar nada. No requiere área.',
     sistemas:  'Acceso total al sistema. Sin restricción de área.',
   };
   document.getElementById('hint-rol-nuevo').textContent = hints[rol] || '';
+
+  // Directivo no requiere área — ocultar esa sección
+  const esDirectivo = rol === 'directivo';
+  document.getElementById('nuevo-areas-seccion').style.display = esDirectivo ? 'none' : '';
+
   // Actualizar defaults de atiende_turnos en los checkboxes
   document.querySelectorAll('#nuevo-areas-lista .area-check-item').forEach(item => {
     const atiendeChk = item.querySelector('.atiende-turnos-group input[type="checkbox"]');
@@ -540,6 +590,15 @@ function onNuevoRolChange() {
 // Evento: cambio de rol en modal de edición
 function onEditRolChange() {
   const rol = document.getElementById('edit-rol').value;
+
+  // Directivo no requiere área — ocultar esa sección y la de horarios
+  const esDirectivo = rol === 'directivo';
+  document.getElementById('edit-areas-seccion').style.display  = esDirectivo ? 'none' : '';
+  if (esDirectivo) {
+    document.getElementById('seccion-horarios').style.display = 'none';
+    return;
+  }
+
   document.querySelectorAll('#edit-areas-lista .area-check-item').forEach(item => {
     const atiendeChk = item.querySelector('.atiende-turnos-group input[type="checkbox"]');
     if (atiendeChk) atiendeChk.checked = (rol === 'operador');
@@ -590,7 +649,8 @@ async function crearUsuario() {
   if (!nombre || !email || !password || !rol) {
     mostrarAlerta('error-form', null, 'error', 'Completá todos los campos obligatorios.'); return;
   }
-  if (!areas.length) {
+  // Directivo no requiere área asignada (acceso de solo lectura a todo el sistema)
+  if (!areas.length && rol !== 'directivo') {
     mostrarAlerta('error-form', null, 'error', 'Seleccioná al menos un área.'); return;
   }
   if (password.length < 6) {
@@ -641,14 +701,20 @@ async function abrirModal(id) {
   document.getElementById('edit-rol').value    = u.rol;
   document.getElementById('edit-activo').value = u.activo ? '1' : '0';
 
-  // B2+B3: cargar checkboxes de área con estado actual
-  construirAreaCheckboxes('edit-areas-lista', u.areas || [], u.rol);
+  // Directivo no tiene áreas — ocultar esas secciones
+  const esDirectivo = u.rol === 'directivo';
+  document.getElementById('edit-areas-seccion').style.display = esDirectivo ? 'none' : '';
 
-  // B4: verificar si algún área tiene atiende_turnos=TRUE → mostrar horarios
-  const hayAtiende = (u.areas || []).some(a => a.atiende_turnos);
-  if (hayAtiende) {
-    document.getElementById('seccion-horarios').style.display = '';
-    await cargarHorarios(id);
+  if (!esDirectivo) {
+    // B2+B3: cargar checkboxes de área con estado actual
+    construirAreaCheckboxes('edit-areas-lista', u.areas || [], u.rol);
+
+    // B4: verificar si algún área tiene atiende_turnos=TRUE → mostrar horarios
+    const hayAtiende = (u.areas || []).some(a => a.atiende_turnos);
+    if (hayAtiende) {
+      document.getElementById('seccion-horarios').style.display = '';
+      await cargarHorarios(id);
+    }
   }
 }
 
@@ -656,6 +722,49 @@ function cerrarModal() {
   document.getElementById('modal-fondo').classList.remove('abierto');
   idEditando = null;
   horariosEditar = [];
+}
+
+// ─── Reseteo de contraseña (solo sistemas) ─────────────────────────────────
+
+// Abre el modal de confirmación para resetear la clave del usuario indicado
+function resetearClave(id, nombre) {
+  idResetando = id;
+  document.getElementById('reset-texto-confirmar').textContent =
+    `¿Resetear la contraseña de ${nombre}? Se generará una clave temporal que el usuario deberá cambiar al próximo login.`;
+  document.getElementById('reset-paso-confirmar').style.display = '';
+  document.getElementById('reset-paso-resultado').style.display = 'none';
+  document.getElementById('modal-reset-fondo').classList.add('abierto');
+}
+
+// Ejecuta la llamada al backend para resetear la clave
+async function ejecutarReset() {
+  if (!idResetando) return;
+  const btn = document.getElementById('btn-confirmar-reset');
+  btn.disabled    = true;
+  btn.textContent = 'Reseteando...';
+
+  const res = await apiFetch(`/panel/usuarios/${idResetando}/resetear-clave`, { method: 'POST' });
+  btn.disabled    = false;
+  btn.textContent = 'Resetear contraseña';
+
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) {
+    mostrarAlerta('error-lista', 'ok-lista', 'error', data.error || 'No se pudo resetear la contraseña.');
+    cerrarModalReset();
+    return;
+  }
+
+  // Mostrar la contraseña temporal generada
+  document.getElementById('reset-clave-display').textContent = data.clave_temporal;
+  document.getElementById('reset-paso-confirmar').style.display = 'none';
+  document.getElementById('reset-paso-resultado').style.display = '';
+}
+
+function cerrarModalReset() {
+  document.getElementById('modal-reset-fondo').classList.remove('abierto');
+  idResetando = null;
 }
 
 async function guardarEdicion() {
@@ -668,11 +777,19 @@ async function guardarEdicion() {
   const { areas, atiendeAreas } = leerAreasSeleccionadas('edit-areas-lista');
 
   if (!nombre) { mostrarAlertaModal('error', 'El nombre no puede estar vacío.'); return; }
-  if (!areas.length) { mostrarAlertaModal('error', 'El usuario debe tener al menos un área asignada.'); return; }
+  // Directivo no requiere área asignada
+  if (!areas.length && rol !== 'directivo') {
+    mostrarAlertaModal('error', 'El usuario debe tener al menos un área asignada.'); return;
+  }
+
+  // Directivo no requiere áreas — no enviar el campo para no borrar asignaciones previas
+  const patchBody = rol === 'directivo'
+    ? { nombre, rol, activo }
+    : { nombre, rol, activo, areas, atiendeAreas };
 
   const res = await apiFetch(`/panel/usuarios/${idEditando}`, {
     method: 'PATCH',
-    body: JSON.stringify({ nombre, rol, activo, areas, atiendeAreas }),
+    body: JSON.stringify(patchBody),
   });
   if (!res) return;
   const data = await res.json();
@@ -693,8 +810,27 @@ async function cargarHorarios(usuarioId) {
     return;
   }
   horariosEditar = await res.json();
-  // Cargar servicios disponibles para poder agregar horarios nuevos
+  // Cargar servicios disponibles para el mapa de nombres
   await cargarServiciosParaHorarios(usuarioId);
+
+  // Para cada servicio sin horarios configurados, pre-cargar lunes a viernes
+  // con 07:00–14:00 como punto de partida. El usuario puede ajustar o desactivar días.
+  Object.values(serviciosMap).forEach(srv => {
+    const tieneDatos = horariosEditar.some(h => h.servicio_id === srv.id);
+    if (!tieneDatos) {
+      [1, 2, 3, 4, 5].forEach(dia => { // 1=lunes … 5=viernes
+        horariosEditar.push({
+          servicio_id:     srv.id,
+          servicio_nombre: srv.nombre,
+          dia_semana:      dia,
+          hora_inicio:     '07:00',
+          hora_fin:        '14:00',
+          activo:          true,
+        });
+      });
+    }
+  });
+
   renderHorarios();
 }
 
@@ -711,14 +847,14 @@ async function cargarServiciosParaHorarios(usuarioId) {
   });
 }
 
-// ─── B4: Renderizar lista de horarios ──────────────────────────────────────
-// Agrupa los horarios por servicio y muestra filas editables.
+// ─── B4 (C4): Renderizar grilla semanal de horarios ───────────────────────
+// Muestra una fila fija por cada día de la semana (lunes a domingo) para cada
+// servicio. El checkbox activa/desactiva el día; cuando está activo se muestran
+// los campos de hora inicio y hora fin.
 function renderHorarios() {
   const container = document.getElementById('horarios-lista');
 
-  // Obtener servicios disponibles (puede que el usuario no tenga ningún horario aún)
-  const todosServiciosArray = Object.values(serviciosMap);
-  // Agregar también servicios que tienen horarios existentes (por si cambió la asignación)
+  // Incluir también servicios que tienen horarios cargados aunque cambiara la asignación
   horariosEditar.forEach(h => {
     if (!serviciosMap[h.servicio_id]) {
       serviciosMap[h.servicio_id] = { id: h.servicio_id, nombre: h.servicio_nombre || `Servicio ${h.servicio_id}` };
@@ -732,73 +868,71 @@ function renderHorarios() {
   }
 
   container.innerHTML = serviciosAMostrar.map(srv => {
-    const filas = horariosEditar.filter(h => h.servicio_id === srv.id);
-    const filasHtml = filas.map((h, idx) => {
-      const key = `${srv.id}-${idx}`;
+    const diasHtml = DIAS.map((dNombre, idx) => {
+      const dia    = idx + 1; // 1=lunes … 7=domingo
+      const entrada = horariosEditar.find(h => h.servicio_id === srv.id && h.dia_semana === dia);
+      const activo  = !!entrada;
+      const ini     = activo ? (entrada.hora_inicio || '').substring(0, 5) : '07:00';
+      const fin     = activo ? (entrada.hora_fin    || '').substring(0, 5) : '14:00';
+
       return `
-        <div class="horario-fila" data-key="${key}" data-srv-id="${srv.id}">
-          <select class="dia-sel" data-key="${key}" onchange="onHorarioChange('${key}', 'dia', this.value)">
-            ${DIAS.map((d, i) => `<option value="${i+1}" ${h.dia_semana === i+1 ? 'selected' : ''}>${d}</option>`).join('')}
-          </select>
-          <input type="time" value="${(h.hora_inicio||'').substring(0,5)}" step="1800"
-                 onchange="onHorarioChange('${key}', 'inicio', this.value)">
-          <span style="font-size:.8rem;color:#64748b">—</span>
-          <input type="time" value="${(h.hora_fin||'').substring(0,5)}" step="1800"
-                 onchange="onHorarioChange('${key}', 'fin', this.value)">
-          <button class="btn btn-danger btn-xs" onclick="eliminarHorario('${key}')">✕</button>
-        </div>
-      `;
+        <div class="horario-dia-fila" data-srv="${srv.id}" data-dia="${dia}">
+          <label class="horario-dia-check">
+            <input type="checkbox" ${activo ? 'checked' : ''}
+                   onchange="onDiaCheck(${srv.id}, ${dia}, this.checked)">
+            <span class="horario-dia-label">${dNombre}</span>
+          </label>
+          <div class="horario-dia-horas" style="visibility:${activo ? 'visible' : 'hidden'}">
+            <input type="time" class="horario-hora-ini" value="${ini}" step="1800"
+                   onchange="onHorarioDiaChange(${srv.id}, ${dia}, 'inicio', this.value)">
+            <span class="horario-sep">—</span>
+            <input type="time" class="horario-hora-fin" value="${fin}" step="1800"
+                   onchange="onHorarioDiaChange(${srv.id}, ${dia}, 'fin', this.value)">
+          </div>
+        </div>`;
     }).join('');
 
     return `
       <div class="horarios-servicio">
         <div class="horarios-srv-nombre">${esc(srv.nombre)}</div>
-        <div class="horarios-filas" id="filas-${srv.id}">
-          ${filas.length ? filasHtml : '<span class="horarios-empty">Sin horarios. Agregá uno abajo.</span>'}
-        </div>
-        <button class="btn btn-ghost btn-xs" style="margin-top:.35rem" onclick="agregarHorario(${srv.id})">+ Agregar horario</button>
-      </div>
-    `;
+        <div class="horarios-grilla">${diasHtml}</div>
+      </div>`;
   }).join('<hr class="separador">');
 }
 
-// Cuando el usuario edita un campo de una fila existente, actualiza horariosEditar
-function onHorarioChange(key, campo, valor) {
-  const [srvId, idx] = key.split('-').map(Number);
-  const filas = horariosEditar.filter(h => h.servicio_id === srvId);
-  if (!filas[idx]) return;
-  const h = filas[idx];
-  if (campo === 'dia')    h.dia_semana  = parseInt(valor, 10);
+// Activa o desactiva un día en la grilla sin re-renderizar toda la lista
+function onDiaCheck(srvId, dia, checked) {
+  if (checked) {
+    // Agregar con valores por defecto si todavía no existe en el array
+    if (!horariosEditar.find(h => h.servicio_id === srvId && h.dia_semana === dia)) {
+      horariosEditar.push({
+        servicio_id:     srvId,
+        servicio_nombre: serviciosMap[srvId]?.nombre || '',
+        dia_semana:      dia,
+        hora_inicio:     '07:00',
+        hora_fin:        '14:00',
+        activo:          true,
+      });
+    }
+    // Mostrar los campos de hora de esa fila
+    const fila = document.querySelector(`.horario-dia-fila[data-srv="${srvId}"][data-dia="${dia}"]`);
+    if (fila) fila.querySelector('.horario-dia-horas').style.visibility = 'visible';
+  } else {
+    // Eliminar del array de edición
+    const idx = horariosEditar.findIndex(h => h.servicio_id === srvId && h.dia_semana === dia);
+    if (idx >= 0) horariosEditar.splice(idx, 1);
+    // Ocultar los campos de hora de esa fila
+    const fila = document.querySelector(`.horario-dia-fila[data-srv="${srvId}"][data-dia="${dia}"]`);
+    if (fila) fila.querySelector('.horario-dia-horas').style.visibility = 'hidden';
+  }
+}
+
+// Actualiza hora inicio o fin de un día en el array de edición
+function onHorarioDiaChange(srvId, dia, campo, valor) {
+  const h = horariosEditar.find(hh => hh.servicio_id === srvId && hh.dia_semana === dia);
+  if (!h) return;
   if (campo === 'inicio') h.hora_inicio = valor;
   if (campo === 'fin')    h.hora_fin    = valor;
-}
-
-// Agrega una fila nueva para el servicio indicado
-function agregarHorario(servicioId) {
-  horariosEditar.push({
-    servicio_id:     servicioId,
-    servicio_nombre: serviciosMap[servicioId]?.nombre || '',
-    dia_semana:      1,
-    hora_inicio:     '08:00',
-    hora_fin:        '13:00',
-    activo:          true,
-  });
-  renderHorarios();
-}
-
-// Elimina la fila indicada (por key "servicioId-indexEnServicio")
-function eliminarHorario(key) {
-  const [srvId, idx] = key.split('-').map(Number);
-  // Encontrar el índice global en horariosEditar
-  let count = 0;
-  const idxGlobal = horariosEditar.findIndex(h => {
-    if (h.servicio_id !== srvId) return false;
-    if (count === idx) return true;
-    count++;
-    return false;
-  });
-  if (idxGlobal >= 0) horariosEditar.splice(idxGlobal, 1);
-  renderHorarios();
 }
 
 // ─── B4: Guardar horarios ──────────────────────────────────────────────────
@@ -887,6 +1021,9 @@ async function guardarHorarios() {
 
   document.getElementById('modal-fondo').addEventListener('click', e => {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
+  });
+  document.getElementById('modal-reset-fondo').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-reset-fondo')) cerrarModalReset();
   });
 
   // Cargar áreas accesibles (B2: checkboxes en formulario; B9: chips filtro de lista)

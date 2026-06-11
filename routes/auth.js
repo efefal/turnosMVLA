@@ -37,6 +37,7 @@ router.post('/login', async (req, res) => {
         u.email,
         u.password_hash,
         u.activo,
+        u.debe_cambiar_clave,
         JSON_ARRAYAGG(
           JSON_OBJECT(
             'area_id',    ua.area_id,
@@ -114,10 +115,15 @@ router.post('/login', async (req, res) => {
 
     logger.info(`[auth] Login exitoso — ${usuario.email} (ID ${usuario.id}, rol: ${rol})`);
 
-    res.json({
+    // Si el usuario tiene contraseña temporal, avisamos al cliente para redirigir a cambiar-clave.html.
+    // El token se genera igual — el usuario solo puede hacer una cosa: cambiar su contraseña.
+    const respuesta = {
       token,
       usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol, areaIds, areas },
-    });
+    };
+    if (usuario.debe_cambiar_clave) respuesta.debe_cambiar_clave = true;
+
+    res.json(respuesta);
 
   } catch (err) {
     logger.error('[auth] Error en login:', err);

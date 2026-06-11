@@ -95,6 +95,44 @@ async function auditar(usuarioId, entidadTipo, entidadId, accion, detalle, ip) {
 
 
 // =============================================================================
+// CAMBIO DE CONTRASEÑA
+// =============================================================================
+
+// POST /panel/auth/cambiar-clave
+// Cambia la contraseña del usuario logueado.
+// Obligatorio cuando debe_cambiar_clave=TRUE (primer login con clave temporal).
+// También disponible para cambio voluntario de cualquier usuario autenticado.
+router.post('/auth/cambiar-clave', async (req, res) => {
+  const { clave_nueva } = req.body;
+
+  if (!clave_nueva || clave_nueva.length < 6) {
+    return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+  }
+
+  try {
+    const hash = await bcrypt.hash(clave_nueva, 10);
+
+    await pool.query(
+      'UPDATE usuarios SET password_hash = ?, debe_cambiar_clave = FALSE WHERE id = ?',
+      [hash, req.usuario.id]
+    );
+
+    await auditar(req.usuario.id, 'usuario', req.usuario.id, 'modificar', {
+      accion_detalle: 'cambio de contraseña',
+      usuario: req.usuario.nombre,
+    }, req.ip);
+
+    logger.info(`[panel] Contraseña cambiada por ${req.usuario.nombre} (ID ${req.usuario.id})`);
+    res.json({ ok: true });
+
+  } catch (err) {
+    logger.error('[panel] Error al cambiar contraseña:', err);
+    res.status(500).json({ error: 'No se pudo cambiar la contraseña.' });
+  }
+});
+
+
+// =============================================================================
 // VECINOS
 // =============================================================================
 
@@ -1029,7 +1067,8 @@ router.post('/bloqueos', async (req, res) => {
     return res.status(403).json({ error: 'Sin permiso para crear bloqueos en esa área.' });
   }
 
-  if (!esEncargado(req)) {
+  // Encargado y sistemas pueden crear bloqueos de oficina; operador solo individuales
+  if (!esEncargadoOSistemas(req)) {
     if (tipo === 'oficina') {
       return res.status(403).json({ error: 'Solo los encargados pueden crear bloqueos de oficina.' });
     }
@@ -1098,7 +1137,8 @@ router.delete('/bloqueos/:id', async (req, res) => {
       return res.status(403).json({ error: 'Sin permiso para eliminar este bloqueo.' });
     }
 
-    if (!esEncargado(req)) {
+    // Encargado y sistemas pueden eliminar bloqueos de oficina; operador solo los suyos
+    if (!esEncargadoOSistemas(req)) {
       if (bloqueo.tipo === 'oficina') {
         return res.status(403).json({ error: 'Solo los encargados pueden eliminar bloqueos de oficina.' });
       }
@@ -1630,9 +1670,11 @@ router.post('/usuarios', async (req, res) => {
     ? [].concat(req.body.areas).map(Number).filter(Boolean)
     : (req.body.area_id ? [parseInt(req.body.area_id, 10)] : []);
 
-  if (!nombre || !email || !password || !areas.length || !rol) {
+  // Directivo no necesita áreas (acceso de solo lectura a todo el sistema)
+  const requiereAreas = rol !== 'directivo';
+  if (!nombre || !email || !password || (requiereAreas && !areas.length) || !rol) {
     return res.status(400).json({
-      error: 'Faltan datos: nombre, email, password, areas y rol son obligatorios.'
+      error: 'Faltan datos: nombre, email, password y rol son obligatorios. Las áreas son obligatorias salvo para el rol directivo.'
     });
   }
 
@@ -2125,6 +2167,58 @@ router.put('/usuarios/:id/horarios', async (req, res) => {
   } catch (err) {
     logger.error('[panel] Error al guardar horarios de usuario:', err);
     res.status(500).json({ error: 'No se pudieron guardar los horarios.' });
+  }
+});
+
+
+// =============================================================================
+// RESETEO DE CONTRASEÑA (solo sistemas)
+// =============================================================================
+
+// POST /panel/usuarios/:id/resetear-clave
+// Genera una contraseña temporal de 8 caracteres, la guarda hasheada y activa
+// debe_cambiar_clave=TRUE para que el usuario sea obligado a cambiarla al próximo login.
+// Solo accesible por el rol sistemas.
+// Devuelve la contraseña en texto plano para que sistemas se la comunique al usuario.
+router.post('/usuarios/:id/resetear-clave', async (req, res) => {
+  if (!esSistemas(req)) {
+    return res.status(403).json({ error: 'Solo el rol sistemas puede resetear contraseñas.' });
+  }
+
+  const id = parseInt(req.params.id, 10);
+
+  try {
+    const [rows] = await pool.query('SELECT id, nombre, email FROM usuarios WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    // Generar contraseña temporal de 8 caracteres (letras + números, fácil de comunicar)
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let claveTemporal = '';
+    for (let i = 0; i < 8; i++) {
+      claveTemporal += chars[Math.floor(Math.random() * chars.length)];
+    }
+
+    const hash = await bcrypt.hash(claveTemporal, 10);
+
+    await pool.query(
+      'UPDATE usuarios SET password_hash = ?, debe_cambiar_clave = TRUE WHERE id = ?',
+      [hash, id]
+    );
+
+    await auditar(req.usuario.id, 'usuario', id, 'modificar', {
+      accion_detalle: 'reseteo de contraseña',
+      reseteado_por: req.usuario.nombre,
+      usuario_afectado: rows[0].nombre,
+    }, req.ip);
+
+    logger.info(`[panel] Contraseña de usuario ${id} (${rows[0].email}) reseteada por ${req.usuario.nombre}`);
+    res.json({ ok: true, clave_temporal: claveTemporal });
+
+  } catch (err) {
+    logger.error('[panel] Error al resetear contraseña:', err);
+    res.status(500).json({ error: 'No se pudo resetear la contraseña.' });
   }
 });
 

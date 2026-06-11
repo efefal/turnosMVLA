@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Panel — Iniciar sesión</title>
+  <title>Cambiar contraseña — Panel MVLA</title>
   <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,27 +22,34 @@
       box-shadow: 0 20px 60px rgba(0,0,0,.35);
       padding: 2.5rem;
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
     }
     .encabezado {
       text-align: center;
-      margin-bottom: 2rem;
+      margin-bottom: 1.75rem;
       padding-bottom: 1.5rem;
       border-bottom: 1px solid #f1f5f9;
     }
     .encabezado img {
-      max-width: 240px;
+      max-width: 200px;
       height: auto;
       display: block;
       margin: 0 auto 1rem;
     }
     .encabezado h1 {
       font-family: 'Trebuchet MS', Trebuchet, sans-serif;
-      font-size: 0.9rem;
+      font-size: 1rem;
       font-weight: 700;
       color: #1A3C4B;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
+    }
+    .aviso {
+      background: #fefce8;
+      border: 1px solid #fde047;
+      color: #854d0e;
+      padding: 0.75rem 1rem;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
     }
     .form-grupo { margin-bottom: 1.1rem; }
     label {
@@ -76,7 +83,7 @@
       margin-bottom: 1rem;
       display: none;
     }
-    .btn-ingresar {
+    .btn-guardar {
       width: 100%;
       padding: 0.65rem;
       background: #1A3C4B;
@@ -89,11 +96,11 @@
       cursor: pointer;
       transition: opacity 0.15s;
     }
-    .btn-ingresar:hover:not(:disabled) { opacity: 0.88; }
-    .btn-ingresar:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-guardar:hover:not(:disabled) { opacity: 0.88; }
+    .btn-guardar:disabled { opacity: 0.5; cursor: not-allowed; }
     .pie {
       text-align: center;
-      margin-top: 1.5rem;
+      margin-top: 1.25rem;
       font-size: 0.78rem;
       color: #94a3b8;
     }
@@ -105,38 +112,50 @@
   <div class="encabezado">
     <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
          alt="Municipalidad de Villa La Angostura">
-    <h1>Panel de empleados — Sistema de turnos</h1>
+    <h1>Cambiar contraseña</h1>
   </div>
 
-  <form id="form-login">
+  <!-- Aviso visible solo cuando el cambio es obligatorio (primer login con clave temporal) -->
+  <div class="aviso" id="aviso-obligatorio" style="display:none">
+    Tu cuenta tiene una contraseña temporal. Debés establecer una nueva contraseña
+    antes de continuar.
+  </div>
+
+  <form id="form-cambio">
     <div class="form-grupo">
-      <label for="email">Correo electrónico</label>
-      <input type="email" id="email" autocomplete="email"
-             placeholder="nombre@municipio.gob.ar" required>
+      <label for="clave-nueva">Nueva contraseña</label>
+      <input type="password" id="clave-nueva" autocomplete="new-password"
+             placeholder="Mínimo 6 caracteres" required>
     </div>
     <div class="form-grupo">
-      <label for="password">Contraseña</label>
-      <input type="password" id="password" autocomplete="current-password"
-             placeholder="••••••••" required>
+      <label for="clave-confirmar">Confirmar contraseña</label>
+      <input type="password" id="clave-confirmar" autocomplete="new-password"
+             placeholder="Repetí la nueva contraseña" required>
     </div>
 
     <div class="error" id="error"></div>
 
-    <button type="submit" class="btn-ingresar" id="btn-submit">
-      Iniciar sesión
+    <button type="submit" class="btn-guardar" id="btn-submit">
+      Guardar contraseña
     </button>
   </form>
 
-  <p class="pie">La sesión se cerrará al cerrar el navegador.</p>
+  <p class="pie">Municipalidad de Villa La Angostura — Sistema de Turnos</p>
 </div>
 
 <script>
-  // Si ya hay sesión activa, ir directo a la agenda
-  if (sessionStorage.getItem('panel_token')) {
-    window.location.href = '/panel/agenda.html';
+  // Verificar que haya sesión activa (token generado en el login)
+  const token = sessionStorage.getItem('panel_token');
+  if (!token) {
+    window.location.href = '/panel/login.html';
   }
 
-  const form    = document.getElementById('form-login');
+  // Si el flag debe_cambiar_clave está en sessionStorage, mostrar el aviso obligatorio
+  if (sessionStorage.getItem('panel_debe_cambiar_clave') === 'true') {
+    document.getElementById('aviso-obligatorio').style.display = 'block';
+  }
+
+  const form    = document.getElementById('form-cambio');
   const errorEl = document.getElementById('error');
   const btn     = document.getElementById('btn-submit');
 
@@ -148,45 +167,46 @@
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     errorEl.style.display = 'none';
-    btn.disabled    = true;
-    btn.textContent = 'Ingresando...';
 
-    const email    = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
+    const claveNueva     = document.getElementById('clave-nueva').value;
+    const claveConfirmar = document.getElementById('clave-confirmar').value;
+
+    if (claveNueva.length < 6) {
+      mostrarError('La contraseña debe tener al menos 6 caracteres.'); return;
+    }
+    if (claveNueva !== claveConfirmar) {
+      mostrarError('Las contraseñas no coinciden.'); return;
+    }
+
+    btn.disabled    = true;
+    btn.textContent = 'Guardando...';
 
     try {
-      const res  = await fetch('/panel/login', {
+      const res = await fetch('/panel/auth/cambiar-clave', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ clave_nueva: claveNueva }),
       });
       const data = await res.json();
 
       if (!res.ok) {
-        mostrarError(data.error || 'No se pudo iniciar sesión.');
+        mostrarError(data.error || 'No se pudo cambiar la contraseña.');
         btn.disabled    = false;
-        btn.textContent = 'Iniciar sesión';
+        btn.textContent = 'Guardar contraseña';
         return;
       }
 
-      // sessionStorage se borra automáticamente al cerrar el navegador
-      sessionStorage.setItem('panel_token',   data.token);
-      sessionStorage.setItem('panel_usuario', JSON.stringify(data.usuario));
-
-      // Si el servidor indica que la clave es temporal, redirigir a cambiar-clave.html.
-      // El token fue generado igualmente, pero el usuario solo puede hacer esa acción.
-      if (data.debe_cambiar_clave) {
-        sessionStorage.setItem('panel_debe_cambiar_clave', 'true');
-        window.location.href = '/panel/cambiar-clave.html';
-        return;
-      }
-
+      // Limpiar el flag de cambio obligatorio y redirigir a la agenda
+      sessionStorage.removeItem('panel_debe_cambiar_clave');
       window.location.href = '/panel/agenda.html';
 
     } catch {
-      mostrarError('No se pudo conectar al servidor. Verificá que el sistema esté en funcionamiento.');
+      mostrarError('No se pudo conectar al servidor.');
       btn.disabled    = false;
-      btn.textContent = 'Iniciar sesión';
+      btn.textContent = 'Guardar contraseña';
     }
   });
 </script>
