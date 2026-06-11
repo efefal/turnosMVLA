@@ -286,6 +286,10 @@
     </div>
 
     <div class="modal-footer">
+      <!-- Botón de reseteo visible solo para el rol sistemas; se muestra/oculta en abrirModal() -->
+      <button id="btn-resetear-en-modal" class="btn btn-ghost btn-sm"
+              style="display:none;color:#dc2626;border-color:#fca5a5;margin-right:auto"
+              onclick="resetearClaveDesdeModal()">Resetear clave</button>
       <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="guardarEdicion()">Guardar cambios</button>
     </div>
@@ -489,10 +493,6 @@ function renderUsuarios(data) {
         ${puedeEditar
           ? `<button class="btn btn-ghost btn-sm" onclick="abrirModal(${u.id})">Editar</button>`
           : '<span style="color:#94a3b8;font-size:.78rem">Sin permiso</span>'}
-        ${usuarioLogueado.rol === 'sistemas'
-          ? `<button class="btn btn-ghost btn-sm" style="color:#dc2626;border-color:#fca5a5"
-               onclick="resetearClave(${u.id}, ${JSON.stringify(esc(u.nombre))})">Resetear clave</button>`
-          : ''}
       </td>
     </tr>`;
   }).join('');
@@ -698,8 +698,12 @@ async function abrirModal(id) {
 
   document.getElementById('modal-titulo').textContent = `Editar: ${u.nombre}`;
   document.getElementById('edit-nombre').value = u.nombre;
-  document.getElementById('edit-rol').value    = u.rol;
+  document.getElementById('edit-rol').value    = u.rol || '';
   document.getElementById('edit-activo').value = u.activo ? '1' : '0';
+
+  // Mostrar el botón "Resetear clave" solo si el usuario logueado es sistemas
+  const btnReset = document.getElementById('btn-resetear-en-modal');
+  if (btnReset) btnReset.style.display = getUsuario().rol === 'sistemas' ? '' : 'none';
 
   // Directivo no tiene áreas — ocultar esas secciones
   const esDirectivo = u.rol === 'directivo';
@@ -765,6 +769,17 @@ async function ejecutarReset() {
 function cerrarModalReset() {
   document.getElementById('modal-reset-fondo').classList.remove('abierto');
   idResetando = null;
+}
+
+// Llama a resetearClave() con los datos del usuario que está abierto en el modal de edición.
+// Cierra el modal de edición antes de abrir el modal de confirmación (evita solapamiento).
+function resetearClaveDesdeModal() {
+  if (!idEditando) return;
+  const id     = idEditando;
+  const nombre = document.getElementById('edit-nombre').value || 'este usuario';
+  // Cerrar el modal de edición sin borrar idEditando (por si el usuario quiere volver)
+  document.getElementById('modal-fondo').classList.remove('abierto');
+  resetearClave(id, nombre);
 }
 
 async function guardarEdicion() {

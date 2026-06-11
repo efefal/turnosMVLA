@@ -1277,6 +1277,7 @@ router.get('/operadores', async (req, res) => {
       JOIN   usuario_areas ua ON u.id = ua.usuario_id
       WHERE  ua.area_id IN (${filtroAreas.map(() => '?').join(',')})
         AND  u.activo = TRUE
+        AND  ua.rol != 'directivo'
       ORDER BY u.nombre ASC
     `, filtroAreas);
 
@@ -1638,6 +1639,7 @@ router.get('/usuarios', async (req, res) => {
       areas = (areas || []).filter(a => a && a.area_id !== null);
       const rolEfectivo = areas.some(a => a.rol === 'sistemas')  ? 'sistemas'
                         : areas.some(a => a.rol === 'encargado') ? 'encargado'
+                        : areas.some(a => a.rol === 'directivo') ? 'directivo'
                         : areas.length > 0 ? 'operador'
                         : null;
       return { id: u.id, nombre: u.nombre, email: u.email, activo: u.activo,
@@ -1708,17 +1710,32 @@ router.post('/usuarios', async (req, res) => {
     try {
       await conn.beginTransaction();
 
+      // debe_cambiar_clave=1 porque toda clave creada desde el panel es temporal:
+      // el usuario deberá cambiarla en su primer acceso.
       const [result] = await conn.query(
-        'INSERT INTO usuarios (nombre, email, password_hash) VALUES (?, ?, ?)',
+        'INSERT INTO usuarios (nombre, email, password_hash, debe_cambiar_clave) VALUES (?, ?, ?, 1)',
         [nombre.trim(), email.trim().toLowerCase(), hash]
       );
       const nuevoId = result.insertId;
 
-      for (const aId of areas) {
-        await conn.query(
-          'INSERT INTO usuario_areas (usuario_id, area_id, rol, atiende_turnos) VALUES (?, ?, ?, ?)',
-          [nuevoId, aId, rol, atiendeT]
-        );
+      if (rol === 'directivo') {
+        // El directivo tiene acceso de solo lectura a todo el sistema.
+        // Asignamos todas las áreas activas para que el rol quede almacenado
+        // en usuario_areas y el login pueda detectarlo correctamente.
+        const [todasAreas] = await conn.query('SELECT id FROM areas WHERE activo = TRUE');
+        for (const area of todasAreas) {
+          await conn.query(
+            'INSERT INTO usuario_areas (usuario_id, area_id, rol, atiende_turnos) VALUES (?, ?, ?, 0)',
+            [nuevoId, area.id, 'directivo']
+          );
+        }
+      } else {
+        for (const aId of areas) {
+          await conn.query(
+            'INSERT INTO usuario_areas (usuario_id, area_id, rol, atiende_turnos) VALUES (?, ?, ?, ?)',
+            [nuevoId, aId, rol, atiendeT]
+          );
+        }
       }
 
       await conn.query(
@@ -1825,7 +1842,20 @@ router.patch('/usuarios/:id', async (req, res) => {
       }
 
       if (rol !== undefined) {
-        await conn.query('UPDATE usuario_areas SET rol = ? WHERE usuario_id = ?', [rol, id]);
+        if (rol === 'directivo') {
+          // Al asignar rol directivo, se requiere acceso a todas las áreas.
+          // Borramos las asignaciones actuales y re-insertamos con todas las áreas activas.
+          const [todasAreas] = await conn.query('SELECT id FROM areas WHERE activo = TRUE');
+          await conn.query('DELETE FROM usuario_areas WHERE usuario_id = ?', [id]);
+          for (const area of todasAreas) {
+            await conn.query(
+              'INSERT INTO usuario_areas (usuario_id, area_id, rol, atiende_turnos) VALUES (?, ?, ?, 0)',
+              [id, area.id, 'directivo']
+            );
+          }
+        } else {
+          await conn.query('UPDATE usuario_areas SET rol = ? WHERE usuario_id = ?', [rol, id]);
+        }
       }
 
       // B2: actualizar áreas si se envió el array (comparar e insertar/borrar)
