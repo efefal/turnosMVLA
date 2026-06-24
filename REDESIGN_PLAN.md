@@ -739,13 +739,13 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ Cero errores en consola; init() redirige a login correctamente (sin token)
 - ✅ Sidebar incluye header VLA, user-card (nav-nombre), minical placeholder, nav groups con label-reportes/label-admin
 
-### Paso 3 — Sidebar: contenido completo
-- Logo VLA + texto Municipalidad/Villa La Angostura
-- User card con `#nav-nombre`
-- Mini-calendario decorativo (7 columnas, sin lógica de datos)
-- Nav groups con los 4 links ocultos por defecto
-- Botón de salir
-- Verificar: roles ocultan/muestran los links correctamente
+### Paso 3 — Sidebar: contenido completo ✅ COMPLETADO (2026-06-24 · commit pendiente)
+- ✅ `renderizarMiniCal()` — función nueva de presentación; genera 35 celdas con hoy en teal sólido y semana actual en teal-dim
+- ✅ Avatar `#sidebar-avatar` — iniciales + fondo por rol: encargado=teal-mid, operador=blue-mid, sistemas/directivo=amber-mid
+- ✅ Labels `#label-reportes` y `#label-admin` — se muestran junto a sus links cuando el rol lo permite (C1 del plan)
+- ✅ `renderizarMiniCal()` llamada al final de init(), después de toda la lógica de negocio
+- ✅ Cero líneas existentes modificadas; solo código nuevo agregado
+- ✅ Cero errores en consola; auth redirige a login correctamente
 
 ### Paso 4 — Topbar: 3 columnas
 - Columna izquierda: título + toggle vista + navs de fecha

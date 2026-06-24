@@ -1591,6 +1591,59 @@ async function cargarOperadores() {
   });
 }
 
+// ─── Mini-calendario del sidebar ───────────────────────────────────────────
+// Decorativo: muestra el mes actual con hoy y la semana actual destacados.
+// Sin fetch ni datos de negocio — se llama una sola vez al final de init().
+function renderizarMiniCal() {
+  const container = document.getElementById('sidebar-minical');
+  if (!container) return;
+
+  const hoy    = new Date();
+  const año    = hoy.getFullYear();
+  const mes    = hoy.getMonth();   // 0-based
+  const diaHoy = hoy.getDate();
+
+  // Lunes y domingo de la semana que contiene hoy
+  const lunes = new Date(hoy);
+  const diff  = lunes.getDay() === 0 ? -6 : 1 - lunes.getDay();
+  lunes.setDate(lunes.getDate() + diff);
+  const domingoDeSemana = new Date(lunes);
+  domingoDeSemana.setDate(domingoDeSemana.getDate() + 6);
+
+  const MESES = ['Ene','Feb','Mar','Abr','May','Jun',
+                 'Jul','Ago','Sep','Oct','Nov','Dic'];
+  const DOWS  = ['L','M','X','J','V','S','D'];
+
+  const headers = DOWS.map(d => `<div class="minical-dow">${d}</div>`).join('');
+
+  // Primer lunes de la cuadrícula (puede pertenecer al mes anterior)
+  const primerDia  = new Date(año, mes, 1);
+  const ds         = primerDia.getDay();
+  const initOffset = ds === 0 ? 6 : ds - 1;
+  const cur        = new Date(año, mes, 1 - initOffset);
+
+  // 35 celdas (5 semanas × 7 días)
+  const celdas = [];
+  for (let i = 0; i < 35; i++) {
+    const esDelMes = cur.getMonth() === mes;
+    const esHoy    = esDelMes && cur.getDate() === diaHoy;
+    const enSemana = !esHoy && cur >= lunes && cur <= domingoDeSemana;
+    const cls = esHoy      ? 'minical-cell hoy'
+              : enSemana   ? 'minical-cell en-semana'
+              : !esDelMes  ? 'minical-cell otro-mes'
+              :               'minical-cell';
+    celdas.push(`<div class="${cls}">${cur.getDate()}</div>`);
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  container.innerHTML = `
+    <div class="minical">
+      <div class="minical-header">${MESES[mes]} ${año}</div>
+      <div class="minical-grid">${headers}${celdas.join('')}</div>
+    </div>
+  `;
+}
+
 // ─── Init ──────────────────────────────────────────────────────────────────
 (async function init() {
   const token = getToken();
@@ -1602,6 +1655,23 @@ async function cargarOperadores() {
   // Badge de rol junto al nombre — se muestra para todos los roles
   const nombreEl = document.getElementById('nav-nombre');
   nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
+
+  // Avatar del sidebar: iniciales + fondo según rol
+  const avatarEl = document.getElementById('sidebar-avatar');
+  if (avatarEl) {
+    const partes    = (usuario.nombre || '').trim().split(/\s+/);
+    const iniciales = partes.slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '?';
+    const avatarCfg = {
+      encargado: { bg: 'var(--teal-mid)',  color: 'var(--teal)'  },
+      operador:  { bg: 'var(--blue-mid)',  color: 'var(--blue)'  },
+      sistemas:  { bg: 'var(--amber-mid)', color: 'var(--amber)' },
+      directivo: { bg: 'var(--amber-mid)', color: 'var(--amber)' },
+    };
+    const ac = avatarCfg[usuario.rol] || avatarCfg.operador;
+    avatarEl.textContent      = iniciales;
+    avatarEl.style.background = ac.bg;
+    avatarEl.style.color      = ac.color;
+  }
 
   // Filtro de operador visible para quien puede ver todos los turnos
   if (['encargado', 'sistemas', 'directivo'].includes(usuario.rol)) {
@@ -1615,6 +1685,11 @@ async function cargarOperadores() {
       const el = document.getElementById(id);
       if (el) el.style.display = '';
     });
+    // Mostrar labels de sección del sidebar (presentación — C1 del plan de rediseño)
+    const lRep = document.getElementById('label-reportes');
+    if (lRep) lRep.style.display = '';
+    const lAdm = document.getElementById('label-admin');
+    if (lAdm) lAdm.style.display = '';
   }
 
   // B9: cargar áreas accesibles y construir chips si hay más de una
@@ -1631,6 +1706,9 @@ async function cargarOperadores() {
   document.getElementById('modal-fondo').addEventListener('click', (e) => {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
   });
+
+  // Mini-calendario decorativo del sidebar — solo presentación, sin datos de negocio
+  renderizarMiniCal();
 })();
 </script>
 </body>
