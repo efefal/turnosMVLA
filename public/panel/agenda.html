@@ -599,18 +599,7 @@
     .banner-bloqueado     { background: var(--amber-dim); border-bottom-color: var(--amber-mid); color: var(--amber); }
     .banner-bloqueado-ind { background: var(--blue-dim);  border-bottom-color: var(--blue-mid);  color: var(--blue); }
 
-    /* Selector de área legacy — reemplazado por filter-chip en paso 5 */
-    .area-selector { margin-bottom: 10px; display: none; }
-    .area-selector.visible { display: block; }
-    .area-selector-titulo { font-size: var(--text-xs); font-weight: 600; color: var(--text-3);
-                            margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
-    .area-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .area-chip  { display: inline-flex; align-items: center; padding: 4px 10px;
-                  border: 1px solid var(--border); border-radius: 99px; cursor: pointer;
-                  font-size: var(--text-xs); font-weight: 500; color: var(--text-2);
-                  background: transparent; transition: all 0.15s; user-select: none; }
-    .area-chip:hover  { border-color: var(--border-hi); color: var(--text-1); }
-    .area-chip.activo { border-color: var(--teal); background: var(--teal-dim); color: var(--teal); }
+    /* .filter-chip y .filter-chip.active → design-tokens.css */
 
     /* Badge de rol en la navbar legacy — reemplazado en paso 3 */
     .badge-rol { font-size: var(--text-xs); padding: 2px 8px; border-radius: 99px;
@@ -789,26 +778,26 @@ function inicializarChipsAgenda() {
   selector.classList.add('visible');
 
   const chipTodas = document.createElement('span');
-  chipTodas.className   = 'area-chip activo';
+  chipTodas.className   = 'filter-chip active';
   chipTodas.textContent = 'Todas';
   chipTodas.dataset.id  = 'todas';
   chipTodas.onclick = () => {
-    container.querySelectorAll('.area-chip').forEach(c => c.classList.remove('activo'));
-    chipTodas.classList.add('activo');
+    container.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chipTodas.classList.add('active');
     cargar();
   };
   container.appendChild(chipTodas);
 
   todasLasAreas.forEach(a => {
     const chip = document.createElement('span');
-    chip.className   = 'area-chip';
+    chip.className   = 'filter-chip';
     chip.textContent = a.nombre;
     chip.dataset.id  = String(a.id);
     chip.onclick = () => {
-      chipTodas.classList.remove('activo');
-      chip.classList.toggle('activo');
-      const hayActivos = container.querySelectorAll('.area-chip.activo:not([data-id="todas"])').length > 0;
-      if (!hayActivos) chipTodas.classList.add('activo');
+      chipTodas.classList.remove('active');
+      chip.classList.toggle('active');
+      const hayActivos = container.querySelectorAll('.filter-chip.active:not([data-id="todas"])').length > 0;
+      if (!hayActivos) chipTodas.classList.add('active');
       cargar();
     };
     container.appendChild(chip);
@@ -820,8 +809,8 @@ function areasParam() {
   const container = document.getElementById('chips-areas-agenda');
   if (!container || container.children.length === 0) return '';
   const chipTodas = container.querySelector('[data-id="todas"]');
-  if (chipTodas?.classList.contains('activo')) return '';
-  const activos = [...container.querySelectorAll('.area-chip.activo:not([data-id="todas"])')];
+  if (chipTodas?.classList.contains('active')) return '';
+  const activos = [...container.querySelectorAll('.filter-chip.active:not([data-id="todas"])')];
   if (!activos.length) return '';
   return activos.map(c => `&areas[]=${c.dataset.id}`).join('');
 }
