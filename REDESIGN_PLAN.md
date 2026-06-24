@@ -747,11 +747,14 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ Cero líneas existentes modificadas; solo código nuevo agregado
 - ✅ Cero errores en consola; auth redirige a login correctamente
 
-### Paso 4 — Topbar: 3 columnas
-- Columna izquierda: título + toggle vista + navs de fecha
-- Columna central: input de búsqueda (decorativo por ahora)
-- Columna derecha: `#stats` + botón Nueva Reserva
-- Verificar: cambiar vista día/semana/mes funciona, navegación de fechas funciona
+### Paso 4 — Topbar: 3 columnas ✅ COMPLETADO (2026-06-24 · commit c8ea14f)
+- ✅ Toggle Día/Semana/Mes: cambiarVista() funciona en los 3 modos; btn.activo tiene fondo --teal-dim
+- ✅ Navegación de fechas: moverFecha(), moverSemana(), moverMes(), irAHoy() OK
+- ✅ #nav-dia, #nav-semana, #nav-mes: todos tienen clase nav-fecha y display correcto
+- ✅ #stats existe (display:flex), buscador .search-global a 340px (o fluido en pantallas angostas)
+- ✅ Cero errores JS en consola
+- Fix: topbar-left tenía width:0 a <1100px → aplicado flex: 1 1 200px y topbar-center: 0 1 340px
+  (el right quedará compacto definitivamente en Paso 6 al reescribir renderizarStats)
 
 ### Paso 5 — Filterbar
 - Area chips (`#selector-areas-agenda`) con clase `.filter-chip`
