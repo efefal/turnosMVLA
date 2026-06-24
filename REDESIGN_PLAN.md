@@ -801,11 +801,16 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ Cero errores en consola
 - Nota: el trabajo fue realizado en Paso 1 (eliminación del CSS viejo)
 
-### Paso 10 — Pulido final
-- `rolBadgeHTML()` → usar clases role-badge
-- `renderizarBannersDia()` → actualizar clases a design tokens
-- Verificar que el modal de cancelación funciona completo
-- Ajustar scrollbar en calendar-area
+### Paso 10 — Pulido final ✅ COMPLETADO (2026-06-24 · commit 7ca061d)
+- ✅ `rolBadgeHTML()` → reemplaza colores hex inline por clases `role-badge role-encargado/operador/sistemas/directivo/admin`
+- ✅ `renderizarBannersDia()` → ya usaba variables CSS correctas; sin cambios necesarios
+- ✅ Modal: botón "Volver" pasa de `btn-ghost` a `btn-secondary`; textarea agrega clase `input-base`
+- ✅ `#modal-error` ya tenía `class="alerta alerta-error"`; `#btn-confirmar` ya tenía `btn btn-danger`
+- ✅ CSS legacy eliminado: ~100 líneas de estilos transicionales (tablas, turno-semana, badge-rol, btn-ghost/success/warning, encabezado-*, badge-agendado/presente/ausente/atendido)
+- ✅ `renderizarAcciones()` eliminada — función JS muerta (reemplazada en Paso 8 por lógica inline de renderizarTablaDia)
+- ✅ Comentario del fix flex topbar-left mejorado (explica el POR QUÉ del flex: 1 1 200px)
+- ✅ grep de `#[hex]` fuera de `<script>`: 0 resultados — cero colores hardcodeados
+- ✅ Cero errores JS en consola
 
 ---
 
