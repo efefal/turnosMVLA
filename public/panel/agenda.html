@@ -121,10 +121,14 @@
       display: flex;
       align-items: center;
       gap: var(--gap-md);
-      flex: 1 1 200px;   /* base 200px para que participe en el shrink y no quede en 0 */
+      /* Sin base explícita el bloque queda en width:0 a <1050px cuando topbar-right crece
+         con los 4 contadores. flex: 1 1 200px garantiza que siempre tenga espacio mínimo
+         y pueda ceder al resto sin desaparecer. (Fix necesario desde Paso 4, Paso 10 √) */
+      flex: 1 1 200px;
       min-width: 0;
     }
-    /* flex: 0 1 340px permite que el buscador ceda espacio a pantallas <1100px */
+    /* flex: 0 1 340px — el buscador puede achicarse en pantallas <1100px
+       sin robar espacio al bloque de navegación ni a los contadores */
     .topbar-center { flex: 0 1 340px; min-width: 0; }
     /* el search-global tiene width:340px en design-tokens; lo hacemos fluido aquí */
     .topbar-center .search-global { width: 100%; }
@@ -502,97 +506,22 @@
       display: block; font-size: var(--text-sm); font-weight: 600;
       color: var(--text-2); margin-bottom: 6px;
     }
-    .modal-caja textarea {
-      width: 100%; background: var(--bg-4); border: 1px solid var(--border);
-      border-radius: var(--radius-md); color: var(--text-1);
-      padding: 8px 10px; font-size: var(--text-base);
-      font-family: var(--font-ui); resize: vertical;
-    }
-    .modal-caja textarea:focus { border-color: var(--border-hi); outline: none; }
+    /* .input-base (design-tokens.css) provee el estilo visual del textarea.
+       Aquí solo las propiedades específicas del modal: ancho y resize. */
+    .modal-caja textarea.input-base { width: 100%; background: var(--bg-4); resize: vertical; }
+    .modal-caja textarea.input-base:focus { outline: none; }
     .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
 
-    /* ── Estilos transicionales ─────────────────────────────────
-       Se eliminan a medida que se reescriben las funciones de render
-       en los pasos 5-9 del plan.                                  */
-
-    /* Botones usados en el HTML estático y en renderizarAcciones() */
-    .btn-ghost   { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
-    .btn-ghost:hover { background: var(--bg-4); border-color: var(--border-hi); color: var(--text-1); }
-    .btn-success { background: var(--teal);  color: var(--bg-0); border: 1px solid var(--teal); }
-    .btn-success:hover { background: #26bf8e; }
-    .btn-warning { background: var(--amber); color: var(--bg-0); border: 1px solid var(--amber); }
-    .btn-warning:hover { opacity: 0.85; }
-    .btn-logout  { background: transparent; border: 1px solid var(--border); color: var(--text-2);
-                   padding: 4px 10px; border-radius: var(--radius-md); cursor: pointer;
-                   font-size: var(--text-sm); font-family: var(--font-ui); }
-
-    /* Badge de sin tomar */
+    /* ── Badge de turno sin operador asignado ─────────────────── */
+    /* Usado en renderizarTablaDia() y renderizarSemana() cuando operador_nombre === null */
     .badge-sin-tomar {
       font-size: var(--text-xs); font-weight: 600; color: var(--text-3);
       background: var(--bg-4); border: 1px solid var(--border);
       border-radius: 20px; padding: 2px 8px; display: inline-block;
     }
 
-    /* Badges de estado — reemplazados por turno-card en pasos 7-8 */
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px;
-             font-size: var(--text-xs); font-weight: 600; }
-    .badge-agendado { background: var(--blue-dim);  color: var(--blue); }
-    .badge-presente { background: var(--teal-dim);  color: var(--teal); }
-    .badge-ausente  { background: var(--red-dim);   color: var(--red); }
-    .badge-atendido { background: var(--bg-4);      color: var(--text-3); }
-
-    /* Tabla DÍA y SEMANA — reemplazadas por grilla de cards en pasos 7-8 */
-    .tabla-wrapper { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th {
-      background: var(--bg-3); color: var(--text-3); font-weight: 600;
-      font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em;
-      padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left;
-    }
-    td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: var(--bg-4); }
-    .nombre-vecino { font-weight: 500; color: var(--text-1); }
-    .dni-vecino    { font-size: var(--text-xs); color: var(--text-2); margin-top: 2px; }
-    .td-acciones   { display: flex; gap: 4px; flex-wrap: wrap; }
-    .tabla-semana-wrapper { overflow-x: auto; }
-    .tabla-semana { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 640px; }
-    .tabla-semana th {
-      background: var(--bg-3); color: var(--text-2); font-weight: 600;
-      font-size: var(--text-xs); padding: 6px 4px;
-      border-bottom: 1px solid var(--border); text-align: center;
-    }
-    .tabla-semana .col-hora { width: 52px; }
-    .tabla-semana td {
-      border: 1px solid var(--border); vertical-align: top;
-      padding: 2px; height: 42px; font-size: var(--text-xs);
-    }
-    .cel-hora {
-      font-family: var(--font-mono); font-size: var(--text-xs);
-      color: var(--text-3); text-align: right;
-      padding-right: 6px !important; vertical-align: middle !important;
-      background: var(--bg-3);
-    }
-    .cel-dia-hoy     { background: var(--day-bg-today)   !important; }
-    .cel-feriado     { background: var(--day-bg-holiday) !important; }
-    .cel-bloqueado   { background: var(--day-bg-blocked) !important; }
-    .cel-bloqueado-ind { background: var(--blue-dim)     !important; }
-    .turno-semana {
-      border-radius: var(--radius-sm); padding: 2px 4px; margin-bottom: 2px;
-      font-size: var(--text-xs); line-height: 1.25; overflow: hidden;
-      white-space: nowrap; text-overflow: ellipsis;
-    }
-    .turno-semana.badge-agendado { background: var(--blue-dim);  color: var(--blue); }
-    .turno-semana.badge-presente { background: var(--teal-dim);  color: var(--teal); }
-    .turno-semana.badge-ausente  { background: var(--red-dim);   color: var(--red); }
-    .turno-semana.badge-atendido { background: var(--bg-4);      color: var(--text-3); }
-    .encabezado-dia-semana { font-size: var(--text-xs); color: var(--text-3); display: block; font-weight: 400; }
-    .encabezado-num-semana { font-size: var(--text-base); }
-    .encabezado-feriado-tag       { font-size: var(--text-xs); color: var(--red);   display: block; font-weight: 500; }
-    .encabezado-bloqueado-tag     { font-size: var(--text-xs); color: var(--amber); display: block; font-weight: 500; }
-    .encabezado-bloqueado-ind-tag { font-size: var(--text-xs); color: var(--blue);  display: block; font-weight: 500; }
-
-    /* Banners vista DÍA — reemplazados por el diseño final en paso 8 */
+    /* ── Banners informativos de la vista día ─────────────────── */
+    /* Usados en renderizarBannersDia() — se inyectan al inicio de #tabla-container */
     .banner-dia {
       padding: 8px 16px; font-size: var(--text-base); font-weight: 500;
       border-bottom: 1px solid transparent; display: flex; align-items: center; gap: 8px;
@@ -600,12 +529,6 @@
     .banner-feriado       { background: var(--red-dim);   border-bottom-color: var(--red-mid);   color: var(--red); }
     .banner-bloqueado     { background: var(--amber-dim); border-bottom-color: var(--amber-mid); color: var(--amber); }
     .banner-bloqueado-ind { background: var(--blue-dim);  border-bottom-color: var(--blue-mid);  color: var(--blue); }
-
-    /* .filter-chip y .filter-chip.active → design-tokens.css */
-
-    /* Badge de rol en la navbar legacy — reemplazado en paso 3 */
-    .badge-rol { font-size: var(--text-xs); padding: 2px 8px; border-radius: 99px;
-                 font-weight: 600; margin-left: 4px; }
   </style>
 </head>
 <body>
@@ -741,12 +664,12 @@
     <p class="modal-info" id="modal-info"></p>
     <div>
       <label for="motivo-input">Motivo de cancelación</label>
-      <textarea id="motivo-input" rows="3"
+      <textarea id="motivo-input" rows="3" class="input-base"
         placeholder="Describí el motivo de la cancelación..."></textarea>
     </div>
     <div class="alerta alerta-error" id="modal-error" style="margin-top:.75rem"></div>
     <div class="modal-footer">
-      <button class="btn btn-ghost"  onclick="cerrarModal()">Volver</button>
+      <button class="btn btn-secondary" onclick="cerrarModal()">Volver</button>
       <button class="btn btn-danger" id="btn-confirmar" onclick="confirmarCancelacion()">Confirmar cancelación</button>
     </div>
   </div>
@@ -817,17 +740,26 @@ function areasParam() {
   return activos.map(c => `&areas[]=${c.dataset.id}`).join('');
 }
 
-// Genera el HTML del badge de rol con el color institucional según el rol.
+// Genera el HTML del badge de rol usando las clases role-badge de design-tokens.css.
 // Se llama desde init() y se usa en todas las pantallas.
 function rolBadgeHTML(rol) {
-  const cfg = {
-    operador:  { bg: '#1e40af', label: 'Operador' },
-    encargado: { bg: '#166534', label: 'Encargado' },
-    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
-    directivo: { bg: '#374151', label: 'Solo lectura' },
+  const clases = {
+    operador:  'role-badge role-operador',
+    encargado: 'role-badge role-encargado',
+    sistemas:  'role-badge role-sistemas',
+    directivo: 'role-badge role-directivo',
+    admin:     'role-badge role-admin',
   };
-  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
-  return `<span class="badge-rol" style="background:${bg};color:white">${label}</span>`;
+  const labels = {
+    operador:  'Operador',
+    encargado: 'Encargado',
+    sistemas:  'Sistemas',
+    directivo: 'Solo lectura',
+    admin:     'Admin',
+  };
+  const cls   = clases[rol]  || 'role-badge role-sistemas';
+  const label = labels[rol] || rol;
+  return `<span class="${cls}">${label}</span>`;
 }
 
 // Días especiales para las tres vistas (día, semana, mes).
@@ -1041,33 +973,6 @@ function renderizarStats(turnos) {
 }
 
 // ─── Vista DÍA ─────────────────────────────────────────────────────────────
-function renderizarAcciones(t) {
-  // El directivo solo puede ver, no actuar
-  if (usuarioRol === 'directivo') {
-    return '<span style="color:#94a3b8;font-size:.8rem">—</span>';
-  }
-
-  // Turno sin tomar (agendado, operador_id = null) → Tomar + Cancelar
-  if (!t.operador_id && t.estado === 'agendado') {
-    return `<div class="td-acciones">
-      <button class="btn btn-primary" onclick="tomarTurno(${t.id})">Tomar</button>
-      <button class="btn btn-danger"  onclick="abrirCancelar(${t.id})">Cancelar</button>
-    </div>`;
-  }
-
-  // Turno tomado (agendado, operador asignado) → Presente + Ausente + Liberar
-  if (t.operador_id && t.estado === 'agendado') {
-    return `<div class="td-acciones">
-      <button class="btn btn-success" onclick="cambiarEstado(${t.id},'presente')">Presente</button>
-      <button class="btn btn-warning" onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>
-      <button class="btn btn-ghost"   onclick="liberarTurno(${t.id})">Liberar</button>
-    </div>`;
-  }
-
-  // Estados finales o intermedios sin acciones disponibles
-  return '<span style="color:#94a3b8;font-size:.8rem">—</span>';
-}
-
 function renderizarTablaDia(turnos) {
   const slots = generarSlotsTiempo('08:00', '17:30'); // 20 slots × 44px = 880px
 
