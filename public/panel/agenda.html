@@ -1200,12 +1200,31 @@ async function cargarDiasEspeciales(desde, hasta) {
 }
 
 // ─── Vista SEMANA ──────────────────────────────────────────────────────────
+
+// Devuelve las iniciales del operador (ej. "Juan García" → "JG") para el avatar
+// de la card. Si el turno no tiene operador asignado devuelve "?" para diferenciarlo.
+function inicialesOp(nombre) {
+  if (!nombre) return '?';
+  return nombre.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase();
+}
+
+// Abre el detalle de un turno al hacer clic en su card del calendario semanal.
+// Implementación completa en Paso 8; por ahora navega a la vista día de ese turno.
+function abrirDetalleTurno(id) {
+  const t = turnosActuales.find(x => x.id === id);
+  if (!t) return;
+  const f = typeof t.fecha === 'string' ? t.fecha.substring(0, 10) : t.fecha;
+  fechaActual = f;
+  document.getElementById('fecha-input').value = fechaActual;
+  cambiarVista('dia');
+}
+
 function renderizarSemana(turnos, dias) {
   const lunes   = dias[0];
   const domingo = dias[6];
   actualizarLabelSemana(lunes, domingo);
 
-  // Agrupar turnos por fecha
+  // Índice de turnos por fecha para evitar búsquedas lineales al dibujar cada columna
   const porFecha = {};
   for (const t of turnos) {
     const f = typeof t.fecha === 'string' ? t.fecha.substring(0, 10) : t.fecha;
@@ -1213,95 +1232,150 @@ function renderizarSemana(turnos, dias) {
     porFecha[f].push(t);
   }
 
-  // Slots de tiempo para las filas (08:00 a 17:30)
-  const slots = generarSlotsTiempo('08:00', '17:30');
+  const slots = generarSlotsTiempo('08:00', '17:30'); // 20 slots × 44px = 880px
 
-  // Encabezados de columnas (un día por columna).
-  // Tres capas de color por prioridad:
-  //   Rojo  (feriado) > Ámbar (bloqueo oficina) > Azul (bloqueo individual) > sin tinte
-  const headerCols = dias.map((fecha, i) => {
-    const d           = parseFecha(fecha);
-    const num         = d.getDate();
-    const mes         = d.getMonth() + 1;
+  // ── Columna de horas ──────────────────────────────────────────────────────
+  // Los :00 muestran la hora; los :30 muestran vacío con borde sutil (.half)
+  const timeSlots = slots.map(slot => {
+    const esMedia = slot.substring(3) === '30';
+    return `<div class="cal-time-slot${esMedia ? ' half' : ''}">${esMedia ? '' : slot}</div>`;
+  }).join('');
+  const timeColHTML = `<div class="cal-time-header"></div>${timeSlots}`;
+
+  // ── Columna por cada día ───────────────────────────────────────────────────
+  const daysAreaHTML = dias.map((fecha, i) => {
+    const d         = parseFecha(fecha);
+    const dayOfWeek = d.getDay();    // 0=Dom, 6=Sáb
+    const num       = d.getDate();
+    const nombreDia = DIAS_CORTO[i]; // índice 0=Lun coincide con dias[0]=lunes
+
+    // Estado del día — prioridad: feriado > bloqueado > cerrado > hoy > normal.
+    // "cerrado" aplica a sábado (6) y domingo (0): no hay atención municipal.
+    const esCerrado   = dayOfWeek === 0 || dayOfWeek === 6;
+    const esFeriado   = !esCerrado && diasEspeciales.feriados.has(fecha);
+    const esBloqueado = !esCerrado && !esFeriado && diasEspeciales.bloqueados.has(fecha);
     const esHoy       = fecha === HOY;
-    const esFeriado   = diasEspeciales.feriados.has(fecha);
-    const esBloqueado = !esFeriado && diasEspeciales.bloqueados.has(fecha);
-    // Nombres de operadores con bloqueo individual en este día (puede ser más de uno)
-    const nombresInd    = (!esFeriado && !esBloqueado)
-                          ? (diasEspeciales.bloqueosIndividuales[fecha] || [])
-                          : [];
-    const esBloqueadoInd = nombresInd.length > 0;
 
-    const headerBg    = esFeriado       ? 'background:#fef2f2;'
-                      : esBloqueado     ? 'background:#fef3c7;'
-                      : esBloqueadoInd  ? 'background:#eff6ff;'
-                      : '';
-    const headerColor = esHoy           ? 'color:#1A3C4B;'
-                      : esFeriado       ? 'color:#dc2626;'
-                      : esBloqueado     ? 'color:#92400e;'
-                      : esBloqueadoInd  ? 'color:#1d4ed8;'
-                      : '';
+    let estado;
+    if      (esFeriado)   estado = 'holiday';
+    else if (esBloqueado) estado = 'blocked';
+    else if (esCerrado)   estado = 'closed';
+    else if (esHoy)       estado = 'today';
+    else                  estado = 'normal';
 
-    // Una etiqueta por operador bloqueado; si hay muchos, se apilan en la columna
-    const tagsInd = nombresInd
-      .map(n => `<span class="encabezado-bloqueado-ind-tag">${esc(n.split(' ')[0])} — bloqueado</span>`)
-      .join('');
+    // Bloqueos individuales de operadores (no aplica en días cerrados/feriados/bloqueados)
+    const nombresInd = (!esCerrado && !esFeriado && !esBloqueado)
+      ? (diasEspeciales.bloqueosIndividuales[fecha] || [])
+      : [];
 
-    const tag = esFeriado      ? '<span class="encabezado-feriado-tag">Feriado</span>'
-              : esBloqueado    ? '<span class="encabezado-bloqueado-tag">Sin atención</span>'
-              : tagsInd;
+    // ── Encabezado del día ─────────────────────────────────────────────────
+    const turnosDia  = porFecha[fecha] || [];
+    const countBadge = turnosDia.length > 0
+      ? `<span class="cal-day-count">${turnosDia.length} turno${turnosDia.length !== 1 ? 's' : ''}</span>`
+      : '';
+
+    // Los días bloqueados muestran el badge "BLOQUEADO";
+    // los días con bloqueos individuales muestran los nombres de los operadores.
+    let headerExtras = '';
+    if (esBloqueado) {
+      headerExtras = '<span class="cal-day-badge-blocked">BLOQUEADO</span>';
+    } else if (nombresInd.length > 0) {
+      const infos = nombresInd.map(n => `${esc(n.split(' ')[0])} — bloqueado`).join(', ');
+      headerExtras = `<span class="cal-day-block-info">${infos}</span>`;
+    }
+
+    const headerHTML = `
+      <div class="cal-day-header">
+        <span class="cal-day-name">${nombreDia}</span>
+        <span class="cal-day-num font-mono">${num}</span>
+        ${headerExtras}
+        ${countBadge}
+      </div>`;
+
+    // ── Líneas decorativas de hora ─────────────────────────────────────────
+    // Una línea por slot a top = índice × 44px; las :00 son más visibles que las :30
+    const lineasHTML = slots.map((s, si) => {
+      const cls = s.substring(3) === '30' ? 'hora-line hora-line-half' : 'hora-line hora-line-full';
+      return `<div class="${cls}" style="top:${si * 44}px"></div>`;
+    }).join('');
+
+    // ── Overlay diagonal para días bloqueados y feriados ───────────────────
+    let overlayHTML = '';
+    if (esBloqueado || esFeriado) {
+      const watermark = esBloqueado ? 'BLOQUEADO' : 'FERIADO';
+      overlayHTML = `
+        <div class="day-blocked-overlay"></div>
+        <div class="day-blocked-watermark">${watermark}</div>`;
+    }
+
+    // ── Cards de turno ─────────────────────────────────────────────────────
+    // top = fila * 44 + 2px de margen, donde fila = (hora-8)*2 + (mins>=30 ? 1 : 0)
+    const cardsHTML = turnosDia.map(tc => {
+      const hora = parseInt(tc.hora_inicio.substring(0, 2));
+      const mins = parseInt(tc.hora_inicio.substring(3, 5));
+      const fila = (hora - 8) * 2 + (mins >= 30 ? 1 : 0);
+      const top  = fila * 44 + 2;
+
+      // Color de card por serviceId; si no hay serviceId, fallback por estado del turno.
+      // serviceId 2 = Licencia de Conducir (azul), serviceId 3 = Tribunal de Faltas (teal)
+      const svcId = tc.service_id || tc.serviceId;
+      let cardColor, badgeCls, badgeLabel;
+      if      (svcId == 2) { cardColor = 'turno-blue'; badgeCls = 'svc-blue'; badgeLabel = 'LIC'; }
+      else if (svcId == 3) { cardColor = 'turno-teal'; badgeCls = 'svc-teal'; badgeLabel = 'TRI'; }
+      else if (svcId) {
+        cardColor  = 'turno-red';
+        badgeCls   = 'svc-red';
+        badgeLabel = (tc.servicio_nombre || '???').substring(0, 3).toUpperCase();
+      } else {
+        // Sin serviceId: determinar por estado
+        if      (tc.estado === 'agendado') { cardColor = 'turno-blue'; badgeCls = 'svc-blue'; }
+        else if (tc.estado === 'presente') { cardColor = 'turno-teal'; badgeCls = 'svc-teal'; }
+        else                               { cardColor = 'turno-red';  badgeCls = 'svc-red';  }
+        badgeLabel = (tc.servicio_nombre || '???').substring(0, 3).toUpperCase();
+      }
+
+      // Avatar con iniciales; si no hay operador asignado, badge especial "?"
+      const avatarHTML = tc.operador_nombre
+        ? `<span class="turno-avatar">${esc(inicialesOp(tc.operador_nombre))}</span>`
+        : `<span class="badge-sin-tomar">?</span>`;
+
+      return `
+        <div class="turno-card ${cardColor}"
+             style="top:${top}px"
+             data-id="${tc.id}"
+             onclick="abrirDetalleTurno(${tc.id})">
+          <div class="turno-card-inner">
+            <div class="turno-row-1">
+              <span class="turno-hora font-mono">${esc(tc.hora_inicio.substring(0, 5))}</span>
+              ${avatarHTML}
+            </div>
+            <div class="turno-nombre">${esc(tc.vecino_nombre)}</div>
+            <span class="svc-badge ${badgeCls}">${badgeLabel}</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    // Zona de agregar turno: solo en el día de hoy (no en días cerrados ni bloqueados)
+    const agregarHTML = (esHoy && !esCerrado)
+      ? `<div class="agregar-turno-zone" onclick="window.location.href='/panel/presencial.html'">+ Agregar turno</div>`
+      : '';
 
     return `
-      <th class="col-dia" style="${headerBg}${headerColor}">
-        <span class="encabezado-dia-semana">${DIAS_CORTO[i]}</span>
-        <span class="encabezado-num-semana">${num}/${String(mes).padStart(2,'0')}</span>
-        ${tag}
-      </th>`;
-  }).join('');
-
-  // Filas de tiempo.
-  // Cada celda de un día especial hereda el mismo color de fondo del encabezado
-  // para que toda la columna quede tintada, no solo el encabezado.
-  // Prioridad: feriado > bloqueo oficina > bloqueo individual > hoy > normal
-  const filas = slots.map(slot => {
-    const celdas = dias.map(fecha => {
-      const turnosDia = (porFecha[fecha] || [])
-        .filter(t => t.hora_inicio.substring(0, 5) === slot);
-      const esHoy         = fecha === HOY;
-      const esFeriado     = diasEspeciales.feriados.has(fecha);
-      const esBloqueado   = !esFeriado && diasEspeciales.bloqueados.has(fecha);
-      const esBloqueadoInd = !esFeriado && !esBloqueado
-                             && (diasEspeciales.bloqueosIndividuales[fecha] || []).length > 0;
-
-      let claseCelda = '';
-      if (esFeriado)       claseCelda = 'cel-feriado';
-      else if (esBloqueado)  claseCelda = 'cel-bloqueado';
-      else if (esBloqueadoInd) claseCelda = 'cel-bloqueado-ind';
-      else if (esHoy)        claseCelda = 'cel-dia-hoy';
-      // "hoy" con prioridad más baja que los colores de alerta para que, si hoy
-      // es feriado o bloqueado, el color de alerta tenga prioridad visual.
-
-      const cards = turnosDia.map(t => `
-        <div class="turno-semana badge-${t.estado}" title="${esc(t.vecino_nombre)} — ${esc(t.servicio_nombre)}">
-          ${esc(t.hora_inicio.substring(0,5))} ${esc(t.vecino_nombre.split(' ')[0])}
+      <div class="cal-day-col" data-state="${estado}">
+        ${headerHTML}
+        <div class="cal-day-body">
+          ${lineasHTML}
+          ${overlayHTML}
+          ${cardsHTML}
+          ${agregarHTML}
         </div>
-      `).join('');
-      return `<td${claseCelda ? ` class="${claseCelda}"` : ''}>${cards}</td>`;
-    }).join('');
-    return `<tr><td class="cel-hora">${slot}</td>${celdas}</tr>`;
+      </div>`;
   }).join('');
 
   document.getElementById('tabla-container').innerHTML = `
-    <div class="tabla-semana-wrapper">
-      <table class="tabla-semana">
-        <thead>
-          <tr>
-            <th class="col-hora"></th>
-            ${headerCols}
-          </tr>
-        </thead>
-        <tbody>${filas}</tbody>
-      </table>
+    <div class="cal-week-wrapper">
+      <div class="cal-time-col">${timeColHTML}</div>
+      <div class="cal-days-area">${daysAreaHTML}</div>
     </div>
   `;
 }

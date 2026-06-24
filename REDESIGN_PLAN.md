@@ -769,13 +769,16 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ topbar-right baja de 438px a 394px; topbar-left sube de 90px a 106px a 961px
 - Nota: fix flex de Paso 4 sigue siendo necesario a <1050px; se revisa en Paso 10
 
-### Paso 7 — renderizarSemana()
-- Reemplazar `<table class="tabla-semana">` por `.cal-week-wrapper`
-- Generar cards con `position:absolute` y `top` calculado
-- Agregar overlays de bloqueados y watermark
-- Agregar zona de agregar turno en el día actual
-- Verificar: semana se visualiza con cards, navegación funciona,
-  días especiales tienen overlay correcto
+### Paso 7 — renderizarSemana() ✅ COMPLETADO (2026-06-24)
+- ✅ `.cal-week-wrapper` con `.cal-time-col` (08:00–17:30, :30 sin texto) y `.cal-days-area`
+- ✅ 7 `.cal-day-col` con `data-state` correcto: today/holiday/blocked/closed/normal
+- ✅ Cards `position:absolute` con `top = fila*44+2`; turno 10:30 → top=222px verificado
+- ✅ Colores por serviceId: 2→turno-blue/LIC, 3→turno-teal/TRI, null→fallback por estado
+- ✅ Iniciales del operador (CP, LG) y badge `?` cuando `operador_nombre` es null
+- ✅ Overlays: `day-blocked-overlay` + `day-blocked-watermark "BLOQUEADO"/"FERIADO"` en blocked/holiday
+- ✅ `.agregar-turno-zone` solo en el día `today` y no en cerrados
+- ✅ `inicialesOp()` y `abrirDetalleTurno()` (stub → navega a vista día) agregadas
+- ✅ Cero errores en consola; bloqueos individuales muestran info en header
 
 ### Paso 8 — renderizarTablaDia()
 - Misma grilla que semana pero columna única
