@@ -756,10 +756,12 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - Fix: topbar-left tenía width:0 a <1100px → aplicado flex: 1 1 200px y topbar-center: 0 1 340px
   (el right quedará compacto definitivamente en Paso 6 al reescribir renderizarStats)
 
-### Paso 5 — Filterbar
-- Area chips (`#selector-areas-agenda`) con clase `.filter-chip`
-- Dropdown de operadores (`#filtro-operador`) restyled
-- Verificar: cargar por área funciona, dropdown de operadores funciona
+### Paso 5 — Filterbar ✅ COMPLETADO (2026-06-24 · commit dc32719)
+- ✅ `inicializarChipsAgenda()`: clases `area-chip`/`activo` → `filter-chip`/`active`
+- ✅ `areasParam()`: selectores `.area-chip.activo` → `.filter-chip.active`
+- ✅ CSS legacy `.area-chip` eliminado; reemplazado por `.filter-chip` de design-tokens.css
+- ✅ Dropdown `#filtro-operador select`: ya tenía estilos correctos (sin cambios)
+- ✅ Filterbar 36px alto, elementos centrados; toggle ON/OFF verificado; cero errores consola
 
 ### Paso 6 — renderizarStats()
 - Cambiar HTML generado a `.topbar-counter.counter-*`
