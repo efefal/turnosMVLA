@@ -763,9 +763,11 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ Dropdown `#filtro-operador select`: ya tenía estilos correctos (sin cambios)
 - ✅ Filterbar 36px alto, elementos centrados; toggle ON/OFF verificado; cero errores consola
 
-### Paso 6 — renderizarStats()
-- Cambiar HTML generado a `.topbar-counter.counter-*`
-- Verificar: los contadores se muestran correctamente al cargar la agenda
+### Paso 6 — renderizarStats() ✅ COMPLETADO (2026-06-24 · commit 5bafb76)
+- ✅ HTML generado: 4 `topbar-counter` (total/agendado/presente/ausente); `atendido` va al Total sin counter propio
+- ✅ Colores: gris/azul/teal/rojo desde design-tokens.css ✓ sin CSS nuevo
+- ✅ topbar-right baja de 438px a 394px; topbar-left sube de 90px a 106px a 961px
+- Nota: fix flex de Paso 4 sigue siendo necesario a <1050px; se revisa en Paso 10
 
 ### Paso 7 — renderizarSemana()
 - Reemplazar `<table class="tabla-semana">` por `.cal-week-wrapper`
