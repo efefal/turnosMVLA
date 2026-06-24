@@ -121,10 +121,13 @@
       display: flex;
       align-items: center;
       gap: var(--gap-md);
-      flex: 1;
+      flex: 1 1 200px;   /* base 200px para que participe en el shrink y no quede en 0 */
       min-width: 0;
     }
-    .topbar-center { flex-shrink: 0; }
+    /* flex: 0 1 340px permite que el buscador ceda espacio a pantallas <1100px */
+    .topbar-center { flex: 0 1 340px; min-width: 0; }
+    /* el search-global tiene width:340px en design-tokens; lo hacemos fluido aquí */
+    .topbar-center .search-global { width: 100%; }
     .topbar-right {
       display: flex;
       align-items: center;
