@@ -792,10 +792,14 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ `.agregar-turno-zone` solo en el día de hoy
 - ✅ Cero errores en consola; posiciones: 08:00→2px, 09:30→134px, 11:00→266px, 14:30→574px
 
-### Paso 9 — renderizarMes()
-- Ajustar clases CSS a design tokens (eliminar colores hardcodeados)
-- Verificar: celdas de feriado/bloqueo tienen colores correctos,
-  click en día navega a vista día
+### Paso 9 — renderizarMes() ✅ COMPLETADO (2026-06-24)
+- ✅ Sin cambios de código: función y CSS ya cumplían los requisitos del plan
+- ✅ Clases generadas: cal-dia, cal-hoy, cal-feriado, cal-bloqueado, cal-bloqueado-ind, otro-mes
+- ✅ CSS ya usa var(--) en todos los estilos del mes: no había colores hardcodeados
+- ✅ Grid de 7 columnas confirmado; 30 celdas con onclick en junio 2026
+- ✅ irADiaDesdeCalendario() navega a vista día al hacer click
+- ✅ Cero errores en consola
+- Nota: el trabajo fue realizado en Paso 1 (eliminación del CSS viejo)
 
 ### Paso 10 — Pulido final
 - `rolBadgeHTML()` → usar clases role-badge
