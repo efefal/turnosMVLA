@@ -1024,15 +1024,17 @@ function actualizarLabelMes(año, mes) {
 // ─── Stats ─────────────────────────────────────────────────────────────────
 function renderizarStats(turnos) {
   const contar = (e) => turnos.filter(t => t.estado === e).length;
-  const chips = [
-    { cls: 'chip-total',    label: 'Total',     val: turnos.length },
-    { cls: 'chip-agendado', label: 'Agendados', val: contar('agendado') },
-    { cls: 'chip-presente', label: 'Presentes', val: contar('presente') },
-    { cls: 'chip-atendido', label: 'Atendidos', val: contar('atendido') },
-    { cls: 'chip-ausente',  label: 'Ausentes',  val: contar('ausente')  },
+  const contadores = [
+    { cls: 'counter-total',    label: 'Total',     val: turnos.length        },
+    { cls: 'counter-agendado', label: 'Agendados', val: contar('agendado')   },
+    { cls: 'counter-presente', label: 'Presentes', val: contar('presente')   },
+    { cls: 'counter-ausente',  label: 'Ausentes',  val: contar('ausente')    },
   ];
-  document.getElementById('stats').innerHTML = chips
-    .map(c => `<div class="stat-chip ${c.cls}"><strong>${c.val}</strong> ${c.label}</div>`)
+  document.getElementById('stats').innerHTML = contadores
+    .map(c => `<div class="topbar-counter ${c.cls}">
+      <span class="counter-num font-mono">${c.val}</span>
+      <span class="counter-label">${c.label}</span>
+    </div>`)
     .join('');
 }
 
