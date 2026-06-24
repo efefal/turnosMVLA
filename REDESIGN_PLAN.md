@@ -732,11 +732,12 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ Verificación: auth funciona (redirige a login en 401 como se espera)
 - Nota: página visualmente rota (esperado — estructura HTML aún sin cambios)
 
-### Paso 2 — Shell: sidebar + main area
-- Reemplazar `<nav class="navbar">` + `<div class="container">` por el esqueleto
-  `<div class="app-shell"> <aside class="sidebar">...</aside> <div class="main-area">...</div> </div>`
-- Mantener todos los IDs en sus nuevas posiciones
-- Verificar: init() corre, los IDs existen, no hay errores en consola
+### Paso 2 — Shell: sidebar + main area ✅ COMPLETADO (2026-06-24 · commit pendiente)
+- ✅ Reemplazado `<nav class="navbar">` + `<div class="container">` por app-shell con sidebar + main-area
+- ✅ Todos los 28 IDs del inventario existen en el DOM en sus nuevas posiciones
+- ✅ `#modal-fondo` es el último elemento del `<body>`, fuera del `app-shell` (línea 744)
+- ✅ Cero errores en consola; init() redirige a login correctamente (sin token)
+- ✅ Sidebar incluye header VLA, user-card (nav-nombre), minical placeholder, nav groups con label-reportes/label-admin
 
 ### Paso 3 — Sidebar: contenido completo
 - Logo VLA + texto Municipalidad/Villa La Angostura

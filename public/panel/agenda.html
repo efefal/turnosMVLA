@@ -616,96 +616,131 @@
 </head>
 <body>
 
-<nav class="navbar">
-  <a href="/panel/agenda.html">
-    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
-         alt="Municipalidad Villa La Angostura" class="nav-logo">
-  </a>
-  <div class="nav-links">
-    <a href="/panel/agenda.html" class="activo">Agenda</a>
-    <a href="/panel/presencial.html">Presencial</a>
-    <a href="/panel/bloqueos.html">Bloqueos</a>
-    <a href="/panel/auditoria.html"      id="nav-auditoria"  style="display:none">Auditoría</a>
-    <a href="/panel/dashboard.html"      id="nav-dashboard"  style="display:none">Dashboard</a>
-    <a href="/panel/usuarios.html"       id="nav-usuarios"   style="display:none">Usuarios</a>
-    <a href="/panel/servicios-admin.html" id="nav-servicios" style="display:none">Servicios</a>
-  </div>
-  <div class="nav-user">
-    <span id="nav-nombre"></span>
-    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
-  </div>
-</nav>
+<div class="app-shell">
 
-<div class="container">
+  <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
 
-  <!-- Barra superior: selector de vista + navegación -->
-  <div class="barra-top">
-
-    <!-- Selector de vista: Día / Semana / Mes -->
-    <div class="btn-group-vista">
-      <button class="btn-vista activo" id="btn-vista-dia"
-              onclick="cambiarVista('dia')">Día</button>
-      <button class="btn-vista" id="btn-vista-semana"
-              onclick="cambiarVista('semana')">Semana</button>
-      <button class="btn-vista" id="btn-vista-mes"
-              onclick="cambiarVista('mes')">Mes</button>
+    <div class="sidebar-header">
+      <div class="sidebar-logo">VLA</div>
+      <div>
+        <div class="sidebar-muni">Municipalidad</div>
+        <div class="sidebar-ciudad">Villa La Angostura</div>
+      </div>
     </div>
 
-    <!-- Navegación vista DÍA -->
-    <div class="nav-fecha" id="nav-dia">
-      <button class="btn btn-ghost" onclick="moverFecha(-1)">◀ Anterior</button>
-      <input type="date" id="fecha-input" onchange="onFechaChange()">
-      <button class="btn btn-ghost" onclick="moverFecha(+1)">Siguiente ▶</button>
-      <button class="btn btn-ghost" onclick="irAHoy()">Hoy</button>
+    <div class="sidebar-user-card">
+      <div class="sidebar-avatar" id="sidebar-avatar"></div>
+      <div>
+        <span id="nav-nombre"></span>
+      </div>
     </div>
 
-    <!-- Navegación vista SEMANA -->
-    <div class="nav-fecha" id="nav-semana" style="display:none">
-      <button class="btn btn-ghost" onclick="moverSemana(-1)">◀ Anterior</button>
-      <span class="periodo-label" id="label-semana"></span>
-      <button class="btn btn-ghost" onclick="moverSemana(+1)">Siguiente ▶</button>
-      <button class="btn btn-ghost" onclick="irASemanaActual()">Esta semana</button>
+    <!-- Mini-calendario decorativo — renderizarMiniCal() lo llena en Paso 3 -->
+    <div id="sidebar-minical"></div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Calendario</div>
+      <a href="/panel/agenda.html"     class="nav-item active">Agenda</a>
+      <a href="/panel/presencial.html" class="nav-item">Presencial</a>
+      <a href="/panel/bloqueos.html"   class="nav-item">Bloqueos</a>
+
+      <!-- Reportes — ocultos por defecto; init() los muestra según rol -->
+      <div class="nav-section-label" id="label-reportes" style="display:none">Reportes</div>
+      <a href="/panel/auditoria.html"  class="nav-item" id="nav-auditoria" style="display:none">Auditoría</a>
+      <a href="/panel/dashboard.html"  class="nav-item" id="nav-dashboard" style="display:none">Dashboard</a>
+
+      <!-- Admin — ocultos por defecto; init() los muestra según rol -->
+      <div class="nav-section-label" id="label-admin" style="display:none">Admin.</div>
+      <a href="/panel/usuarios.html"        class="nav-item" id="nav-usuarios" style="display:none">Usuarios</a>
+      <a href="/panel/servicios-admin.html" class="nav-item" id="nav-servicios" style="display:none">Servicios</a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-logout-sidebar" onclick="cerrarSesion()">Salir</button>
     </div>
 
-    <!-- Navegación vista MES -->
-    <div class="nav-fecha" id="nav-mes" style="display:none">
-      <button class="btn btn-ghost" onclick="moverMes(-1)">◀ Anterior</button>
-      <span class="periodo-label" id="label-mes"></span>
-      <button class="btn btn-ghost" onclick="moverMes(+1)">Siguiente ▶</button>
-      <button class="btn btn-ghost" onclick="irAMesActual()">Este mes</button>
+  </aside>
+
+  <!-- ── Main area ───────────────────────────────────────────────────── -->
+  <div class="main-area">
+
+    <!-- Topbar: título + toggle vista + navegación + búsqueda + stats -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Agenda</span>
+
+        <div class="btn-group-vista">
+          <button id="btn-vista-dia"    class="btn-vista activo" onclick="cambiarVista('dia')">Día</button>
+          <button id="btn-vista-semana" class="btn-vista"        onclick="cambiarVista('semana')">Semana</button>
+          <button id="btn-vista-mes"    class="btn-vista"        onclick="cambiarVista('mes')">Mes</button>
+        </div>
+
+        <div class="nav-fecha" id="nav-dia">
+          <button onclick="moverFecha(-1)">◀</button>
+          <input type="date" id="fecha-input" onchange="onFechaChange()">
+          <button onclick="moverFecha(+1)">▶</button>
+          <button onclick="irAHoy()">Hoy</button>
+        </div>
+
+        <div class="nav-fecha" id="nav-semana" style="display:none">
+          <button onclick="moverSemana(-1)">◀</button>
+          <span class="periodo-label" id="label-semana"></span>
+          <button onclick="moverSemana(+1)">▶</button>
+          <button onclick="irASemanaActual()">Esta semana</button>
+        </div>
+
+        <div class="nav-fecha" id="nav-mes" style="display:none">
+          <button onclick="moverMes(-1)">◀</button>
+          <span class="periodo-label" id="label-mes"></span>
+          <button onclick="moverMes(+1)">▶</button>
+          <button onclick="irAMesActual()">Este mes</button>
+        </div>
+      </div>
+
+      <div class="topbar-center">
+        <input class="search-global" type="text" placeholder="Buscar vecino, DNI, n.º turno…">
+      </div>
+
+      <div class="topbar-right">
+        <div id="stats"></div>
+        <!-- C4: redirige a presencial.html hasta que se implemente el drawer -->
+        <button class="btn btn-primary" onclick="window.location.href='/panel/presencial.html'">+ Nueva Reserva</button>
+      </div>
     </div>
 
-    <!-- Filtro por operador (encargado) -->
-    <div id="filtro-operador" style="display:none">
-      <select id="select-operador" onchange="cargar()">
-        <option value="">Todos los operadores</option>
-      </select>
+    <!-- Filterbar: chips de área + dropdown de operadores -->
+    <div class="filterbar">
+      <div class="filterbar-left">
+        <span class="filterbar-label">Área</span>
+        <div id="selector-areas-agenda">
+          <div id="chips-areas-agenda"></div>
+        </div>
+      </div>
+      <div class="filterbar-right">
+        <div id="filtro-operador" style="display:none">
+          <select id="select-operador" onchange="cargar()">
+            <option value="">Todos los operadores</option>
+          </select>
+        </div>
+      </div>
     </div>
 
-  </div>
-
-  <!-- B9: chips de área (visible cuando el usuario accede a >1 área) -->
-  <div class="area-selector" id="selector-areas-agenda">
-    <div class="area-selector-titulo">Filtrar por área</div>
-    <div class="area-chips" id="chips-areas-agenda"></div>
-  </div>
-
-  <p class="fecha-label" id="fecha-label"></p>
-
-  <div class="stats" id="stats"></div>
-
-  <div class="alerta alerta-error" id="alerta-error"></div>
-  <div class="alerta alerta-ok"    id="alerta-ok"></div>
-
-  <div class="card">
-    <div class="tabla-wrapper">
-      <div id="tabla-container"><div class="cargando">Cargando agenda...</div></div>
+    <!-- Calendar area: label fecha + alertas + grilla -->
+    <div class="calendar-area">
+      <p id="fecha-label" class="fecha-label-bar"></p>
+      <div class="alerta alerta-error" id="alerta-error"></div>
+      <div class="alerta alerta-ok"    id="alerta-ok"></div>
+      <div id="tabla-container">
+        <div class="cargando">Cargando agenda...</div>
+      </div>
     </div>
-  </div>
 
-</div>
+  </div><!-- /main-area -->
 
-<!-- Modal cancelar -->
+</div><!-- /app-shell -->
+
+<!-- Modal cancelar — fuera del app-shell para evitar problemas de z-index/stacking context -->
 <div class="modal-fondo" id="modal-fondo">
   <div class="modal-caja">
     <h3>Cancelar turno</h3>
