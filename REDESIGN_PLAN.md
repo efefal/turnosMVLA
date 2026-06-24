@@ -732,14 +732,14 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ Verificación: auth funciona (redirige a login en 401 como se espera)
 - Nota: página visualmente rota (esperado — estructura HTML aún sin cambios)
 
-### Paso 2 — Shell: sidebar + main area ✅ COMPLETADO (2026-06-24 · commit pendiente)
+### Paso 2 — Shell: sidebar + main area ✅ COMPLETADO (2026-06-24 · commit 0ab97e6)
 - ✅ Reemplazado `<nav class="navbar">` + `<div class="container">` por app-shell con sidebar + main-area
 - ✅ Todos los 28 IDs del inventario existen en el DOM en sus nuevas posiciones
 - ✅ `#modal-fondo` es el último elemento del `<body>`, fuera del `app-shell` (línea 744)
 - ✅ Cero errores en consola; init() redirige a login correctamente (sin token)
 - ✅ Sidebar incluye header VLA, user-card (nav-nombre), minical placeholder, nav groups con label-reportes/label-admin
 
-### Paso 3 — Sidebar: contenido completo ✅ COMPLETADO (2026-06-24 · commit pendiente)
+### Paso 3 — Sidebar: contenido completo ✅ COMPLETADO (2026-06-24 · commit ccc7cdb)
 - ✅ `renderizarMiniCal()` — función nueva de presentación; genera 35 celdas con hoy en teal sólido y semana actual en teal-dim
 - ✅ Avatar `#sidebar-avatar` — iniciales + fondo por rol: encargado=teal-mid, operador=blue-mid, sistemas/directivo=amber-mid
 - ✅ Labels `#label-reportes` y `#label-admin` — se muestran junto a sus links cuando el rol lo permite (C1 del plan)
