@@ -718,11 +718,19 @@ El `<style>` interno solo debe agregar:
 
 Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace commit antes del siguiente.
 
-### Paso 1 — Base: link a design-tokens.css + eliminar CSS obsoleto
-- Agregar `<link rel="stylesheet" href="/assets/design-tokens.css">` en el `<head>`
-- Borrar el bloque `<style>` completo del archivo actual
-- Agregar el `<style>` nuevo definido en este plan
-- Verificar: la página carga sin errores de JS (aunque rota visualmente)
+### Paso 1 — Base: link a design-tokens.css + eliminar CSS obsoleto ✅ COMPLETADO (2026-06-24 · commit 5a0b630)
+
+- ✅ Agregado `<link rel="stylesheet" href="/assets/design-tokens.css">` en el `<head>`
+- ✅ Eliminado el bloque `<style>` viejo (~195 líneas, colores hardcodeados)
+- ✅ Agregado `<style>` nuevo (~380 líneas, solo variables `var(--)`)
+- ✅ Incluidos estilos transicionales para clases legacy que usan el JS actual:
+  `.btn-ghost`, `.btn-success`, `.btn-warning`, `.badge-agendado/presente/ausente/atendido`,
+  `.turno-semana`, tablas `<table>/<th>/<td>`, `.banner-dia`, `.area-chip`, `.badge-rol`
+- ✅ Verificación: cero errores JS en consola
+- ✅ Verificación: `/assets/design-tokens.css` responde HTTP 200 y se carga correctamente
+- ✅ Verificación: `<head>` contiene ambos links (favicon + design-tokens.css)
+- ✅ Verificación: auth funciona (redirige a login en 401 como se espera)
+- Nota: página visualmente rota (esperado — estructura HTML aún sin cambios)
 
 ### Paso 2 — Shell: sidebar + main area
 - Reemplazar `<nav class="navbar">` + `<div class="container">` por el esqueleto
