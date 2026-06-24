@@ -780,10 +780,17 @@ Cada paso se trabaja solo, se verifica que el JS siga funcionando, y se hace com
 - ✅ `inicialesOp()` y `abrirDetalleTurno()` (stub → navega a vista día) agregadas
 - ✅ Cero errores en consola; bloqueos individuales muestran info en header
 
-### Paso 8 — renderizarTablaDia()
-- Misma grilla que semana pero columna única
-- Cards expandidas con botones de acción al pie
-- Verificar: acciones tomar/liberar/presente/ausente/cancelar funcionan
+### Paso 8 — renderizarTablaDia() ✅ COMPLETADO (2026-06-24)
+- ✅ Misma grilla `.cal-week-wrapper` que semana pero con columna única `.cal-day-col`
+- ✅ Cards expandidas: `height:auto; min-height:40px`; nombre con `flex:1` en `turno-row-1`
+- ✅ Botones correctos por estado: sin operador+agendado→Tomar/Cancelar; con operador+agendado→Presente/Ausente/Liberar; otros→sin botones; directivo→sin botones
+- ✅ Clases design system: btn-secondary/Tomar, btn-primary/Presente, btn-danger/Ausente+Cancelar, btn-secondary/Liberar
+- ✅ `.turno-card .btn { font-size:var(--text-xs); padding:3px 8px }` agregado al `<style>`
+- ✅ Overlay + watermark en días bloqueados/feriados; data-state correcto
+- ✅ `abrirCancelar(id)` abre `#modal-fondo` con info del vecino — verificado
+- ✅ Columna de horas (08:00–17:30, 20 slots) visible a la izquierda
+- ✅ `.agregar-turno-zone` solo en el día de hoy
+- ✅ Cero errores en consola; posiciones: 08:00→2px, 09:30→134px, 11:00→266px, 14:30→574px
 
 ### Paso 9 — renderizarMes()
 - Ajustar clases CSS a design tokens (eliminar colores hardcodeados)

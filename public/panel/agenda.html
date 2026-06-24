@@ -412,6 +412,8 @@
 
     /* ── Acciones dentro de la card (vista día) ──────────────── */
     .turno-acciones { display: flex; gap: var(--gap-xs); flex-wrap: wrap; margin-top: var(--gap-xs); }
+    /* Botones dentro de card: tamaño reducido para caber en la card expandida */
+    .turno-card .btn { font-size: var(--text-xs); padding: 3px 8px; }
 
     /* ── Mini-calendario del sidebar ─────────────────────────── */
     .minical { padding: 10px 10px 6px; border-bottom: 1px solid var(--border); }
@@ -1067,39 +1069,168 @@ function renderizarAcciones(t) {
 }
 
 function renderizarTablaDia(turnos) {
-  if (!turnos.length) {
-    document.getElementById('tabla-container').innerHTML =
-      `<div class="vacio">📅<p>No hay turnos para este día.</p></div>`;
-    return;
+  const slots = generarSlotsTiempo('08:00', '17:30'); // 20 slots × 44px = 880px
+
+  // ── Columna de horas ─────────────────────────────────────────────────────
+  const timeSlots = slots.map(slot => {
+    const esMedia = slot.substring(3) === '30';
+    return `<div class="cal-time-slot${esMedia ? ' half' : ''}">${esMedia ? '' : slot}</div>`;
+  }).join('');
+  const timeColHTML = `<div class="cal-time-header"></div>${timeSlots}`;
+
+  // ── Estado del día ───────────────────────────────────────────────────────
+  const d         = parseFecha(fechaActual);
+  const dayOfWeek = d.getDay(); // 0=Dom, 6=Sáb
+  const num       = d.getDate();
+  const esCerrado   = dayOfWeek === 0 || dayOfWeek === 6;
+  const esFeriado   = !esCerrado && diasEspeciales.feriados.has(fechaActual);
+  const esBloqueado = !esCerrado && !esFeriado && diasEspeciales.bloqueados.has(fechaActual);
+  const esHoy       = fechaActual === HOY;
+
+  let estado;
+  if      (esFeriado)   estado = 'holiday';
+  else if (esBloqueado) estado = 'blocked';
+  else if (esCerrado)   estado = 'closed';
+  else if (esHoy)       estado = 'today';
+  else                  estado = 'normal';
+
+  // getDay() retorna 0=Dom…6=Sáb; DIAS_CORTO empieza en Lun (índice 0).
+  // (dayOfWeek + 6) % 7 convierte: Dom(0)→6, Lun(1)→0, Mar(2)→1, etc.
+  const nombreDia = DIAS_CORTO[(dayOfWeek + 6) % 7];
+
+  // Bloqueos individuales de operadores (solo si el día no está bloqueado ni es feriado)
+  const nombresInd = (!esCerrado && !esFeriado && !esBloqueado)
+    ? (diasEspeciales.bloqueosIndividuales[fechaActual] || [])
+    : [];
+
+  const countBadge = turnos.length > 0
+    ? `<span class="cal-day-count">${turnos.length} turno${turnos.length !== 1 ? 's' : ''}</span>`
+    : '';
+
+  let headerExtras = '';
+  if (esBloqueado) {
+    headerExtras = '<span class="cal-day-badge-blocked">BLOQUEADO</span>';
+  } else if (nombresInd.length > 0) {
+    const infos = nombresInd.map(n => `${esc(n.split(' ')[0])} — bloqueado`).join(', ');
+    headerExtras = `<span class="cal-day-block-info">${infos}</span>`;
   }
-  const filas = turnos.map(t => `
-    <tr>
-      <td style="font-weight:600;white-space:nowrap">${esc(t.hora_inicio.substring(0,5))}</td>
-      <td>
-        <div class="nombre-vecino">${esc(t.vecino_nombre)}</div>
-        <div class="dni-vecino">DNI ${esc(t.vecino_dni)}</div>
-      </td>
-      <td>${esc(t.servicio_nombre)}</td>
-      <td>${t.operador_nombre ? esc(t.operador_nombre) : '<span class="badge-sin-tomar">Sin tomar</span>'}</td>
-      <td><span class="badge badge-${t.estado}">${ESTADOS[t.estado] || t.estado}</span></td>
-      <td>${renderizarAcciones(t)}</td>
-    </tr>
-  `).join('');
+
+  // ── Líneas decorativas de hora ───────────────────────────────────────────
+  const lineasHTML = slots.map((s, si) => {
+    const cls = s.substring(3) === '30' ? 'hora-line hora-line-half' : 'hora-line hora-line-full';
+    return `<div class="${cls}" style="top:${si * 44}px"></div>`;
+  }).join('');
+
+  // ── Overlay diagonal para días bloqueados y feriados ────────────────────
+  let overlayHTML = '';
+  if (esBloqueado || esFeriado) {
+    const watermark = esBloqueado ? 'BLOQUEADO' : 'FERIADO';
+    overlayHTML = `
+      <div class="day-blocked-overlay"></div>
+      <div class="day-blocked-watermark">${watermark}</div>`;
+  }
+
+  // ── Cards de turno ────────────────────────────────────────────────────────
+  // RIESGO C5: dos turnos en slots consecutivos (ej. 08:00 y 08:30) pueden
+  // solaparse visualmente si el primero crece en altura por los botones de
+  // acción (height > 44px). Pendiente resolver con scroll interno o drawer
+  // de detalle en iteración posterior.
+  let cardsHTML = '';
+  if (turnos.length === 0) {
+    // Sin turnos: mensaje centrado sobre la grilla de horas
+    cardsHTML = `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+      color:var(--text-3);font-size:var(--text-sm);pointer-events:none;white-space:nowrap">
+      Sin turnos este día</div>`;
+  } else {
+    cardsHTML = turnos.map(t => {
+      const hora  = parseInt(t.hora_inicio.substring(0, 2));
+      const mins  = parseInt(t.hora_inicio.substring(3, 5));
+      const fila  = (hora - 8) * 2 + (mins >= 30 ? 1 : 0);
+      const top   = fila * 44 + 2;
+
+      // Color por serviceId — misma lógica que renderizarSemana
+      const svcId = t.service_id || t.serviceId;
+      let cardColor, badgeCls, badgeLabel;
+      if      (svcId == 2) { cardColor = 'turno-blue'; badgeCls = 'svc-blue'; badgeLabel = 'LIC'; }
+      else if (svcId == 3) { cardColor = 'turno-teal'; badgeCls = 'svc-teal'; badgeLabel = 'TRI'; }
+      else if (svcId) {
+        cardColor  = 'turno-red';
+        badgeCls   = 'svc-red';
+        badgeLabel = (t.servicio_nombre || '???').substring(0, 3).toUpperCase();
+      } else {
+        // Sin serviceId: determinar color por estado del turno
+        if      (t.estado === 'agendado') { cardColor = 'turno-blue'; badgeCls = 'svc-blue'; }
+        else if (t.estado === 'presente') { cardColor = 'turno-teal'; badgeCls = 'svc-teal'; }
+        else                              { cardColor = 'turno-red';  badgeCls = 'svc-red';  }
+        badgeLabel = (t.servicio_nombre || '???').substring(0, 3).toUpperCase();
+      }
+
+      // Avatar con iniciales del operador; badge "?" si el turno no fue tomado
+      const avatarHTML = t.operador_nombre
+        ? `<span class="turno-avatar">${esc(inicialesOp(t.operador_nombre))}</span>`
+        : `<span class="badge-sin-tomar">?</span>`;
+
+      // Botones de acción — replica la lógica de renderizarAcciones() con clases del
+      // design system (btn-primary/secondary/danger en lugar de btn-success/warning/ghost)
+      let accionesHTML = '';
+      if (usuarioRol !== 'directivo') {
+        if (!t.operador_id && t.estado === 'agendado') {
+          // Turno sin tomar → Tomar + Cancelar
+          accionesHTML = `
+            <button class="btn btn-secondary" onclick="tomarTurno(${t.id})">Tomar</button>
+            <button class="btn btn-danger"    onclick="abrirCancelar(${t.id})">Cancelar</button>`;
+        } else if (t.operador_id && t.estado === 'agendado') {
+          // Turno tomado → Presente + Ausente + Liberar
+          accionesHTML = `
+            <button class="btn btn-primary"   onclick="cambiarEstado(${t.id},'presente')">Presente</button>
+            <button class="btn btn-danger"    onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>
+            <button class="btn btn-secondary" onclick="liberarTurno(${t.id})">Liberar</button>`;
+        }
+        // Estados finales (presente, ausente, atendido) o rol directivo → sin botones
+      }
+
+      return `
+        <div class="turno-card ${cardColor}"
+             style="top:${top}px; height:auto; min-height:40px;"
+             data-id="${t.id}">
+          <div class="turno-card-inner">
+            <div class="turno-row-1">
+              <span class="turno-hora font-mono">${esc(t.hora_inicio.substring(0, 5))}</span>
+              ${avatarHTML}
+              <span class="turno-nombre" style="flex:1">${esc(t.vecino_nombre)}</span>
+              <span class="svc-badge ${badgeCls}">${badgeLabel}</span>
+            </div>
+            ${accionesHTML ? `<div class="turno-acciones">${accionesHTML}</div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // Zona de agregar turno — solo en hoy, nunca en días cerrados/bloqueados
+  const agregarHTML = (esHoy && !esCerrado)
+    ? `<div class="agregar-turno-zone" onclick="window.location.href='/panel/presencial.html'">+ Agregar turno</div>`
+    : '';
 
   document.getElementById('tabla-container').innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Hora</th>
-          <th>Vecino</th>
-          <th>Trámite</th>
-          <th>Operador</th>
-          <th>Estado</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody>${filas}</tbody>
-    </table>
+    <div class="cal-week-wrapper">
+      <div class="cal-time-col">${timeColHTML}</div>
+      <div class="cal-days-area">
+        <div class="cal-day-col" data-state="${estado}">
+          <div class="cal-day-header">
+            <span class="cal-day-name">${nombreDia}</span>
+            <span class="cal-day-num font-mono">${num}</span>
+            ${headerExtras}
+            ${countBadge}
+          </div>
+          <div class="cal-day-body">
+            ${lineasHTML}
+            ${overlayHTML}
+            ${cardsHTML}
+            ${agregarHTML}
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 }
 
