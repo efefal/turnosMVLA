@@ -5,97 +5,128 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Panel — Iniciar sesión</title>
   <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
+  <link rel="stylesheet" href="/assets/design-tokens.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-      background: #1A3C4B;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 1.5rem;
     }
+
     .card {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0,0,0,.35);
-      padding: 2.5rem;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+      padding: 2.5rem 2rem;
       width: 100%;
       max-width: 400px;
     }
+
     .encabezado {
       text-align: center;
       margin-bottom: 2rem;
       padding-bottom: 1.5rem;
-      border-bottom: 1px solid #f1f5f9;
+      border-bottom: 1px solid var(--border);
     }
+
     .encabezado img {
-      max-width: 240px;
+      max-width: 72px;
       height: auto;
       display: block;
       margin: 0 auto 1rem;
     }
+
     .encabezado h1 {
-      font-family: 'Trebuchet MS', Trebuchet, sans-serif;
-      font-size: 0.9rem;
+      font-size: var(--text-xs);
       font-weight: 700;
-      color: #1A3C4B;
-      letter-spacing: 0.02em;
+      color: var(--text-2);
+      letter-spacing: 0.1em;
       text-transform: uppercase;
     }
-    .form-grupo { margin-bottom: 1.1rem; }
+
+    .encabezado p {
+      margin-top: 0.3rem;
+      font-size: var(--text-xs);
+      color: var(--text-3);
+      letter-spacing: 0.05em;
+    }
+
+    .form-grupo {
+      margin-bottom: 1rem;
+    }
+
     label {
       display: block;
-      font-size: 0.85rem;
+      font-size: var(--text-sm);
       font-weight: 500;
-      color: #374151;
+      color: var(--text-2);
       margin-bottom: 0.4rem;
     }
-    input {
+
+    input[type="email"],
+    input[type="password"] {
       width: 100%;
-      padding: 0.6rem 0.8rem;
-      border: 1px solid #d1d5db;
-      border-radius: 7px;
-      font-size: 0.9rem;
-      font-family: inherit;
-      transition: border-color 0.15s, box-shadow 0.15s;
+      background: var(--bg-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-1);
+      font-size: var(--text-base);
+      padding: 0.55rem 0.75rem;
+      transition: var(--transition-fast);
     }
-    input:focus {
-      outline: none;
-      border-color: #1A3C4B;
-      box-shadow: 0 0 0 3px rgba(26,60,75,.12);
+
+    input[type="email"]::placeholder,
+    input[type="password"]::placeholder {
+      color: var(--text-3);
     }
+
+    input[type="email"]:focus,
+    input[type="password"]:focus {
+      border-color: var(--border-hi);
+      box-shadow: 0 0 0 3px var(--teal-dim);
+    }
+
     .error {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #991b1b;
-      padding: 0.7rem 0.9rem;
-      border-radius: 7px;
-      font-size: 0.85rem;
+      background: var(--red-dim);
+      border: 1px solid var(--red-mid);
+      color: var(--red);
+      padding: 0.6rem 0.75rem;
+      border-radius: var(--radius-md);
+      font-size: var(--text-sm);
       margin-bottom: 1rem;
       display: none;
     }
+
     .btn-ingresar {
       width: 100%;
-      padding: 0.65rem;
-      background: #1A3C4B;
-      color: white;
+      padding: 0.6rem;
+      background: var(--teal);
+      color: var(--bg-0);
       border: none;
-      border-radius: 7px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      font-family: inherit;
+      border-radius: var(--radius-md);
+      font-size: var(--text-md);
+      font-weight: 700;
       cursor: pointer;
-      transition: opacity 0.15s;
+      transition: background 0.15s;
     }
-    .btn-ingresar:hover:not(:disabled) { opacity: 0.88; }
-    .btn-ingresar:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-ingresar:hover:not(:disabled) {
+      opacity: 0.88;
+    }
+
+    .btn-ingresar:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .pie {
       text-align: center;
       margin-top: 1.5rem;
-      font-size: 0.78rem;
-      color: #94a3b8;
+      font-size: var(--text-xs);
+      color: var(--text-3);
     }
   </style>
 </head>
@@ -103,9 +134,10 @@
 
 <div class="card">
   <div class="encabezado">
-    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
+    <img src="/assets/escudo_vla_web_color.png"
          alt="Municipalidad de Villa La Angostura">
-    <h1>Panel de empleados — Sistema de turnos</h1>
+    <h1>Municipalidad de Villa La Angostura</h1>
+    <p>Sistema de turnos — Panel de empleados</p>
   </div>
 
   <form id="form-login">
