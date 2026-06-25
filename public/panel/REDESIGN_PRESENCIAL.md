@@ -559,12 +559,13 @@ Estos estilos hardcodeados están en el HTML estático y deben moverse al CSS:
 - ~~Elimina definiciones locales de `.btn/.btn-primary/.btn-ghost` (redundantes con design-tokens)~~
 - **Verificado (estructural):** 0 hex en CSS nuevo; chips y alertas coinciden con nombres usados en JS
 
-### Paso 4 — Formulario paso 2 (servicio, fecha, slots)
-- CSS: `.area-selector`, `.area-chip`, `.area-chip.activo`
-- CSS: select, input[type=date] (mismos que paso 3)
-- CSS: `.slots-area`, `.slot-btn`, `.slot-btn.seleccionado`, estados de slots
-- CSS: `.botones-nav`
-- **Verificar:** slots se cargan y se seleccionan con highlight teal; chips de área filtran
+### ~~Paso 4 — Formulario paso 2 (servicio, fecha, slots)~~ ✅ completado (commit `4d71303`)
+- ~~CSS: `.area-selector`, `.area-chip`, `.area-chip.activo`~~
+- ~~CSS: select, input[type=date] (mismos que paso 3)~~
+- ~~CSS: `.slots-area`, `.slot-btn`, `.slot-btn.seleccionado`, estados de slots~~
+- ~~CSS: `.botones-nav`~~
+- ~~HTML: `btn-ghost` → `btn-secondary` en botón "Volver"~~
+- **Verificado (estructural):** 0 hex en CSS nuevo; `.slot-btn.seleccionado` y `.area-chip.activo` coinciden exactamente con nombres usados en JS
 
 ### Paso 5 — Pantalla de éxito
 - CSS: `.exito`, `.exito-icono`, `.exito h2`, `.exito-subtexto`, `.exito-detalle`
