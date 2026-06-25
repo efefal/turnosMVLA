@@ -647,7 +647,7 @@ function rolBadgeHTML(rol) {
 - ~~`btn-ghost` → `btn-secondary` en botón "↻ Actualizar"~~
 - **Verificado:** 0 hex en `<style>`; 31 IDs obligatorios presentes; navbar vieja eliminada; `renderizarMiniCal` definida y llamada; `sidebar-avatar` + labels en `init()`; `role-badge` sin inline styles
 
-### Paso 2 — Cards y tabla
+### ~~Paso 2 — Cards y tabla~~ ✅ completado
 > **Nota:** el CSS de este paso ya fue incluido en el Paso 1. Solo quedan verificaciones
 > de que los nombres de clase coinciden con lo que usa el JS.
 
@@ -656,8 +656,8 @@ function rolBadgeHTML(rol) {
 - ~~CSS: `.badge` base, `.badge-individual`, `.badge-oficina`, `.badge-dia-completo`~~ (incluido en Paso 1)
 - ~~CSS: `.alerta`, `.alerta-error`, `.alerta-ok`~~ (incluido en Paso 1)
 - ~~CSS: `.area-selector`, `.area-selector-titulo`, `.area-chips`, `.area-chip`, `.area-chip.activo`~~ (incluido en Paso 1)
-- HTML: no hay cambios en la estructura del card lista (IDs se mantienen)
-- **Checkpoint (estructural):** 0 hex en CSS; `.badge-individual`, `.badge-oficina`, `.badge-dia-completo` y `.area-chip.activo` coinciden con nombres usados en JS; `.alerta.visible` presente
+- ~~HTML: no hay cambios en la estructura del card lista (IDs se mantienen)~~
+- **Verificado:** 0 hex en `<style>`; 0 hex en HTML estático; `badge badge-individual` / `badge badge-oficina` / `badge badge-dia-completo` generados por JS coinciden con CSS; `.area-chip activo` (espacio) en JS coincide con `.area-chip.activo` en CSS; `.alerta.visible` con `display:block` presente
 
 ### Paso 3 — Formulario
 > **Nota:** el CSS de este paso ya fue incluido en el Paso 1. Solo quedan verificaciones.
