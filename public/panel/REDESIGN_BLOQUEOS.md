@@ -630,43 +630,52 @@ function rolBadgeHTML(rol) {
 
 ## 10. Orden de implementación (pasos con checkpoint)
 
-### Paso 1 — Layout shell y sidebar
-- Reemplazar `<nav class="navbar">` y todo su CSS por sidebar de agenda.html/presencial.html
-- Cambiar `.nav-item.active` a "Bloqueos"
-- HTML del sidebar: incluir `id="sidebar-avatar"`, `id="nav-nombre"`, `id="label-reportes"` y `id="label-admin"` (con `style="display:none"` por defecto), igual que en presencial.html
-- Wrap del contenido en `.app-shell > .main-content > .page-inner`
-- Agregar `<link rel="stylesheet" href="/assets/design-tokens.css">` en el `<head>`
-- CSS: `.app-shell`, `.main-content`, `.page-inner`, sidebar completo
-- CSS: `page-supertitle`, `page-title`
-- HTML: bloque `.page-header` con "Panel de gestión" / "Bloqueos"
-- **JS en `init()`:** agregar bloque de `sidebar-avatar` (iniciales + color por rol) copiado de presencial.html
-- **JS en `init()`:** agregar `lRep.style.display = ''` y `lAdm.style.display = ''` dentro del bloque que ya muestra los nav links según rol
-- **Checkpoint:** sidebar visible, avatar con iniciales, nav-nombre se llena, labels de sección aparecen para encargado/sistemas/directivo, links de rol muestran/ocultan correctamente
+### ~~Paso 1 — Layout shell y sidebar~~ ✅ completado (commit `d6f2d58`)
+- ~~Reemplazar `<nav class="navbar">` y todo su CSS por sidebar de agenda.html/presencial.html~~
+- ~~Cambiar `.nav-item.active` a "Bloqueos"~~
+- ~~HTML del sidebar: incluir `id="sidebar-avatar"`, `id="nav-nombre"`, `id="label-reportes"` y `id="label-admin"` (con `style="display:none"` por defecto), igual que en presencial.html~~
+- ~~Wrap del contenido en `.app-shell > .main-content > .page-inner`~~
+- ~~Agregar `<link rel="stylesheet" href="/assets/design-tokens.css">` en el `<head>`~~
+- ~~CSS: `.app-shell`, `.main-content`, `.page-inner`, sidebar completo, minical~~
+- ~~CSS: `page-supertitle`, `page-title`~~
+- ~~CSS: CSS completo del plan §7 incluido en este paso (cards, tabla, badges, alertas, formulario)~~
+- ~~HTML: bloque `.page-header` con "Panel de gestión" / "Bloqueos"~~
+- ~~**JS en `init()`:** agregar bloque de `sidebar-avatar` (iniciales + color por rol) copiado de presencial.html~~
+- ~~**JS en `init()`:** agregar `lRep.style.display = ''` y `lAdm.style.display = ''` dentro del bloque que ya muestra los nav links según rol~~
+- ~~`rolBadgeHTML()` reescrita para usar `.role-badge .role-XXX` (sin estilos inline)~~
+- ~~Inline style `color:#dc2626` en asterisco de Motivo → `.required-mark`~~
+- ~~`btn-ghost` → `btn-secondary` en botón "↻ Actualizar"~~
+- **Verificado:** 0 hex en `<style>`; 31 IDs obligatorios presentes; navbar vieja eliminada; `renderizarMiniCal` definida y llamada; `sidebar-avatar` + labels en `init()`; `role-badge` sin inline styles
 
 ### Paso 2 — Cards y tabla
-- CSS: `.card`, `.card-titulo`
-- CSS: `.tabla-wrapper`, `table`, `th`, `td`, `tr:hover`, `.vacio`, `.cargando`
-- CSS: `.badge` base, `.badge-individual`, `.badge-oficina`, `.badge-dia-completo`
-- CSS: `.alerta`, `.alerta-error`, `.alerta-ok`
-- CSS: `.area-selector`, `.area-selector-titulo`, `.area-chips`, `.area-chip`, `.area-chip.activo`
+> **Nota:** el CSS de este paso ya fue incluido en el Paso 1. Solo quedan verificaciones
+> de que los nombres de clase coinciden con lo que usa el JS.
+
+- ~~CSS: `.card`, `.card-titulo`~~ (incluido en Paso 1)
+- ~~CSS: `.tabla-wrapper`, `table`, `th`, `td`, `tr:hover`, `.vacio`, `.cargando`~~ (incluido en Paso 1)
+- ~~CSS: `.badge` base, `.badge-individual`, `.badge-oficina`, `.badge-dia-completo`~~ (incluido en Paso 1)
+- ~~CSS: `.alerta`, `.alerta-error`, `.alerta-ok`~~ (incluido en Paso 1)
+- ~~CSS: `.area-selector`, `.area-selector-titulo`, `.area-chips`, `.area-chip`, `.area-chip.activo`~~ (incluido en Paso 1)
 - HTML: no hay cambios en la estructura del card lista (IDs se mantienen)
-- **Checkpoint (estructural):** 0 hex en CSS nuevo; `.badge-individual`, `.badge-oficina`, `.badge-dia-completo` y `.area-chip.activo` coinciden exactamente con nombres usados en JS; `.alerta.visible` presente
+- **Checkpoint (estructural):** 0 hex en CSS; `.badge-individual`, `.badge-oficina`, `.badge-dia-completo` y `.area-chip.activo` coinciden con nombres usados en JS; `.alerta.visible` presente
 
 ### Paso 3 — Formulario
-- CSS: `label`, `.opcional`, `input`, `select`, `textarea`, `.hint`, `.separador`
-- CSS: `.form-grupo`, `.form-fila`, `.required-mark`
-- CSS: `.checkbox-label`
-- CSS: `.tipo-opciones`, `.tipo-opcion` y estado `:checked`
-- CSS: `.btn-full`
-- HTML: reemplazar `<span style="color:#dc2626">` por `<span class="required-mark">`
-- HTML: `btn-ghost` → `btn-secondary` en botón "↻ Actualizar"
-- **Checkpoint (estructural):** 0 hex en CSS nuevo; 0 `style=` en HTML (salvo los `display:none` funcionales); `.tipo-opcion input:checked + label` presente
+> **Nota:** el CSS de este paso ya fue incluido en el Paso 1. Solo quedan verificaciones.
+
+- ~~CSS: `label`, `.opcional`, `input`, `select`, `textarea`, `.hint`, `.separador`~~ (incluido en Paso 1)
+- ~~CSS: `.form-grupo`, `.form-fila`, `.required-mark`~~ (incluido en Paso 1)
+- ~~CSS: `.checkbox-label`~~ (incluido en Paso 1)
+- ~~CSS: `.tipo-opciones`, `.tipo-opcion` y estado `:checked`~~ (incluido en Paso 1)
+- ~~CSS: `.btn-full`~~ (incluido en Paso 1)
+- ~~HTML: reemplazar `<span style="color:#dc2626">` por `<span class="required-mark">`~~ (hecho en Paso 1)
+- ~~HTML: `btn-ghost` → `btn-secondary` en botón "↻ Actualizar"~~ (hecho en Paso 1)
+- **Checkpoint (estructural):** 0 hex en CSS; 0 `style=` en HTML (salvo los `display:none` funcionales); `.tipo-opcion input:checked + label` presente
 
 ### Paso 4 — `rolBadgeHTML()` y limpieza final
-- Reescribir `rolBadgeHTML()` para usar `.role-badge .role-XXX`
-- Eliminar del `<style>` todas las reglas de `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`,
-  `.btn`, `.btn-primary`, `.btn-danger`, `.btn-ghost`, `.btn-full` del bloque viejo
-  (reemplazadas por design-tokens + local `.btn-full`)
+> **Nota:** `rolBadgeHTML()` ya fue reescrita en el Paso 1.
+
+- ~~Reescribir `rolBadgeHTML()` para usar `.role-badge .role-XXX`~~ (hecho en Paso 1)
+- ~~Eliminar del `<style>` todas las reglas de `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`~~ (hecho en Paso 1)
 - Grep final: `grep -n "#[0-9a-fA-F]\{3,6\}" bloqueos.html` → solo deben aparecer los dos
   hexadecimales en los inline styles de `cargarBloqueos()` (documentados y excluidos)
 - **Checkpoint:** `.role-badge` y clases de rol presentes en design-tokens.css;
