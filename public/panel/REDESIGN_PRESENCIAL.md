@@ -574,10 +574,11 @@ Estos estilos hardcodeados están en el HTML estático y deben moverse al CSS:
 - ~~Eliminar inline styles del HTML de éxito~~
 - **Verificado (estructural):** 0 hex en HTML/CSS; 0 style= en #paso-exito; JS solo usa .textContent sobre IDs ex-*
 
-### Paso 6 — `rolBadgeHTML()` y limpieza final
-- Reescribir `rolBadgeHTML()` para usar `.role-badge .role-XXX`
-- Grep hex hardcodeados: `grep -n "#[0-9a-fA-F]\{3,6\}" presencial.html` → 0 resultados
-- **Verificar:** badge de rol en sidebar usa colores del design system
+### ~~Paso 6 — `rolBadgeHTML()` y limpieza final~~ ✅ completado (commit `e501a9a`)
+- ~~Reescribir `rolBadgeHTML()` para usar `.role-badge .role-XXX`~~
+- ~~Grep hex hardcodeados: `grep -n "#[0-9a-fA-F]\{3,6\}" presencial.html` → 1 resultado~~
+  (único hex restante: `#dc2626` en inline de error de API en `actualizarSlots()`, dentro del `<script>` — excluido explícitamente por el plan)
+- **Verificado:** `.role-badge` y clases de rol presentes en design-tokens.css; `rolBadgeHTML()` sin hex
 
 ### Commit por paso
 Cada paso hace un commit antes de avanzar al siguiente:
