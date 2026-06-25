@@ -650,16 +650,16 @@ function filtrarServiciosPorArea() {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// Badge de rol con color diferenciado por rol
+// Badge de rol — usa clases de design-tokens.css (.role-badge .role-XXX)
 function rolBadgeHTML(rol) {
   const cfg = {
-    operador:  { bg: '#1e40af', label: 'Operador' },
-    encargado: { bg: '#166534', label: 'Encargado' },
-    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
-    directivo: { bg: '#374151', label: 'Solo lectura' },
+    operador:  { cls: 'role-operador',  label: 'Operador'     },
+    encargado: { cls: 'role-encargado', label: 'Encargado'    },
+    sistemas:  { cls: 'role-sistemas',  label: 'Sistemas'     },
+    directivo: { cls: 'role-directivo', label: 'Solo lectura' },
   };
-  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
-  return `<span class="badge-rol" style="background:${bg};color:white;font-size:0.7rem;padding:0.15rem 0.5rem;border-radius:99px;font-weight:600;margin-left:0.4rem">${label}</span>`;
+  const { cls, label } = cfg[rol] || { cls: 'role-admin', label: rol };
+  return `<span class="role-badge ${cls}">${label}</span>`;
 }
 
 function mostrarError(paso, msg) {
