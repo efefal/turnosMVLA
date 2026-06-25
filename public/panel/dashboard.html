@@ -5,145 +5,364 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — Panel MVLA</title>
   <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
+  <link rel="stylesheet" href="/assets/design-tokens.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; font-size: 14px; }
+    /* ══════════════════════════════════════════════════════════════
+       dashboard.html — estilos locales (design system C+)
+       Todos los colores vienen de design-tokens.css.
+    ══════════════════════════════════════════════════════════════ */
 
-    /* Navbar */
-    .navbar { background: #1A3C4B; color: white; display: flex; align-items: center; padding: 0 1.5rem; height: 52px; gap: 1.5rem; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
-    .nav-logo { height: 34px; display: block; }
-    .nav-links { display: flex; gap: 0.25rem; flex: 1; }
-    .nav-links a { color: rgba(255,255,255,.75); text-decoration: none; padding: 0.4rem 0.9rem; border-radius: 5px; font-size: 0.875rem; }
-    .nav-links a:hover, .nav-links a.activo { background: rgba(255,255,255,.15); color: #fff; }
-    .nav-user { display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
-    .nav-user span { color: rgba(255,255,255,.85); }
-    .btn-logout { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 0.3rem 0.75rem; border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
-    .btn-logout:hover { background: rgba(255,255,255,.2); }
-    .badge-rol { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 99px; font-weight: 600; margin-left: 0.4rem; }
+    /* ── Layout shell ─────────────────────────────────────────── */
+    .app-shell    { display: flex; height: 100vh; overflow: hidden; }
+    .main-content { flex: 1; overflow-y: auto; background: var(--bg-2); }
+    .page-inner   { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
 
-    /* Layout */
-    .container { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.5rem; }
-    h1 { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-size: 1.25rem; color: #1A3C4B; margin-bottom: 1rem; }
+    /* ── Header de página ─────────────────────────────────────── */
+    .page-supertitle {
+      font-size: var(--text-xs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--teal);
+      margin-bottom: 0.2rem;
+    }
+    .page-title {
+      font-size: var(--text-xl);
+      font-weight: 800;
+      color: var(--text-1);
+      margin-bottom: 1.5rem;
+    }
 
-    /* Card */
-    .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 1rem 1.25rem; margin-bottom: 1rem; }
-    .card-titulo { font-family: 'Trebuchet MS', Trebuchet, sans-serif; font-weight: 700; color: #1A3C4B; font-size: 0.95rem; margin-bottom: 1rem; }
+    /* ── Sidebar ──────────────────────────────────────────────── */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--bg-1);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      gap: var(--gap-sm);
+      padding: 14px 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo {
+      width: 36px; height: 36px;
+      border-radius: var(--radius-xl);
+      background: var(--teal-dim);
+      color: var(--teal);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800;
+      flex-shrink: 0;
+      letter-spacing: 0.04em;
+    }
+    .sidebar-muni {
+      font-size: 8.5px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-3);
+    }
+    .sidebar-ciudad {
+      font-size: 12.5px; font-weight: 700;
+      color: var(--text-1);
+    }
+    .sidebar-user-card {
+      margin: 8px;
+      padding: 7px 9px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      gap: var(--gap-sm);
+    }
+    .sidebar-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: var(--text-xs); font-weight: 700;
+      flex-shrink: 0;
+    }
+    .nav-section-label {
+      font-size: 8.5px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-3);
+      padding: 10px 12px 4px;
+    }
+    .sidebar-nav { padding: 0 6px; flex: 1; }
+    .sidebar-footer {
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+    }
+    .btn-logout-sidebar {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-2);
+      padding: 5px 10px;
+      font-family: var(--font-ui);
+      font-size: var(--text-sm);
+      cursor: pointer;
+      width: 100%;
+      transition: var(--transition-fast);
+    }
+    .btn-logout-sidebar:hover {
+      background: var(--bg-4);
+      border-color: var(--border-hi);
+      color: var(--text-1);
+    }
 
-    /* Selector de período */
+    /* ── Card ─────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .card-titulo {
+      font-family: var(--font-ui);
+      font-size: var(--text-lg);
+      font-weight: 700;
+      color: var(--text-1);
+      margin-bottom: 1rem;
+    }
+
+    /* ── Selector de período ─────────────────────────────────── */
     .periodo-bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-    .btn-group-periodo { display: inline-flex; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; }
-    .btn-periodo { background: white; border: none; border-right: 1px solid #d1d5db; padding: 0.38rem 0.9rem; cursor: pointer; font-size: 0.82rem; font-weight: 500; color: #374151; font-family: inherit; }
+    .btn-group-periodo {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .btn-periodo {
+      background: var(--bg-3);
+      border: none;
+      border-right: 1px solid var(--border);
+      padding: 0.38rem 0.9rem;
+      cursor: pointer;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--text-2);
+      font-family: var(--font-ui);
+      transition: var(--transition-fast);
+    }
     .btn-periodo:last-child { border-right: none; }
-    .btn-periodo.activo { background: #1A3C4B; color: white; }
-    .btn-periodo:hover:not(.activo) { background: #f8fafc; }
+    .btn-periodo.activo {
+      background: var(--teal-dim);
+      border-color: var(--teal-mid);
+      color: var(--teal);
+      font-weight: 600;
+    }
+    .btn-periodo:hover:not(.activo) { background: var(--bg-4); color: var(--text-1); }
+
+    /* ── Campos de fecha personalizada ───────────────────────── */
     .campos-custom { display: none; align-items: center; gap: 0.5rem; }
     .campos-custom.visible { display: flex; }
-    input[type="date"] { padding: 0.38rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; font-family: inherit; }
-    input[type="date"]:focus { outline: none; border-color: #1A3C4B; }
-    .btn { display: inline-flex; align-items: center; padding: 0.38rem 0.9rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 500; font-family: inherit; }
-    .btn-primary { background: #1A3C4B; color: white; }
-    .btn:hover:not(:disabled) { opacity: 0.85; }
+    .fecha-sep { color: var(--text-3); }
+    input[type="date"] {
+      padding: 0.38rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: var(--text-sm);
+      font-family: var(--font-ui);
+      background: var(--bg-4);
+      color: var(--text-1);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    input[type="date"]:focus { outline: none; border-color: var(--border-hi); }
 
-    /* Grid de métricas */
+    /* ── Grillas de métricas ─────────────────────────────────── */
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
     @media (max-width: 720px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
 
-    /* Stat grande */
+    /* ── Stat grande (tasa de ausentismo) ────────────────────── */
     .stat-grande { text-align: center; padding: 0.5rem 0; }
-    .stat-numero { font-size: 2.5rem; font-weight: 700; font-family: 'Trebuchet MS', Trebuchet, sans-serif; color: #1A3C4B; line-height: 1; }
-    .stat-label  { font-size: 0.82rem; color: #64748b; margin-top: 0.3rem; }
+    .stat-numero {
+      font-family: var(--font-mono);
+      font-size: var(--text-kpi);
+      font-weight: 800;
+      color: var(--teal);   /* el inline style del JS lo sobreescribe condicionalmente */
+      line-height: 1;
+    }
+    .stat-label { font-size: var(--text-sm); color: var(--text-2); margin-top: 0.3rem; }
 
-    /* Tabla de estados */
+    /* ── Tabla de estados ────────────────────────────────────── */
     .tabla-estados { width: 100%; border-collapse: collapse; }
-    .tabla-estados td { padding: 0.5rem 0.5rem; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+    .tabla-estados td {
+      padding: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      font-size: var(--text-base);
+    }
     .tabla-estados tr:last-child td { border-bottom: none; }
     .tabla-estados .num { font-weight: 700; text-align: right; }
-    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.4rem; }
 
-    /* Leyenda de torta */
+    /* ── Dot de color (indicador de estado/canal) ────────────── */
+    /* El color real viene del inline style del JS (datos de visualización) */
+    .dot {
+      display: inline-block;
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      margin-right: 0.4rem;
+      flex-shrink: 0;
+    }
+
+    /* ── Leyenda del gráfico de torta ────────────────────────── */
     .leyenda { margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
-    .leyenda-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: #374151; }
+    .leyenda-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: var(--text-sm);
+      color: var(--text-2);
+    }
 
-    /* Tabla operadores */
+    /* ── Tabla de operadores ─────────────────────────────────── */
     .tabla-op { width: 100%; border-collapse: collapse; }
-    .tabla-op td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+    .tabla-op td {
+      padding: 0.45rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+      font-size: var(--text-base);
+    }
     .tabla-op tr:last-child td { border-bottom: none; }
-    .tabla-op .num { font-weight: 700; color: #1A3C4B; text-align: right; }
-    .tabla-op .pos { color: #94a3b8; font-size: 0.78rem; width: 24px; }
+    .tabla-op .num { font-weight: 700; color: var(--teal); text-align: right; }
+    .tabla-op .pos { color: var(--text-3); font-size: var(--text-xs); width: 24px; }
 
-    /* Alerta */
-    .alerta { padding: 0.7rem 1rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; display: none; }
+    /* ── Alerta de error ─────────────────────────────────────── */
+    .alerta {
+      padding: 0.7rem 1rem;
+      border-radius: var(--radius-md);
+      font-size: var(--text-sm);
+      margin-bottom: 1rem;
+      display: none;
+    }
     .alerta.visible { display: block; }
-    .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-    .cargando { text-align: center; color: #94a3b8; padding: 2rem; font-style: italic; }
-    .vacio    { text-align: center; color: #94a3b8; padding: 1.5rem; font-size: 0.875rem; }
+    .alerta-error { background: var(--red-dim); border: 1px solid var(--red-mid); color: var(--red); }
 
-    /* B9: Selector de área */
+    /* ── Carga y vacío ───────────────────────────────────────── */
+    .cargando { text-align: center; color: var(--text-3); padding: 2rem; font-style: italic; }
+    .vacio    { text-align: center; color: var(--text-3); padding: 1.5rem; font-size: var(--text-sm); }
+
+    /* ── Selector de área (B9) ───────────────────────────────── */
     .area-selector { margin-bottom: 1rem; display: none; }
     .area-selector.visible { display: block; }
-    .area-selector-titulo { font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .area-selector-titulo {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.4rem;
+    }
     .area-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-    .area-chip { display: inline-flex; align-items: center; padding: 0.3rem 0.7rem; border: 2px solid #e2e8f0; border-radius: 99px; cursor: pointer; font-size: 0.78rem; font-weight: 500; color: #475569; background: white; transition: all 0.15s; user-select: none; }
-    .area-chip:hover { border-color: #1A3C4B; color: #1A3C4B; }
-    .area-chip.activo { border-color: #1A3C4B; background: #1A3C4B; color: white; }
+    .area-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text-2);
+      background: transparent;
+      transition: var(--transition-fast);
+      user-select: none;
+    }
+    .area-chip:hover  { background: var(--bg-4); border-color: var(--border-hi); color: var(--text-1); }
+    .area-chip.activo { background: var(--teal-dim); border-color: var(--teal-mid); color: var(--teal); font-weight: 600; }
   </style>
 </head>
 <body>
 
-<nav class="navbar">
-  <a href="/panel/agenda.html">
-    <img src="/assets/Logo%20mvla%202024%20%201%20color%20h.jpg"
-         alt="Municipalidad Villa La Angostura" class="nav-logo">
-  </a>
-  <div class="nav-links">
-    <a href="/panel/agenda.html">Agenda</a>
-    <a href="/panel/presencial.html">Presencial</a>
-    <a href="/panel/bloqueos.html">Bloqueos</a>
-    <a href="/panel/auditoria.html"       id="nav-auditoria"  style="display:none">Auditoría</a>
-    <a href="/panel/dashboard.html"       class="activo">Dashboard</a>
-    <a href="/panel/usuarios.html"        id="nav-usuarios"   style="display:none">Usuarios</a>
-    <a href="/panel/servicios-admin.html" id="nav-servicios"  style="display:none">Servicios</a>
-  </div>
-  <div class="nav-user">
-    <span id="nav-nombre"></span>
-    <button class="btn-logout" onclick="cerrarSesion()">Salir</button>
-  </div>
-</nav>
+<div class="app-shell">
 
-<div class="container">
+  <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
 
-  <h1>Dashboard de estadísticas</h1>
-
-  <!-- Selector de período -->
-  <div class="card">
-    <div class="periodo-bar">
-      <div class="btn-group-periodo">
-        <button class="btn-periodo" onclick="elegirPeriodo('semana')">Última semana</button>
-        <button class="btn-periodo activo" id="btn-mes" onclick="elegirPeriodo('mes')">Último mes</button>
-        <button class="btn-periodo" onclick="elegirPeriodo('trimestre')">Últimos 3 meses</button>
-        <button class="btn-periodo" onclick="elegirPeriodo('custom')">Personalizado</button>
-      </div>
-      <div class="campos-custom" id="campos-custom">
-        <input type="date" id="custom-desde">
-        <span style="color:#64748b">—</span>
-        <input type="date" id="custom-hasta">
-        <button class="btn btn-primary" onclick="aplicarCustom()">Aplicar</button>
+    <div class="sidebar-header">
+      <div class="sidebar-logo">VLA</div>
+      <div>
+        <div class="sidebar-muni">Municipalidad</div>
+        <div class="sidebar-ciudad">Villa La Angostura</div>
       </div>
     </div>
-  </div>
 
-  <!-- B9: chips de área -->
-  <div class="area-selector" id="selector-areas-dash">
-    <div class="area-selector-titulo">Filtrar por área</div>
-    <div class="area-chips" id="chips-areas-dash"></div>
-  </div>
+    <div class="sidebar-user-card">
+      <div class="sidebar-avatar" id="sidebar-avatar"></div>
+      <div>
+        <span id="nav-nombre"></span>
+      </div>
+    </div>
 
-  <div class="alerta alerta-error" id="alerta-error"></div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Calendario</div>
+      <a href="/panel/agenda.html"     class="nav-item">Agenda</a>
+      <a href="/panel/presencial.html" class="nav-item">Presencial</a>
+      <a href="/panel/bloqueos.html"   class="nav-item">Bloqueos</a>
 
-  <div id="contenido"><div class="card cargando">Cargando estadísticas...</div></div>
+      <!-- Reportes — ocultos por defecto; init() los muestra según rol -->
+      <div class="nav-section-label" id="label-reportes" style="display:none">Reportes</div>
+      <a href="/panel/auditoria.html"  class="nav-item" id="nav-auditoria" style="display:none">Auditoría</a>
+      <a href="/panel/dashboard.html"  class="nav-item active">Dashboard</a>
 
-</div>
+      <!-- Admin — ocultos por defecto; init() los muestra según rol -->
+      <div class="nav-section-label" id="label-admin" style="display:none">Admin.</div>
+      <a href="/panel/usuarios.html"        class="nav-item" id="nav-usuarios" style="display:none">Usuarios</a>
+      <a href="/panel/servicios-admin.html" class="nav-item" id="nav-servicios" style="display:none">Servicios</a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-logout-sidebar" onclick="cerrarSesion()">Salir</button>
+    </div>
+
+  </aside>
+
+  <!-- ── Contenido principal ─────────────────────────────────────────── -->
+  <main class="main-content">
+    <div class="page-inner">
+
+      <div class="page-header">
+        <p class="page-supertitle">Panel de gestión</p>
+        <h1 class="page-title">Dashboard</h1>
+      </div>
+
+      <!-- Selector de período -->
+      <div class="card">
+        <div class="periodo-bar">
+          <div class="btn-group-periodo">
+            <button class="btn-periodo" onclick="elegirPeriodo('semana')">Última semana</button>
+            <button class="btn-periodo activo" id="btn-mes" onclick="elegirPeriodo('mes')">Último mes</button>
+            <button class="btn-periodo" onclick="elegirPeriodo('trimestre')">Últimos 3 meses</button>
+            <button class="btn-periodo" onclick="elegirPeriodo('custom')">Personalizado</button>
+          </div>
+          <div class="campos-custom" id="campos-custom">
+            <input type="date" id="custom-desde">
+            <span class="fecha-sep">—</span>
+            <input type="date" id="custom-hasta">
+            <button class="btn btn-primary" onclick="aplicarCustom()">Aplicar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- B9: chips de área -->
+      <div class="area-selector" id="selector-areas-dash">
+        <div class="area-selector-titulo">Filtrar por área</div>
+        <div class="area-chips" id="chips-areas-dash"></div>
+      </div>
+
+      <div class="alerta alerta-error" id="alerta-error"></div>
+
+      <div id="contenido"><div class="card cargando">Cargando estadísticas...</div></div>
+
+    </div><!-- .page-inner -->
+  </main>
+
+</div><!-- .app-shell -->
 
 <script>
 // ─── Auth ──────────────────────────────────────────────────────────────────
@@ -222,13 +441,13 @@ function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt
 
 function rolBadgeHTML(rol) {
   const cfg = {
-    operador:  { bg: '#1e40af', label: 'Operador' },
-    encargado: { bg: '#166534', label: 'Encargado' },
-    sistemas:  { bg: '#6b21a8', label: 'Sistemas' },
-    directivo: { bg: '#374151', label: 'Solo lectura' },
+    operador:  { cls: 'role-operador',  label: 'Operador'     },
+    encargado: { cls: 'role-encargado', label: 'Encargado'    },
+    sistemas:  { cls: 'role-sistemas',  label: 'Sistemas'     },
+    directivo: { cls: 'role-directivo', label: 'Solo lectura' },
   };
-  const { bg, label } = cfg[rol] || { bg: '#374151', label: rol };
-  return `<span class="badge-rol" style="background:${bg};color:white">${label}</span>`;
+  const { cls, label } = cfg[rol] || { cls: 'role-admin', label: rol };
+  return `<span class="role-badge ${cls}">${label}</span>`;
 }
 
 function mostrarError(msg) {
@@ -516,10 +735,35 @@ async function cargar() {
   const nombreEl = document.getElementById('nav-nombre');
   nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
 
+  // Avatar del sidebar: iniciales + fondo/color según rol
+  const avatarEl = document.getElementById('sidebar-avatar');
+  if (avatarEl) {
+    const partes    = (usuario.nombre || '').trim().split(/\s+/);
+    const iniciales = partes.slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '?';
+    const avatarCfg = {
+      encargado: { bg: 'var(--teal-mid)',  color: 'var(--teal)'  },
+      operador:  { bg: 'var(--blue-mid)',  color: 'var(--blue)'  },
+      sistemas:  { bg: 'var(--amber-mid)', color: 'var(--amber)' },
+      directivo: { bg: 'var(--amber-mid)', color: 'var(--amber)' },
+    };
+    const ac = avatarCfg[usuario.rol] || avatarCfg.operador;
+    avatarEl.textContent      = iniciales;
+    avatarEl.style.background = ac.bg;
+    avatarEl.style.color      = ac.color;
+  }
+
   ['nav-auditoria', 'nav-usuarios', 'nav-servicios'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = '';
   });
+
+  // Mostrar labels de sección del sidebar
+  // Todos los roles que llegan aquí son encargado/sistemas/directivo
+  // (el redirect de arriba descarta al resto), por lo que se muestran siempre.
+  const lRep = document.getElementById('label-reportes');
+  if (lRep) lRep.style.display = '';
+  const lAdm = document.getElementById('label-admin');
+  if (lAdm) lAdm.style.display = '';
 
   // B9: cargar áreas accesibles y construir chips si hay más de una
   const resAreas = await apiFetch('/panel/areas');
