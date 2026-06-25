@@ -551,12 +551,13 @@ Estos estilos hardcodeados están en el HTML estático y deben moverse al CSS:
 - ~~HTML: bloque `.page-header` agregado dentro de `.card` encima del stepper~~
 - **Verificado (estructural):** 0 hex en CSS nuevo, todos los estados del stepper presentes, nombres de clase coinciden con `actualizarStepper()`
 
-### Paso 3 — Formulario paso 1
-- CSS: inputs, labels, hints, `.dni-row`, `.btn-buscar` (usa `.btn.btn-primary`)
-- CSS: `.vecino-chip`, `.chip-existente`, `.chip-nuevo`
-- CSS: `.alerta`, `.alerta-error`, `.alerta.visible`
-- Eliminar inline styles del label de teléfono
-- **Verificar:** buscarVecino() muestra chip correcto; error de DNI inválido aparece en rojo
+### ~~Paso 3 — Formulario paso 1~~ ✅ completado (commit `045f6d6`)
+- ~~CSS: inputs, labels, hints, `.dni-row`, `.btn-buscar` (usa `.btn.btn-primary`)~~
+- ~~CSS: `.vecino-chip`, `.chip-existente`, `.chip-nuevo`~~
+- ~~CSS: `.alerta`, `.alerta-error`, `.alerta.visible`~~
+- ~~Eliminar inline styles del label de teléfono~~
+- ~~Elimina definiciones locales de `.btn/.btn-primary/.btn-ghost` (redundantes con design-tokens)~~
+- **Verificado (estructural):** 0 hex en CSS nuevo; chips y alertas coinciden con nombres usados en JS
 
 ### Paso 4 — Formulario paso 2 (servicio, fecha, slots)
 - CSS: `.area-selector`, `.area-chip`, `.area-chip.activo`
