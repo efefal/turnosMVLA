@@ -263,12 +263,11 @@ input:focus {
 - ~~HTML — logo: cambiar JPEG por `escudo_vla_web_color.png` (`max-width: 80px`)~~
 - **Verificado:** 0 hex en archivo completo; `.btn-guardar` eliminado; 6 IDs obligatorios presentes; `body` → `var(--bg-0)` + `var(--font-ui)`; `.card` → `var(--bg-3)`; `#btn-submit` → `var(--teal)`; `#error` → `var(--red-dim)` con `display:none`; logo `escudo_vla_web_color.png` a 80px
 
-### Paso 2 — Verificación final
+### ~~Paso 2 — Verificación final~~ ✅ completado — rediseño FINALIZADO
 
-- Grep definitivo: `grep "#[0-9a-fA-F]{3,6}" cambiar-clave.html` → 0 resultados
-- Confirmar visualmente que el PNG del logo se ve bien sobre el fondo oscuro de la card
-  (si tiene fondo blanco, agregar `mix-blend-mode: luminosity` al CSS de `.encabezado img`)
-- **Checkpoint:** 0 hex; logo legible; formulario funcional
+- ~~Grep definitivo: 0 resultados — ningún hex en el archivo completo~~
+- ~~Logo `escudo_vla_web_color.png` verificado visualmente sobre fondo oscuro — aprobado~~
+- **Verificado:** 0 hex; logo legible; formulario funcional
 
 ### Commit por paso
 `feat(panel): cambiar-clave paso N — descripción`
