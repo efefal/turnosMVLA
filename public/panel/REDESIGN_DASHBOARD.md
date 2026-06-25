@@ -660,39 +660,40 @@ Ver sección §4 — todos los colores en `COLORES_CANAL`, `COLORES_ESTADO`, lla
 
 ## 11. Orden de implementación (pasos con checkpoint)
 
-### Paso 1 — Layout shell, sidebar, design-tokens, CSS completo + `rolBadgeHTML()`
+### ~~Paso 1 — Layout shell, sidebar, design-tokens, CSS completo + `rolBadgeHTML()`~~ ✅ completado (commit `d928ac0`)
 
-- Agregar `<link rel="stylesheet" href="/assets/design-tokens.css">` en el `<head>`
-- Reemplazar `<nav class="navbar">` y todo su CSS por el sidebar de bloqueos.html/presencial.html
-- Cambiar `.nav-item.active` al ítem "Dashboard"
-- HTML del sidebar: incluir `id="sidebar-avatar"`, `id="nav-nombre"`, `id="label-reportes"` y `id="label-admin"` (con `style="display:none"` por defecto), igual que en bloqueos.html
-- Wrap del contenido en `.app-shell > .main-content > .page-inner`
-- HTML: bloque `.page-header` con "Panel de gestión" / "Dashboard"
-- HTML: `<span style="color:#64748b">—</span>` → `<span class="fecha-sep">—</span>`
-- CSS: incluir **todo el CSS del §8** en este paso
-- **JS en `init()`:** agregar bloque de `sidebar-avatar` (iniciales + color por rol) copiado de bloqueos.html
-- **JS en `init()`:** agregar `lRep.style.display = ''` y `lAdm.style.display = ''` con la lógica de §9
-- **JS:** `rolBadgeHTML()` reescrita para usar `.role-badge .role-XXX` (sin estilos inline)
-- **Verificado:** 0 hex en `<style>`; 0 hex en HTML estático (excepto `style="display:none"` funcionales); navbar vieja eliminada; todos los IDs del §1 presentes; `sidebar-avatar` + labels en `init()`; `role-badge` sin inline styles
+- ~~Agregar `<link rel="stylesheet" href="/assets/design-tokens.css">` en el `<head>`~~
+- ~~Reemplazar `<nav class="navbar">` y todo su CSS por el sidebar de bloqueos.html/presencial.html~~
+- ~~Cambiar `.nav-item.active` al ítem "Dashboard"~~
+- ~~HTML del sidebar: incluir `id="sidebar-avatar"`, `id="nav-nombre"`, `id="label-reportes"` y `id="label-admin"` (con `style="display:none"` por defecto), igual que en bloqueos.html~~
+- ~~Wrap del contenido en `.app-shell > .main-content > .page-inner`~~
+- ~~HTML: bloque `.page-header` con "Panel de gestión" / "Dashboard"~~
+- ~~HTML: `<span style="color:#64748b">—</span>` → `<span class="fecha-sep">—</span>`~~
+- ~~CSS: incluir **todo el CSS del §8** en este paso~~
+- ~~**JS en `init()`:** agregar bloque de `sidebar-avatar` (iniciales + color por rol) copiado de bloqueos.html~~
+- ~~**JS en `init()`:** agregar `lRep.style.display = ''` y `lAdm.style.display = ''` con la lógica de §9~~
+- ~~**JS:** `rolBadgeHTML()` reescrita para usar `.role-badge .role-XXX` (sin estilos inline)~~
+- **Verificado:** 0 hex en `<style>`; 0 hex en HTML estático (excepto `style="display:none"` funcionales); navbar vieja eliminada; todos los IDs del §1 presentes; `sidebar-avatar` + labels en `init()`; `role-badge` sin inline styles; los dos `style="background:` en el `<script>` son los dots de `renderDashboard()` — exclusiones documentadas en §4
 
-### Paso 2 — Verificación de clases generadas por JS
+### ~~Paso 2 — Verificación de clases generadas por JS~~ ✅ completado — incluido en el Paso 1
+> **Nota:** todas las clases CSS se definieron en el Paso 1. Las verificaciones se ejecutaron en el mismo commit.
 
-- Confirmar que `.grid-2`, `.card`, `.card-titulo`, `.tabla-estados`, `.dot`, `.num`, `.stat-grande`, `.stat-numero`, `.stat-label`, `.leyenda`, `.leyenda-item`, `.tabla-op`, `.pos` están definidas en el CSS
-- Confirmar que `.area-chip` y `.area-chip.activo` (con espacio, no punto) coinciden con lo que genera `inicializarChipsDash()` — JS usa `chip.classList.toggle('activo')`, CSS define `.area-chip.activo`
-- Confirmar que `.alerta.visible` tiene `display: block`
-- Confirmar que `.campos-custom.visible` tiene `display: flex`
-- Confirmar que `.cargando` y `.vacio` existen
+- ~~Confirmar que `.grid-2`, `.card`, `.card-titulo`, `.tabla-estados`, `.dot`, `.num`, `.stat-grande`, `.stat-numero`, `.stat-label`, `.leyenda`, `.leyenda-item`, `.tabla-op`, `.pos` están definidas en el CSS~~
+- ~~Confirmar que `.area-chip` y `.area-chip.activo` coinciden con lo que genera `inicializarChipsDash()`~~
+- ~~Confirmar que `.alerta.visible` tiene `display: block`~~
+- ~~Confirmar que `.campos-custom.visible` tiene `display: flex`~~
+- ~~Confirmar que `.cargando` y `.vacio` existen~~
 - **Verificado:** todas las clases inyectadas por JS tienen su definición CSS; el inline style del `stat-numero` desde JS sobreescribirá el `color: var(--teal)` del CSS (comportamiento esperado para el indicador de ausentismo)
 
-### Paso 3 — `rolBadgeHTML()` y limpieza final
+### ~~Paso 3 — `rolBadgeHTML()` y limpieza final~~ ✅ completado — rediseño FINALIZADO
+> **Nota:** `rolBadgeHTML()` ya fue reescrita en el Paso 1.
 
-- Grep final: 0 hex en `<style>`; 0 hex en HTML estático
-- Grep final para `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`, `.badge-rol` → 0 resultados en `<style>`
-- Confirmar que los hexadecimales del §4 siguen intactos en el `<script>` (son las exclusiones documentadas)
-- Confirmar que `rolBadgeHTML()` usa solo `role-badge ${cls}` sin hex ni `style=`
-- Confirmar que `.role-badge`, `.role-encargado`, `.role-operador`, `.role-sistemas`, `.role-directivo` están en design-tokens.css (líneas 324–336) — ya verificado en análisis
-- **Verificado:** rediseño completo; 0 hex residuales en `<style>` ni en HTML estático; todas las exclusiones documentadas en §4 presentes e intactas en `<script>`
+- ~~Grep final: 0 hex en `<style>`; 0 hex en HTML estático~~
+- ~~Grep final para `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`, `.badge-rol` → 0 resultados en `<style>`~~
+- ~~Confirmar que los hexadecimales del §4 siguen intactos en el `<script>` (son las exclusiones documentadas)~~
+- ~~Confirmar que `rolBadgeHTML()` usa solo `role-badge ${cls}` sin hex ni `style=`~~
+- ~~Confirmar que `.role-badge`, `.role-encargado`, `.role-operador`, `.role-sistemas`, `.role-directivo` están en design-tokens.css (líneas 324–336)~~
+- **Verificado:** rediseño completo; 0 hex en `<style>`; 0 hex en HTML estático; `rolBadgeHTML()` usa `role-badge ${cls}` sin hex ni `style=`; exclusiones del §4 presentes e intactas en `<script>`; `.navbar`/`.nav-links`/`.nav-user`/`.btn-logout`/`.badge-rol` eliminados del `<style>`
 
-### Commit por paso
-Cada paso hace un commit antes de avanzar al siguiente:
-`feat(panel): dashboard paso N — descripción`
+### Commit
+Todo el rediseño en un único commit: `feat(panel): dashboard paso 1 — layout shell, sidebar, design-tokens, CSS completo` (`d928ac0`)
