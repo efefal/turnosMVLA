@@ -659,7 +659,7 @@ function rolBadgeHTML(rol) {
 - ~~HTML: no hay cambios en la estructura del card lista (IDs se mantienen)~~
 - **Verificado:** 0 hex en `<style>`; 0 hex en HTML estático; `badge badge-individual` / `badge badge-oficina` / `badge badge-dia-completo` generados por JS coinciden con CSS; `.area-chip activo` (espacio) en JS coincide con `.area-chip.activo` en CSS; `.alerta.visible` con `display:block` presente
 
-### Paso 3 — Formulario
+### ~~Paso 3 — Formulario~~ ✅ completado
 > **Nota:** el CSS de este paso ya fue incluido en el Paso 1. Solo quedan verificaciones.
 
 - ~~CSS: `label`, `.opcional`, `input`, `select`, `textarea`, `.hint`, `.separador`~~ (incluido en Paso 1)
@@ -669,7 +669,7 @@ function rolBadgeHTML(rol) {
 - ~~CSS: `.btn-full`~~ (incluido en Paso 1)
 - ~~HTML: reemplazar `<span style="color:#dc2626">` por `<span class="required-mark">`~~ (hecho en Paso 1)
 - ~~HTML: `btn-ghost` → `btn-secondary` en botón "↻ Actualizar"~~ (hecho en Paso 1)
-- **Checkpoint (estructural):** 0 hex en CSS; 0 `style=` en HTML (salvo los `display:none` funcionales); `.tipo-opcion input:checked + label` presente
+- **Verificado:** 0 hex en `<style>`; solo `display:none` funcionales en HTML estático (nav items + `#grupo-area`); `style=` en JS template strings son excepciones documentadas; `.tipo-opcion input[type="radio"]:checked + label` presente en línea 314
 
 ### Paso 4 — `rolBadgeHTML()` y limpieza final
 > **Nota:** `rolBadgeHTML()` ya fue reescrita en el Paso 1.
