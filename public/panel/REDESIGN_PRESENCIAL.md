@@ -536,20 +536,20 @@ Estos estilos hardcodeados están en el HTML estático y deben moverse al CSS:
 
 ## 10. Orden de implementación (pasos con checkpoint)
 
-### Paso 1 — Layout shell y sidebar
-- Reemplazar `<nav class="navbar">` por sidebar de agenda.html
-- Cambiar `.nav-item.active` a "Presencial"
-- Wrap del contenido en `.app-shell > .main-content > .page-inner`
-- CSS: `.app-shell`, `.main-content`, `.page-inner`, sidebar completo
-- CSS minical: `.minical`, `.minical-header`, `.minical-grid`, `.minical-dow`, `.minical-cell` y variantes (copiado exacto de agenda.html)
-- Copiar función `renderizarMiniCal()` del `<script>` de agenda.html al `<script>` de presencial.html (va antes del `init()`)
-- Al final del `init()` de presencial.html agregar la llamada: `renderizarMiniCal();`
-- **Verificar:** sidebar visible, mini-calendario renderiza con el mes actual, nav-nombre se llena, links de rol aparecen según usuario
+### ~~Paso 1 — Layout shell y sidebar~~ ✅ completado (commit `7bbfbe3`)
+- ~~Reemplazar `<nav class="navbar">` por sidebar de agenda.html~~
+- ~~Cambiar `.nav-item.active` a "Presencial"~~
+- ~~Wrap del contenido en `.app-shell > .main-content > .page-inner`~~
+- ~~CSS: `.app-shell`, `.main-content`, `.page-inner`, sidebar completo~~
+- ~~CSS minical: `.minical`, `.minical-header`, `.minical-grid`, `.minical-dow`, `.minical-cell` y variantes~~
+- ~~Copiar función `renderizarMiniCal()` y llamada en `init()`~~
+- **Verificado:** sidebar visible, mini-calendario renderiza, nav-nombre se llena, links de rol según usuario
 
-### Paso 2 — Card, header de página, stepper
-- CSS: `.card`, `.page-header`, `.page-supertitle`, `.page-title`
-- CSS: stepper con todos sus estados (`.activo`, `.completo`, `.step-linea.completa`)
-- **Verificar:** stepper avanza al pasar de paso 1 → 2, se muestra teal al completar
+### ~~Paso 2 — Card, header de página, stepper~~ ✅ completado (commit `c8ec09f`)
+- ~~CSS: `.card`, `.page-header`, `.page-supertitle`, `.page-title`~~
+- ~~CSS: stepper con todos sus estados (`.activo`, `.completo`, `.step-linea.completa`)~~
+- ~~HTML: bloque `.page-header` agregado dentro de `.card` encima del stepper~~
+- **Verificado (estructural):** 0 hex en CSS nuevo, todos los estados del stepper presentes, nombres de clase coinciden con `actualizarStepper()`
 
 ### Paso 3 — Formulario paso 1
 - CSS: inputs, labels, hints, `.dni-row`, `.btn-buscar` (usa `.btn.btn-primary`)
