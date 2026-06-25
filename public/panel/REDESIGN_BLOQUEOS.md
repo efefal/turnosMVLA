@@ -647,7 +647,7 @@ function rolBadgeHTML(rol) {
 - ~~`btn-ghost` → `btn-secondary` en botón "↻ Actualizar"~~
 - **Verificado:** 0 hex en `<style>`; 31 IDs obligatorios presentes; navbar vieja eliminada; `renderizarMiniCal` definida y llamada; `sidebar-avatar` + labels en `init()`; `role-badge` sin inline styles
 
-### ~~Paso 2 — Cards y tabla~~ ✅ completado
+### ~~Paso 2 — Cards y tabla~~ ✅ completado (commit `eacf73a`)
 > **Nota:** el CSS de este paso ya fue incluido en el Paso 1. Solo quedan verificaciones
 > de que los nombres de clase coinciden con lo que usa el JS.
 
@@ -659,7 +659,7 @@ function rolBadgeHTML(rol) {
 - ~~HTML: no hay cambios en la estructura del card lista (IDs se mantienen)~~
 - **Verificado:** 0 hex en `<style>`; 0 hex en HTML estático; `badge badge-individual` / `badge badge-oficina` / `badge badge-dia-completo` generados por JS coinciden con CSS; `.area-chip activo` (espacio) en JS coincide con `.area-chip.activo` en CSS; `.alerta.visible` con `display:block` presente
 
-### ~~Paso 3 — Formulario~~ ✅ completado
+### ~~Paso 3 — Formulario~~ ✅ completado (commit `92fb279`)
 > **Nota:** el CSS de este paso ya fue incluido en el Paso 1. Solo quedan verificaciones.
 
 - ~~CSS: `label`, `.opcional`, `input`, `select`, `textarea`, `.hint`, `.separador`~~ (incluido en Paso 1)
@@ -671,15 +671,13 @@ function rolBadgeHTML(rol) {
 - ~~HTML: `btn-ghost` → `btn-secondary` en botón "↻ Actualizar"~~ (hecho en Paso 1)
 - **Verificado:** 0 hex en `<style>`; solo `display:none` funcionales en HTML estático (nav items + `#grupo-area`); `style=` en JS template strings son excepciones documentadas; `.tipo-opcion input[type="radio"]:checked + label` presente en línea 314
 
-### Paso 4 — `rolBadgeHTML()` y limpieza final
+### ~~Paso 4 — `rolBadgeHTML()` y limpieza final~~ ✅ completado — rediseño FINALIZADO
 > **Nota:** `rolBadgeHTML()` ya fue reescrita en el Paso 1.
 
 - ~~Reescribir `rolBadgeHTML()` para usar `.role-badge .role-XXX`~~ (hecho en Paso 1)
 - ~~Eliminar del `<style>` todas las reglas de `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`~~ (hecho en Paso 1)
-- Grep final: `grep -n "#[0-9a-fA-F]\{3,6\}" bloqueos.html` → solo deben aparecer los dos
-  hexadecimales en los inline styles de `cargarBloqueos()` (documentados y excluidos)
-- **Checkpoint:** `.role-badge` y clases de rol presentes en design-tokens.css;
-  `rolBadgeHTML()` sin hexadecimales; 0 hex en `<style>` interno
+- ~~Grep final: exactamente 2 hex en todo el archivo — líneas 680 y 693, dentro de template literals de `cargarBloqueos()` (excepciones documentadas en §3)~~
+- **Verificado:** `rolBadgeHTML()` usa solo `role-badge ${cls}` sin hex ni `style=`; 0 hex en `<style>`; 0 resultados para `.navbar`/`.nav-links`/`.nav-user`/`.btn-logout`; `.role-badge`, `.role-encargado`, `.role-operador` confirmados en `design-tokens.css` (líneas 324, 332, 333)
 
 ### Commit por paso
 Cada paso hace un commit antes de avanzar al siguiente:
