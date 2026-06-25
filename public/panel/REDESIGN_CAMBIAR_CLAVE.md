@@ -251,19 +251,17 @@ input:focus {
 
 ## 8. Orden de implementación (pasos con checkpoint)
 
-### Paso 1 — Importar tokens + reemplazar CSS y HTML
+### ~~Paso 1 — Importar tokens + reemplazar CSS y HTML~~ ✅ completado (commit `2a5e227`)
 
-- Agregar `<link rel="stylesheet" href="/assets/design-tokens.css">` en `<head>` antes del `<style>`
-- Eliminar del `<style>` interno:
-  - Bloque `*, *::before, *::after { ... }` completo (redundante con tokens)
-  - `font-family: system-ui...` del body (tokens lo provee)
-  - `background: #1A3C4B` del body (tokens lo provee)
-- Reemplazar el `<style>` interno con el CSS de §7
-- HTML — botón: `class="btn-guardar"` → `class="btn btn-primary btn-full"`
-- HTML — logo: cambiar JPEG por `escudo_vla_web_color.png` (`max-width: 80px`)
-- **Checkpoint:** 0 hex en `<style>`; 0 hex en HTML estático; `.btn-guardar` eliminado;
-  `#error` conserva `display: none` en CSS; `#aviso-obligatorio` conserva `style="display:none"` en HTML;
-  6 IDs obligatorios presentes
+- ~~Agregar `<link rel="stylesheet" href="/assets/design-tokens.css">` en `<head>` antes del `<style>`~~
+- ~~Eliminar del `<style>` interno:~~
+  - ~~Bloque `*, *::before, *::after { ... }` completo (redundante con tokens)~~
+  - ~~`font-family: system-ui...` del body (tokens lo provee)~~
+  - ~~`background: #1A3C4B` del body (tokens lo provee)~~
+- ~~Reemplazar el `<style>` interno con el CSS de §7~~
+- ~~HTML — botón: `class="btn-guardar"` → `class="btn btn-primary btn-full"`~~
+- ~~HTML — logo: cambiar JPEG por `escudo_vla_web_color.png` (`max-width: 80px`)~~
+- **Verificado:** 0 hex en archivo completo; `.btn-guardar` eliminado; 6 IDs obligatorios presentes; `body` → `var(--bg-0)` + `var(--font-ui)`; `.card` → `var(--bg-3)`; `#btn-submit` → `var(--teal)`; `#error` → `var(--red-dim)` con `display:none`; logo `escudo_vla_web_color.png` a 80px
 
 ### Paso 2 — Verificación final
 
