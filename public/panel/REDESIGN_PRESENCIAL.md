@@ -567,12 +567,12 @@ Estos estilos hardcodeados están en el HTML estático y deben moverse al CSS:
 - ~~HTML: `btn-ghost` → `btn-secondary` en botón "Volver"~~
 - **Verificado (estructural):** 0 hex en CSS nuevo; `.slot-btn.seleccionado` y `.area-chip.activo` coinciden exactamente con nombres usados en JS
 
-### Paso 5 — Pantalla de éxito
-- CSS: `.exito`, `.exito-icono`, `.exito h2`, `.exito-subtexto`, `.exito-detalle`
-- CSS: `.exito-mensaje`, `.exito-link`, `.exito-btn-nuevo`
-- Cambiar SVG `fill="#1A3C4B"` → `fill="currentColor"` + `color: var(--teal)` en padre
-- Eliminar inline styles del HTML de éxito
-- **Verificar:** pantalla de éxito renderiza con paleta dark, link "Ver agenda" en teal
+### ~~Paso 5 — Pantalla de éxito~~ ✅ completado (commit `e4fc45c`)
+- ~~CSS: `.exito`, `.exito-icono`, `.exito h2`, `.exito-subtexto`, `.exito-detalle`~~
+- ~~CSS: `.exito-mensaje`, `.exito-link`, `.exito-btn-nuevo`~~
+- ~~Cambiar SVG `fill="#1A3C4B"` → `fill="currentColor"` + `color: var(--teal)` en padre~~
+- ~~Eliminar inline styles del HTML de éxito~~
+- **Verificado (estructural):** 0 hex en HTML/CSS; 0 style= en #paso-exito; JS solo usa .textContent sobre IDs ex-*
 
 ### Paso 6 — `rolBadgeHTML()` y limpieza final
 - Reescribir `rolBadgeHTML()` para usar `.role-badge .role-XXX`
