@@ -779,9 +779,18 @@ if (lAdm) lAdm.style.display = '';
 - **JS `badgeRol()`:** reescribir (§4.B)
 - **JS `init()`:** agregar bloque `sidebar-avatar` + `lRep`/`lAdm` (§10)
 
-### Paso 2 — Verificación de clases generadas por JS
+### Paso 2 — Verificación de clases generadas por JS ✅ COMPLETADO
 
-- Confirmar clases del §11 Paso 2
+9/9 checks PASS (2026-06-26):
+- `.area-chip` / `.area-chip.activo` → L224–226 ✅
+- `.alerta.visible { display: block }` → L80 ✅
+- `.badge-activo` / `.badge-inactivo` con tokens → L108–109 ✅
+- `.area-check-item` / `.area-check-item.checked` → L137, L149 ✅
+- `.atiende-turnos-group` display:none base + `.visible { display:flex }` → L152, L160 ✅
+- `.modal-fondo.abierto { display: flex }` → L165 ✅
+- `.cargando` / `.vacio` → L229–230 ✅
+- `.badge` (base) → L107 ✅
+- `guardarHorarios()` asigna `alerta-ok visible` y revierte a `alerta-error` → L1125–1126 ✅
 
 ### Paso 3 — Certificación final
 
