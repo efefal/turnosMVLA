@@ -792,9 +792,17 @@ if (lAdm) lAdm.style.display = '';
 - `.badge` (base) → L107 ✅
 - `guardarHorarios()` asigna `alerta-ok visible` y revierte a `alerta-error` → L1125–1126 ✅
 
-### Paso 3 — Certificación final
+### Paso 3 — Certificación final ✅ COMPLETADO
 
-- Checks del §11 Paso 3
+5/5 checks PASS (2026-06-26):
+- 0 hex en `<style>` y HTML estático ✅ (6 hex en `<script>` — exclusiones §6)
+- CSS viejo eliminado: `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`, `.badge-rol` → 0 ✅
+- Hex count en `<script>` = 6 ✅
+- `rolBadgeHTML()` y `badgeRol()` sin hex ni `style=` ✅
+- `btn-ghost` en HTML estático = 0 ✅ (fix: `#btn-resetear-en-modal` → `btn-secondary`)
 
-### Commit
-`feat(panel): usuarios — rediseño design system C+`
+### Commits
+- `291cf3c` — docs(plan): usuarios — plan de rediseño design system C+
+- `1287da8` — feat(panel): usuarios — rediseño design system C+
+- `4ffa04b` — docs(plan): usuarios paso 2 — verificación clases JS, 9/9 PASS
+- `[paso 3]` — docs(plan): usuarios paso 3 — certificación final, 5 checks PASS + fix btn-ghost
