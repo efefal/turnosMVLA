@@ -675,25 +675,26 @@ Ver sección §4 — todos los colores en `COLORES_CANAL`, `COLORES_ESTADO`, lla
 - ~~**JS:** `rolBadgeHTML()` reescrita para usar `.role-badge .role-XXX` (sin estilos inline)~~
 - **Verificado:** 0 hex en `<style>`; 0 hex en HTML estático (excepto `style="display:none"` funcionales); navbar vieja eliminada; todos los IDs del §1 presentes; `sidebar-avatar` + labels en `init()`; `role-badge` sin inline styles; los dos `style="background:` en el `<script>` son los dots de `renderDashboard()` — exclusiones documentadas en §4
 
-### ~~Paso 2 — Verificación de clases generadas por JS~~ ✅ completado — incluido en el Paso 1
-> **Nota:** todas las clases CSS se definieron en el Paso 1. Las verificaciones se ejecutaron en el mismo commit.
+### ~~Paso 2 — Verificación de clases generadas por JS~~ ✅ completado — verificaciones corridas independientemente el 2026-06-26
+> **Nota:** todas las clases CSS se definieron en el Paso 1. Las verificaciones fueron confirmadas de forma independiente el 2026-06-26 mediante 6 greps contra el archivo final.
 
 - ~~Confirmar que `.grid-2`, `.card`, `.card-titulo`, `.tabla-estados`, `.dot`, `.num`, `.stat-grande`, `.stat-numero`, `.stat-label`, `.leyenda`, `.leyenda-item`, `.tabla-op`, `.pos` están definidas en el CSS~~
 - ~~Confirmar que `.area-chip` y `.area-chip.activo` coinciden con lo que genera `inicializarChipsDash()`~~
 - ~~Confirmar que `.alerta.visible` tiene `display: block`~~
 - ~~Confirmar que `.campos-custom.visible` tiene `display: flex`~~
 - ~~Confirmar que `.cargando` y `.vacio` existen~~
-- **Verificado:** todas las clases inyectadas por JS tienen su definición CSS; el inline style del `stat-numero` desde JS sobreescribirá el `color: var(--teal)` del CSS (comportamiento esperado para el indicador de ausentismo)
+- **Verificado 2026-06-26:** 15 clases presentes en CSS; `chip.classList.toggle('activo')` confirmado en línea 419; `.alerta { display: none }` en línea 241 + `.alerta.visible { display: block }` en línea 243; `.campos-custom.visible { display: flex }` y `elegirPeriodo()` usa `classList.add/remove('visible')` — display coincide; el inline style del `stat-numero` desde JS sobreescribirá el `color: var(--teal)` del CSS (comportamiento esperado)
 
-### ~~Paso 3 — `rolBadgeHTML()` y limpieza final~~ ✅ completado — rediseño FINALIZADO
-> **Nota:** `rolBadgeHTML()` ya fue reescrita en el Paso 1.
+### ~~Paso 3 — `rolBadgeHTML()` y limpieza final~~ ✅ certificado — 4 checks PASS (2026-06-26)
+> **Nota:** `rolBadgeHTML()` ya fue reescrita en el Paso 1. Checks de certificación corridos el 2026-06-26.
 
 - ~~Grep final: 0 hex en `<style>`; 0 hex en HTML estático~~
 - ~~Grep final para `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`, `.badge-rol` → 0 resultados en `<style>`~~
 - ~~Confirmar que los hexadecimales del §4 siguen intactos en el `<script>` (son las exclusiones documentadas)~~
 - ~~Confirmar que `rolBadgeHTML()` usa solo `role-badge ${cls}` sin hex ni `style=`~~
 - ~~Confirmar que `.role-badge`, `.role-encargado`, `.role-operador`, `.role-sistemas`, `.role-directivo` están en design-tokens.css (líneas 324–336)~~
-- **Verificado:** rediseño completo; 0 hex en `<style>`; 0 hex en HTML estático; `rolBadgeHTML()` usa `role-badge ${cls}` sin hex ni `style=`; exclusiones del §4 presentes e intactas en `<script>`; `.navbar`/`.nav-links`/`.nav-user`/`.btn-logout`/`.badge-rol` eliminados del `<style>`
+- **Verificado 2026-06-26:** CSS viejo → 0 coincidencias; `rolBadgeHTML()` retorna `<span class="role-badge ${cls}">` sin `style=` ni hex; `.role-badge`/`.role-encargado`/`.role-operador`/`.role-sistemas`/`.role-directivo` en design-tokens.css líneas 324–336; hex count = 15 — idéntico al check anterior, script intacto
 
-### Commit
-Todo el rediseño en un único commit: `feat(panel): dashboard paso 1 — layout shell, sidebar, design-tokens, CSS completo` (`d928ac0`)
+### Commits
+- Rediseño: `feat(panel): dashboard paso 1 — layout shell, sidebar, design-tokens, CSS completo` (`d928ac0`)
+- Certificación: `docs(plan): dashboard paso 3 — certificación final, 4 checks PASS` (ver git log)
