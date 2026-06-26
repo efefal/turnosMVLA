@@ -562,13 +562,28 @@ if (lAdm) lAdm.style.display = '';
 - `rolBadgeHTML()` sin hex ni `style=` ✅
 - `.form-grid-3` eliminado del CSS ✅
 
-### Paso 2 — Verificación de clases generadas por JS
+### Paso 2 — Verificación de clases generadas por JS ✅ COMPLETADO
 
-- Confirmar clases del §11 Paso 2
+8/8 checks PASS (2026-06-26):
+- `.btn-ghost` en CSS local con tokens (bg-4, text-2, border) → L73–74 ✅
+- `.btn-warning` en CSS local con `var(--amber)` → L75 ✅
+- `.alerta.visible { display: block }` → L80 ✅
+- `.badge` (base) → L108 ✅
+- `.badge-activo` / `.badge-inactivo` con tokens → L109–110 ✅
+- `.modal-fondo.abierto { display: flex }` → L130 ✅
+- `.area-chip` / `.area-chip.activo` → L140–142 ✅
+- `.cargando` / `.vacio` → L145–146 ✅
 
-### Paso 3 — Certificación final
+### Paso 3 — Certificación final ✅ COMPLETADO
 
-- Checks del §11 Paso 3
+5/5 checks PASS (2026-06-26):
+- 0 hex en `<style>` y HTML estático ✅ (3 hex en `<script>` — exclusiones §6: L438, L442, L444)
+- CSS viejo eliminado: `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`, `.badge-rol`, `.form-grid-3` → 0 ✅
+- Hex count en `<script>` = 3 ✅
+- `rolBadgeHTML()` sin hex ni `style=` ✅
+- `btn-ghost` en HTML estático = 0 ✅ (L73/74 son selectores CSS, L445/449 son template strings en `<script>`)
 
-### Commit
-`feat(panel): servicios-admin — rediseño design system C+`
+### Commits
+- `897cd83` — docs(plan): servicios-admin — plan de rediseño design system C+
+- `b7b47d8` — feat(panel): servicios-admin — rediseño design system C+
+- `[paso 2+3]` — docs(plan): servicios-admin paso 2+3 — certificación final, 13 checks PASS
