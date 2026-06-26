@@ -550,20 +550,17 @@ if (lAdm) lAdm.style.display = '';
 
 ## 12. Orden de implementación
 
-### Paso 1 — Layout shell, sidebar, CSS completo + ajustes de JS
+### Paso 1 — Layout shell, sidebar, CSS completo + ajustes de JS ✅ COMPLETADO
 
-- Agregar `<link rel="stylesheet" href="/assets/design-tokens.css">` en el `<head>`
-- Reemplazar `<nav class="navbar">` y todo su CSS por el sidebar de dashboard.html
-- Cambiar `.nav-item.active` al ítem "Servicios"
-- Agregar `id="sidebar-avatar"`, `id="label-reportes"` (display:none), `id="label-admin"` (display:none)
-- `nav-auditoria` (display:none), `nav-dashboard` (display:none), `nav-usuarios` (display:none)
-- Wrap del contenido en `.app-shell > .main-content > .page-inner`
-- HTML: `.page-header` con "Panel de gestión" / "Gestión de servicios"
-- HTML: renombrar `.btn-ghost` → `.btn-secondary` en los 2 botones estáticos (Actualizar L126, Cancelar modal L224)
-- HTML: extraer 3 inline styles `color:#dc2626` → `<span class="req">*</span>`
-- CSS: incluir **todo el CSS del §9** en este paso (eliminar `.form-grid-3`)
-- **JS `rolBadgeHTML()`:** reescribir (§4.A)
-- **JS `init()`:** agregar bloque `sidebar-avatar` + `lRep`/`lAdm` (§10)
+8/8 verificaciones PASS (2026-06-26):
+- 0 hex en `<style>` y HTML estático ✅ (3 hex en `<script>` — exclusiones §6)
+- CSS viejo eliminado: `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`, `.badge-rol`, `.form-grid-3` → 0 ✅
+- Hex count en `<script>` = 3 ✅
+- 27/27 IDs del §1 presentes en el DOM ✅
+- `btn-ghost` → `btn-secondary` en Actualizar (L207) y Cancelar modal (L308) ✅
+- 3 asteriscos extraídos a `class="req"` (L243, L247, L253) ✅
+- `rolBadgeHTML()` sin hex ni `style=` ✅
+- `.form-grid-3` eliminado del CSS ✅
 
 ### Paso 2 — Verificación de clases generadas por JS
 
