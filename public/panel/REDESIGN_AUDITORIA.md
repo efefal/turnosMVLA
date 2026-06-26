@@ -806,7 +806,7 @@ if (lAdm) lAdm.style.display = '';
 5. ✅ `btn-ghost` → `btn-secondary` — 0 ocurrencias de `btn-ghost`
 6. ✅ `rolBadgeHTML()` sin inline styles — usa `.role-badge .role-${cls}`
 
-### Paso 2 — Verificación de clases generadas por JS
+### Paso 2 — Verificación de clases generadas por JS ✅ completado — 2026-06-26
 
 - Confirmar que `.area-chip` y `.area-chip.activo` están en CSS
 - Confirmar que `.filtro-panel-btn.activo` y `.filtro-panel-dropdown.abierto` están en CSS
@@ -814,7 +814,17 @@ if (lAdm) lAdm.style.display = '';
 - Confirmar que `.alerta { display: none }` y `.alerta.visible { display: block }` están en CSS
 - Confirmar que `.badge-accion` y las 8 clases `.accion-*` están en CSS
 - Confirmar que `.cargando` y `.vacio` están en CSS
-- **Verificado:** todas las clases inyectadas por JS tienen definición CSS
+
+**Verificaciones ejecutadas 2026-06-26 — 7/7 PASS:**
+1. ✅ `.area-chip` (L71) y `.area-chip.activo` (L87) — presentes en CSS
+2. ✅ `.filtro-panel-btn` (L112) y `.filtro-panel-btn.activo` (L129) — presentes en CSS
+3. ✅ `.filtro-panel-dropdown` (L131) y `.filtro-panel-dropdown.abierto` (L146) — presentes en CSS
+4. ✅ `.check-item` (L147) con `display:flex` + checkbox + label — presente en CSS
+5. ✅ `.alerta { display: none }` (L161–167) y `.alerta.visible { display: block }` (L168) — presentes
+6. ✅ `.badge-accion` (L207) + 8 clases `.accion-*` (L215–222) — todas presentes con tokens
+7. ✅ `.cargando` (L237) y `.vacio` (L238) — presentes con `var(--text-3)`
+8. ✅ `badgeAccion()` genera exactamente `badge-accion accion-${esc(accion)}` (L456) — sin variaciones
+9. ✅ `togglePanel()` usa `classList.add('abierto')` / `classList.remove('abierto')` (L535–536) — correcto
 
 ### Paso 3 — Certificación final
 
