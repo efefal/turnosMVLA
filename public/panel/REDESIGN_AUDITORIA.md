@@ -826,14 +826,15 @@ if (lAdm) lAdm.style.display = '';
 8. ✅ `badgeAccion()` genera exactamente `badge-accion accion-${esc(accion)}` (L456) — sin variaciones
 9. ✅ `togglePanel()` usa `classList.add('abierto')` / `classList.remove('abierto')` (L535–536) — correcto
 
-### Paso 3 — Certificación final
+### Paso 3 — Certificación final ✅ completado — 2026-06-26
 
-- grep: 0 hex en `<style>` (excepto rgba de accion-* — verificar que son los correctos del §4)
-- grep: 0 hex en HTML estático
-- `.navbar`, `.btn-logout`, `.badge-rol`, `.btn-ghost` → 0 en `<style>`
-- `rolBadgeHTML()` usa solo `role-badge ${cls}` sin hex ni `style=`
-- Hex count en script = 3 (líneas con `style="color:..."` de las exclusiones §5)
-- **Verificado:** rediseño completo
+**Verificaciones ejecutadas 2026-06-26 — 4/4 PASS:**
+1. ✅ 0 hex en `<style>` y HTML estático — `grep "#[0-9a-fA-F]{3,6}" | grep -v "<script"` → 0 líneas
+2. ✅ CSS viejo eliminado — `.navbar`, `.nav-links`, `.nav-user`, `.btn-logout`, `.badge-rol`, `.btn-ghost` → 0 ocurrencias
+3. ✅ Hex count en `<script>` = exactamente **3** líneas (L664, L668, L672 — exclusiones §5)
+4. ✅ `rolBadgeHTML()` usa solo `role-badge ${cls}` — sin hex ni `style=` (L437–446)
 
-### Commit
-Un único commit: `feat(panel): auditoria — rediseño design system C+`
+### Commits del rediseño completo
+- `0be4703` — `feat(panel): auditoria paso 1 — layout shell, sidebar, design-tokens, CSS completo`
+- `f591c3b` — `docs(plan): auditoria paso 2 — verificación clases JS, 9/9 PASS`
+- commit de cierre → `docs(plan): auditoria paso 3 — certificación final, 4 checks PASS`
