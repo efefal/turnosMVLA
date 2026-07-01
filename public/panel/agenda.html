@@ -1020,6 +1020,54 @@ function renderizarStats(turnos) {
     .join('');
 }
 
+// ─── Turnos superpuestos (mismo slot de horario) ───────────────────────────
+// Agrupa turnos que caen en la misma "fila" (mismo cálculo de fila que usan
+// renderizarTablaDia y renderizarSemana) para poder repartirles el ancho
+// horizontal en vez de dibujarlos todos con el mismo left/right y que se
+// tapen unos a otros. Devuelve un Map<fila, turno[]> que conserva el orden
+// original dentro de cada grupo.
+function agruparPorFila(turnos) {
+  const porFila = new Map();
+  turnos.forEach(t => {
+    const hora = parseInt(t.hora_inicio.substring(0, 2));
+    const mins = parseInt(t.hora_inicio.substring(3, 5));
+    const fila = (hora - 8) * 2 + (mins >= 30 ? 1 : 0);
+    if (!porFila.has(fila)) porFila.set(fila, []);
+    porFila.get(fila).push(t);
+  });
+  return porFila;
+}
+
+// Devuelve el fragmento de estilo left/width/right para una card según su
+// posición (idx, 0-based) dentro de un grupo de n turnos en la misma fila.
+// n=1: comportamiento de siempre (ancho completo de la columna).
+// n=2 o 3: se reparte el ancho en columnas iguales con un pequeño gap.
+// n>=4 (caso límite poco probable): ancho mínimo legible fijo y se acepta
+// overflow horizontal en la columna del día — decisión de diseño documentada
+// acá en vez de resolver un layout arbitrariamente angosto.
+function calcularPosicionHorizontal(idx, n) {
+  if (n <= 1) return 'left: 3px; right: 3px;';
+
+  if (n >= 4) {
+    const anchoMin = 60; // px — mínimo legible para nombre + badge
+    const gapPx    = 4;
+    return `left: ${idx * (anchoMin + gapPx)}px; width: ${anchoMin}px; right: auto;`;
+  }
+
+  const gap      = 2; // separación visual aproximada entre cards
+  const anchoPct = (100 / n) - (gap * (n - 1) / n);
+  const leftPct  = idx * (100 / n);
+  return `left: calc(${leftPct}% + 2px); width: calc(${anchoPct}% - 4px); right: auto;`;
+}
+
+// LIMITACIÓN CONOCIDA: en vista semana, con 3+ turnos en
+// la misma franja horaria, el ancho de columna (~92px)
+// puede no alcanzar para mostrar el nombre completo del
+// vecino. Las cards no se superponen y siguen siendo
+// clickeables — es una limitación de espacio, no un bug.
+// Mejora futura: mostrar solo iniciales/avatar cuando
+// el ancho de card baje de cierto umbral.
+
 // ─── Vista DÍA ─────────────────────────────────────────────────────────────
 function renderizarTablaDia(turnos) {
   const slots = generarSlotsTiempo('08:00', '17:30'); // 20 slots × 44px = 880px
@@ -1095,11 +1143,18 @@ function renderizarTablaDia(turnos) {
       color:var(--text-3);font-size:var(--text-sm);pointer-events:none;white-space:nowrap">
       Sin turnos este día</div>`;
   } else {
-    cardsHTML = turnos.map(t => {
+    // Agrupar por fila antes de dibujar: si hay más de un turno en el mismo
+    // slot de horario, se reparte el ancho horizontal entre ellos en vez de
+    // dejar que se tapen (ver agruparPorFila / calcularPosicionHorizontal).
+    const gruposPorFila = agruparPorFila(turnos);
+    cardsHTML = [...gruposPorFila.values()].map(grupo => {
+      const n = grupo.length;
+      return grupo.map((t, idx) => {
       const hora  = parseInt(t.hora_inicio.substring(0, 2));
       const mins  = parseInt(t.hora_inicio.substring(3, 5));
       const fila  = (hora - 8) * 2 + (mins >= 30 ? 1 : 0);
       const top   = fila * 44 + 2;
+      const posStyle = calcularPosicionHorizontal(idx, n);
 
       // Color por serviceId — misma lógica que renderizarSemana
       const svcId = t.service_id || t.serviceId;
@@ -1144,7 +1199,7 @@ function renderizarTablaDia(turnos) {
 
       return `
         <div class="turno-card ${cardColor}"
-             style="top:${top}px; height:auto; min-height:40px;"
+             style="top:${top}px; height:auto; min-height:40px; ${posStyle}"
              data-id="${t.id}">
           <div class="turno-card-inner">
             <div class="turno-row-1">
@@ -1156,6 +1211,7 @@ function renderizarTablaDia(turnos) {
             ${accionesHTML ? `<div class="turno-acciones">${accionesHTML}</div>` : ''}
           </div>
         </div>`;
+      }).join('');
     }).join('');
   }
 
@@ -1402,11 +1458,18 @@ function renderizarSemana(turnos, dias) {
 
     // ── Cards de turno ─────────────────────────────────────────────────────
     // top = fila * 44 + 2px de margen, donde fila = (hora-8)*2 + (mins>=30 ? 1 : 0)
-    const cardsHTML = turnosDia.map(tc => {
+    // Agrupar por fila antes de dibujar: si hay más de un turno en el mismo
+    // slot de horario, se reparte el ancho horizontal entre ellos en vez de
+    // dejar que se tapen (ver agruparPorFila / calcularPosicionHorizontal).
+    const gruposPorFilaSemana = agruparPorFila(turnosDia);
+    const cardsHTML = [...gruposPorFilaSemana.values()].map(grupo => {
+      const n = grupo.length;
+      return grupo.map((tc, idx) => {
       const hora = parseInt(tc.hora_inicio.substring(0, 2));
       const mins = parseInt(tc.hora_inicio.substring(3, 5));
       const fila = (hora - 8) * 2 + (mins >= 30 ? 1 : 0);
       const top  = fila * 44 + 2;
+      const posStyle = calcularPosicionHorizontal(idx, n);
 
       // Color de card por serviceId; si no hay serviceId, fallback por estado del turno.
       // serviceId 2 = Licencia de Conducir (azul), serviceId 3 = Tribunal de Faltas (teal)
@@ -1433,7 +1496,7 @@ function renderizarSemana(turnos, dias) {
 
       return `
         <div class="turno-card ${cardColor}"
-             style="top:${top}px"
+             style="top:${top}px; ${posStyle}"
              data-id="${tc.id}"
              onclick="abrirDetalleTurno(${tc.id})">
           <div class="turno-card-inner">
@@ -1445,6 +1508,7 @@ function renderizarSemana(turnos, dias) {
             <span class="svc-badge ${badgeCls}">${badgeLabel}</span>
           </div>
         </div>`;
+      }).join('');
     }).join('');
 
     // Zona de agregar turno: solo en el día de hoy (no en días cerrados ni bloqueados)
