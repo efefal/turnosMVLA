@@ -927,11 +927,59 @@ function cambiarVista(nuevaVista) {
   cargar();
 }
 
-function cargar() {
-  if (vista === 'dia')    cargarDia();
-  else if (vista === 'semana') cargarSemana();
-  else cargarMes();
+function cargar(silencioso = false) {
+  if (vista === 'dia')    return cargarDia(silencioso);
+  else if (vista === 'semana') return cargarSemana(silencioso);
+  else return cargarMes(silencioso);
 }
+
+// ─── Polling automático ────────────────────────────────────────────────────
+// Refresca la agenda cada 10s para reducir el riesgo de que dos operadores
+// tomen el mismo turno sin saberlo. Reutiliza cargar()/cargarDia()/cargarSemana()/
+// cargarMes() en modo "silencioso": sin spinner "Cargando..." y sin tocar el
+// DOM salvo que firmaTurnos() detecte un cambio real.
+//
+// Genera una firma comparable de una lista de turnos (id:estado:operador_id,
+// ordenada) para decidir si vale la pena volver a renderizar.
+function firmaTurnos(turnos) {
+  return turnos
+    .map(t => `${t.id}:${t.estado}:${t.operador_id ?? ''}`)
+    .sort()
+    .join('|');
+}
+
+let pollingInterval = null;
+
+function iniciarPolling() {
+  if (pollingInterval) return; // ya está corriendo, no duplicar
+  pollingInterval = setInterval(tickPolling, 10000);
+}
+
+function detenerPolling() {
+  clearInterval(pollingInterval);
+  pollingInterval = null;
+}
+
+async function tickPolling() {
+  // Con el modal de cancelación abierto no tocamos el DOM para no interrumpir
+  // al operador en medio de una acción — ni siquiera hacemos el fetch.
+  if (document.getElementById('modal-fondo').classList.contains('abierto')) return;
+
+  try {
+    await cargar(true);
+  } catch (err) {
+    // Fallo de red u otro error inesperado: solo log, sin alerta invasiva.
+    // El 401 ya lo maneja apiFetch() redirigiendo a login antes de llegar acá.
+    console.error('[polling] Error al actualizar la agenda:', err);
+  }
+}
+
+// Pausar el polling cuando la pestaña no está visible, para no gastar
+// requests de fondo innecesariamente; reanudar al volver.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) detenerPolling();
+  else iniciarPolling();
+});
 
 // ─── Helpers de label ──────────────────────────────────────────────────────
 function actualizarLabelDia() {
@@ -1171,10 +1219,12 @@ function renderizarBannersDia() {
   }
 }
 
-async function cargarDia() {
+async function cargarDia(silencioso = false) {
   actualizarLabelDia();
-  mostrarAlerta(null);
-  document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+  if (!silencioso) {
+    mostrarAlerta(null);
+    document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+  }
 
   const operadorId = document.getElementById('select-operador')?.value || '';
   let url = `/panel/agenda?fecha=${fechaActual}${areasParam()}`;
@@ -1188,6 +1238,10 @@ async function cargarDia() {
   if (!res) return;
 
   if (!res.ok) {
+    if (silencioso) {
+      console.error('[polling] Error al actualizar la agenda (día):', res.status);
+      return;
+    }
     const data = await res.json();
     mostrarAlerta('error', data.error || 'No se pudo cargar la agenda.');
     document.getElementById('tabla-container').innerHTML = '';
@@ -1196,6 +1250,8 @@ async function cargarDia() {
   }
 
   const turnos = await res.json();
+  if (silencioso && firmaTurnos(turnos) === firmaTurnos(turnosActuales)) return;
+
   turnosActuales = turnos;
   renderizarStats(turnos);
   renderizarTablaDia(turnos);
@@ -1416,14 +1472,16 @@ function renderizarSemana(turnos, dias) {
   `;
 }
 
-async function cargarSemana() {
+async function cargarSemana(silencioso = false) {
   const lunes = lunesDeLaSemana(fechaActual);
   const dias  = diasDeLaSemana(lunes);
   const domingo = dias[6];
 
   actualizarLabelSemana(lunes, domingo);
-  mostrarAlerta(null);
-  document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+  if (!silencioso) {
+    mostrarAlerta(null);
+    document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+  }
 
   const operadorId = document.getElementById('select-operador')?.value || '';
   let url = `/panel/agenda/rango?desde=${lunes}&hasta=${domingo}${areasParam()}`;
@@ -1438,6 +1496,10 @@ async function cargarSemana() {
   if (!res) return;
 
   if (!res.ok) {
+    if (silencioso) {
+      console.error('[polling] Error al actualizar la agenda (semana):', res.status);
+      return;
+    }
     const data = await res.json();
     mostrarAlerta('error', data.error || 'No se pudo cargar la semana.');
     document.getElementById('tabla-container').innerHTML = '';
@@ -1446,6 +1508,8 @@ async function cargarSemana() {
   }
 
   const turnos = await res.json();
+  if (silencioso && firmaTurnos(turnos) === firmaTurnos(turnosActuales)) return;
+
   turnosActuales = turnos;
   renderizarStats(turnos);
   renderizarSemana(turnos, dias);
@@ -1532,12 +1596,14 @@ function renderizarMes(turnos, año, mes) {
   `;
 }
 
-async function cargarMes() {
+async function cargarMes(silencioso = false) {
   const [año, mes] = fechaActual.split('-').map(Number);
 
   actualizarLabelMes(año, mes);
-  mostrarAlerta(null);
-  document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+  if (!silencioso) {
+    mostrarAlerta(null);
+    document.getElementById('tabla-container').innerHTML = '<div class="cargando">Cargando...</div>';
+  }
 
   // Rango: del 1 al último día del mes
   const ultimoDia = new Date(año, mes, 0).getDate();
@@ -1556,6 +1622,10 @@ async function cargarMes() {
   if (!res) return;
 
   if (!res.ok) {
+    if (silencioso) {
+      console.error('[polling] Error al actualizar la agenda (mes):', res.status);
+      return;
+    }
     const data = await res.json();
     mostrarAlerta('error', data.error || 'No se pudo cargar el mes.');
     document.getElementById('tabla-container').innerHTML = '';
@@ -1564,6 +1634,8 @@ async function cargarMes() {
   }
 
   const turnos = await res.json();
+  if (silencioso && firmaTurnos(turnos) === firmaTurnos(turnosActuales)) return;
+
   turnosActuales = turnos;
   renderizarStats(turnos);
   renderizarMes(turnos, año, mes);
@@ -1813,6 +1885,9 @@ function renderizarMiniCal() {
 
   // Mini-calendario decorativo del sidebar — solo presentación, sin datos de negocio
   renderizarMiniCal();
+
+  // Arrancar el polling automático de la agenda (cada 10s, ver definición arriba)
+  iniciarPolling();
 })();
 </script>
 </body>
