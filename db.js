@@ -23,6 +23,11 @@ const pool = mysql.createPool({
   password: process.env.MOTOR_DB_PASSWORD || '',
   database: process.env.MOTOR_DB_NAME     || 'motor_turnos',
 
+  // Fuerza el charset de la conexión a utf8mb4 (el mismo que usa la tabla).
+  // Sin esto, mysql2 puede negociar un charset distinto y los acentos
+  // (á, é, í, ó, ú, ñ) se guardan o se leen mal — mojibake tipo "Record├í".
+  charset: 'utf8mb4',
+
   // Número máximo de conexiones abiertas al mismo tiempo.
   // 10 es más que suficiente para el volumen esperado del PoC.
   connectionLimit: 10,
