@@ -1045,11 +1045,31 @@ function agruparPorFila(turnos) {
 // n>=4 (caso límite poco probable): ancho mínimo legible fijo y se acepta
 // overflow horizontal en la columna del día — decisión de diseño documentada
 // acá en vez de resolver un layout arbitrariamente angosto.
-function calcularPosicionHorizontal(idx, n) {
+//
+// contexto ('dia' | 'semana') determina el ancho mínimo: en semana alcanza
+// con nombre+badge (sin botones), pero en día las cards tienen botones de
+// acción (Tomar/Cancelar o Presente/Ausente/Liberar) que necesitan mucho
+// más espacio horizontal para no apilarse verticalmente y hacer crecer la
+// card más allá del slot de 44px (ver también el modo compacto de botones
+// en renderizarTablaDia, que entra en juego junto con este mínimo para n≥3).
+function calcularPosicionHorizontal(idx, n, contexto) {
   if (n <= 1) return 'left: 3px; right: 3px;';
 
-  if (n >= 4) {
-    const anchoMin = 60; // px — mínimo legible para nombre + badge
+  // En vista día, con N alto (4+) usamos un ancho fijo generoso (para que
+  // quepan los botones de acción) y se acepta overflow horizontal — la
+  // columna del día es ancha (~700-900px), así que N×160px raramente
+  // supera el espacio disponible en la práctica.
+  //
+  // En vista semana NO hacemos esto: la columna real mide solo ~92-140px,
+  // y un ancho fijo multiplicado por N puede superar ese ancho real,
+  // empujando cards fuera de la columna — se ven como una etiqueta suelta
+  // pegada al borde, invadiendo el día siguiente (bug real, visto en
+  // captura). Por eso en semana el reparto SIEMPRE es porcentual (nunca
+  // excede el 100% de la columna real), sin importar cuán chico quede N.
+  // El contenido interno de la card se colapsa a lo mínimo en
+  // renderizarSemana() cuando n es alto, en vez de forzar overflow acá.
+  if (n >= 4 && contexto === 'dia') {
+    const anchoMin = 160; // px — suficiente para 2-3 botones de acción
     const gapPx    = 4;
     return `left: ${idx * (anchoMin + gapPx)}px; width: ${anchoMin}px; right: auto;`;
   }
@@ -1059,14 +1079,6 @@ function calcularPosicionHorizontal(idx, n) {
   const leftPct  = idx * (100 / n);
   return `left: calc(${leftPct}% + 2px); width: calc(${anchoPct}% - 4px); right: auto;`;
 }
-
-// LIMITACIÓN CONOCIDA: en vista semana, con 3+ turnos en
-// la misma franja horaria, el ancho de columna (~92px)
-// puede no alcanzar para mostrar el nombre completo del
-// vecino. Las cards no se superponen y siguen siendo
-// clickeables — es una limitación de espacio, no un bug.
-// Mejora futura: mostrar solo iniciales/avatar cuando
-// el ancho de card baje de cierto umbral.
 
 // ─── Vista DÍA ─────────────────────────────────────────────────────────────
 function renderizarTablaDia(turnos) {
@@ -1154,7 +1166,12 @@ function renderizarTablaDia(turnos) {
       const mins  = parseInt(t.hora_inicio.substring(3, 5));
       const fila  = (hora - 8) * 2 + (mins >= 30 ? 1 : 0);
       const top   = fila * 44 + 2;
-      const posStyle = calcularPosicionHorizontal(idx, n);
+      const posStyle = calcularPosicionHorizontal(idx, n, 'dia');
+      // A partir de 3 turnos superpuestos en día, los botones muestran solo
+      // ícono + title (tooltip) en vez de texto completo — con el ancho
+      // mínimo (160px) tres botones de texto todavía pueden apretar o
+      // wrappear según el nombre del vecino; el ícono lo evita de raíz.
+      const compacto = n >= 3;
 
       // Color por serviceId — misma lógica que renderizarSemana
       const svcId = t.service_id || t.serviceId;
@@ -1184,12 +1201,17 @@ function renderizarTablaDia(turnos) {
       if (usuarioRol !== 'directivo') {
         if (!t.operador_id && t.estado === 'agendado') {
           // Turno sin tomar → Tomar + Cancelar
-          accionesHTML = `
+          accionesHTML = compacto ? `
+            <button class="btn btn-secondary" onclick="tomarTurno(${t.id})" title="Tomar">✓</button>
+            <button class="btn btn-danger"    onclick="abrirCancelar(${t.id})" title="Cancelar">✕</button>` : `
             <button class="btn btn-secondary" onclick="tomarTurno(${t.id})">Tomar</button>
             <button class="btn btn-danger"    onclick="abrirCancelar(${t.id})">Cancelar</button>`;
         } else if (t.operador_id && t.estado === 'agendado') {
           // Turno tomado → Presente + Ausente + Liberar
-          accionesHTML = `
+          accionesHTML = compacto ? `
+            <button class="btn btn-primary"   onclick="cambiarEstado(${t.id},'presente')" title="Presente">✓</button>
+            <button class="btn btn-danger"    onclick="cambiarEstado(${t.id},'ausente')" title="Ausente">✕</button>
+            <button class="btn btn-secondary" onclick="liberarTurno(${t.id})" title="Liberar">↺</button>` : `
             <button class="btn btn-primary"   onclick="cambiarEstado(${t.id},'presente')">Presente</button>
             <button class="btn btn-danger"    onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>
             <button class="btn btn-secondary" onclick="liberarTurno(${t.id})">Liberar</button>`;
@@ -1208,7 +1230,7 @@ function renderizarTablaDia(turnos) {
               <span class="turno-nombre" style="flex:1">${esc(t.vecino_nombre)}</span>
               <span class="svc-badge ${badgeCls}">${badgeLabel}</span>
             </div>
-            ${accionesHTML ? `<div class="turno-acciones">${accionesHTML}</div>` : ''}
+            ${accionesHTML ? `<div class="turno-acciones"${compacto ? ' style="margin-top:1px"' : ''}>${accionesHTML}</div>` : ''}
           </div>
         </div>`;
       }).join('');
@@ -1469,7 +1491,7 @@ function renderizarSemana(turnos, dias) {
       const mins = parseInt(tc.hora_inicio.substring(3, 5));
       const fila = (hora - 8) * 2 + (mins >= 30 ? 1 : 0);
       const top  = fila * 44 + 2;
-      const posStyle = calcularPosicionHorizontal(idx, n);
+      const posStyle = calcularPosicionHorizontal(idx, n, 'semana');
 
       // Color de card por serviceId; si no hay serviceId, fallback por estado del turno.
       // serviceId 2 = Licencia de Conducir (azul), serviceId 3 = Tribunal de Faltas (teal)
@@ -1494,18 +1516,50 @@ function renderizarSemana(turnos, dias) {
         ? `<span class="turno-avatar">${esc(inicialesOp(tc.operador_nombre))}</span>`
         : `<span class="badge-sin-tomar">?</span>`;
 
+      // Con n≥3 en semana, el ancho porcentual de la card (columna real
+      // ~92-140px repartida entre n) queda demasiado angosto para nombre +
+      // badge + avatar completos. En vez de forzar un ancho fijo que
+      // desborda la columna (bug real visto en captura: la card sobrante
+      // termina invadiendo el día siguiente), colapsamos el contenido a lo
+      // esencial: hora + un punto de color en vez del badge de texto. La
+      // card sigue ocupando exactamente su porcentaje del ancho real —
+      // nunca se sale de la columna — y el title da el detalle completo al
+      // pasar el mouse.
+      const compacto = n >= 3;
+      const dotColorVar = badgeCls === 'svc-blue' ? 'var(--blue)' : badgeCls === 'svc-teal' ? 'var(--teal)' : 'var(--red)';
+
+      // LIMITACIÓN CONOCIDA: con N>=4 turnos en la misma franja
+      // en vista semana, las cards resultantes (~15-20px) son
+      // difíciles de clickear con precisión y el contenido
+      // visible se reduce a un punto de color. Funcionalmente
+      // correctas (sin fuga de columna, click funciona si se
+      // acierta el target), pero la UX en este caso extremo
+      // es pobre. Mejora futura: mostrar un contador "+N"
+      // agrupado en vez de N cards individuales cuando N>=4.
+
+      const contenidoHTML = compacto
+        ? `<div class="turno-row-1">
+             <span class="turno-hora font-mono">${esc(tc.hora_inicio.substring(0, 5))}</span>
+             <span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:${dotColorVar};flex-shrink:0;"></span>
+           </div>`
+        : `<div class="turno-row-1">
+             <span class="turno-hora font-mono">${esc(tc.hora_inicio.substring(0, 5))}</span>
+             ${avatarHTML}
+           </div>
+           <div class="turno-nombre">${esc(tc.vecino_nombre)}</div>
+           <span class="svc-badge ${badgeCls}">${badgeLabel}</span>`;
+
+      const tituloCompacto = compacto
+        ? ` title="${esc(tc.hora_inicio.substring(0, 5))} — ${esc(tc.vecino_nombre)} (${esc(badgeLabel)})"`
+        : '';
+
       return `
         <div class="turno-card ${cardColor}"
              style="top:${top}px; ${posStyle}"
              data-id="${tc.id}"
-             onclick="abrirDetalleTurno(${tc.id})">
+             onclick="abrirDetalleTurno(${tc.id})"${tituloCompacto}>
           <div class="turno-card-inner">
-            <div class="turno-row-1">
-              <span class="turno-hora font-mono">${esc(tc.hora_inicio.substring(0, 5))}</span>
-              ${avatarHTML}
-            </div>
-            <div class="turno-nombre">${esc(tc.vecino_nombre)}</div>
-            <span class="svc-badge ${badgeCls}">${badgeLabel}</span>
+            ${contenidoHTML}
           </div>
         </div>`;
       }).join('');
