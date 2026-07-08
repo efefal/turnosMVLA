@@ -164,13 +164,18 @@
       font-size: var(--text-xs);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      padding: 0.7rem 1rem;
+      /* Padding horizontal en px fijo (no rem): con rem escalaba junto con
+         --text-base (font-size de <html>), sumando de más al ancho total de
+         la tabla en sus 8 columnas. Con 9px seguía sobrando ~17px por ser la
+         tabla con más columnas del panel, así que acá queda un poco más
+         angosto (7px) que en usuarios.html/servicios-admin.html. */
+      padding: 9px 7px;
       border-bottom: 2px solid var(--border);
       text-align: left;
       white-space: nowrap;
     }
     td {
-      padding: 0.85rem 1rem;
+      padding: 10px 7px;
       border-bottom: 1px solid var(--border);
       vertical-align: middle;
       font-size: var(--text-base);

@@ -62,13 +62,13 @@
   --font-mono: 'DM Mono', monospace;               /* números, códigos, horarios */
 
   /* ── Escala tipográfica ─────────────────────────────────────── */
-  --text-xs:   9px;    /* labels, badges, leyendas de heatmap */
-  --text-sm:   11px;   /* metadatos, timestamps */
-  --text-base: 12px;   /* cuerpo de tablas */
-  --text-md:   13px;   /* ítems de tabla, nombres */
-  --text-lg:   15px;   /* títulos de topbar */
-  --text-xl:   18px;   /* títulos de drawer / modal */
-  --text-2xl:  20px;   /* números de día en calendario */
+  --text-xs:   10px;   /* labels, badges, leyendas de heatmap */
+  --text-sm:   12px;   /* metadatos, timestamps */
+  --text-base: 13px;   /* cuerpo de tablas */
+  --text-md:   14px;   /* ítems de tabla, nombres */
+  --text-lg:   16px;   /* títulos de topbar */
+  --text-xl:   19px;   /* títulos de drawer / modal */
+  --text-2xl:  21px;   /* números de día en calendario */
   --text-kpi:  38px;   /* KPIs del dashboard (usar --font-mono) */
 
   /* ── Espaciado ──────────────────────────────────────────────── */

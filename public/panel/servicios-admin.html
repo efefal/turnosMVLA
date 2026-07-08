@@ -92,12 +92,15 @@
       font-size: var(--text-xs);
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      padding: 0.7rem 1rem;
+      /* Padding horizontal en px fijo (no rem): con rem escalaba junto con
+         --text-base (font-size de <html>), sumando de más al ancho total de
+         la tabla en sus 7 columnas. Mismo ajuste que en usuarios.html. */
+      padding: 9px 9px;
       border-bottom: 2px solid var(--border);
       text-align: left;
       white-space: nowrap;
     }
-    td { padding: 0.8rem 1rem; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: var(--text-base); color: var(--text-1); }
+    td { padding: 10px 9px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: var(--text-base); color: var(--text-1); }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: var(--bg-4); }
     .td-acciones { display: flex; gap: 0.35rem; flex-wrap: wrap; }
