@@ -310,6 +310,77 @@ router.get('/agenda', async (req, res) => {
 });
 
 
+// GET /panel/buscar?q=texto
+// Buscador global del panel (input .search-global de agenda.html).
+// Busca en tres campos a la vez: DNI del vecino, nombre del vecino y
+// número de turno (id exacto, solo si "q" son todos dígitos).
+// Devuelve turnos (no vecinos sueltos) porque el resultado se usa para
+// saltar directo a la vista día del turno encontrado.
+router.get('/buscar', async (req, res) => {
+  const q = (req.query.q || '').trim();
+
+  // Menos de 2 caracteres da demasiado ruido (y en nombre, sin índice,
+  // sería un table scan grande para poco resultado útil).
+  if (q.length < 2) {
+    return res.json([]);
+  }
+
+  try {
+    // Mismo filtro de rol/área que /agenda y /agenda/rango, para que el
+    // buscador nunca muestre turnos que el usuario no podría ver en la agenda.
+    const areasFiltro = resolverAreaIds(req, req.query['areas[]']);
+
+    const condiciones = ["t.estado != 'cancelado'"];
+    const params      = [];
+
+    const soloDigitos = /^\d+$/.test(q);
+    const like = `%${q}%`;
+    if (soloDigitos) {
+      // Todo dígitos: puede ser un n.º de turno, un DNI completo, o parte de un DNI.
+      condiciones.push('(t.id = ? OR v.dni LIKE ?)');
+      params.push(parseInt(q, 10), like);
+    } else {
+      condiciones.push('v.nombre LIKE ?');
+      params.push(like);
+    }
+
+    if (areasFiltro !== null && areasFiltro.length > 0) {
+      condiciones.push(`s.area_id IN (${areasFiltro.map(() => '?').join(',')})`);
+      params.push(...areasFiltro);
+    }
+
+    if (req.usuario.rol === 'operador') {
+      condiciones.push('(t.operador_id = ? OR t.operador_id IS NULL)');
+      params.push(req.usuario.id);
+    }
+
+    const [turnos] = await pool.query(`
+      SELECT
+        t.id,
+        t.fecha,
+        t.hora_inicio,
+        t.estado,
+        v.dni    AS vecino_dni,
+        v.nombre AS vecino_nombre,
+        s.nombre AS servicio_nombre,
+        u.nombre AS operador_nombre
+      FROM turnos t
+      JOIN vecinos   v ON t.vecino_id   = v.id
+      JOIN servicios s ON t.servicio_id = s.id
+      LEFT JOIN usuarios  u ON t.operador_id = u.id
+      WHERE ${condiciones.join(' AND ')}
+      ORDER BY t.fecha DESC, t.hora_inicio ASC
+      LIMIT 15
+    `, params);
+
+    res.json(turnos);
+  } catch (err) {
+    logger.error('[panel] Error en buscador global:', err);
+    res.status(500).json({ error: 'No se pudo realizar la búsqueda.' });
+  }
+});
+
+
 // =============================================================================
 // CALENDARIO — feriados y bloqueos (para agenda.html)
 // =============================================================================

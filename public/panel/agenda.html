@@ -129,7 +129,9 @@
     }
     /* flex: 0 1 340px — el buscador puede achicarse en pantallas <1100px
        sin robar espacio al bloque de navegación ni a los contadores */
-    .topbar-center { flex: 0 1 340px; min-width: 0; }
+    /* position:relative ancla el dropdown de resultados (.search-global-resultados,
+       definido en design-tokens.css) justo debajo del input */
+    .topbar-center { flex: 0 1 340px; min-width: 0; position: relative; }
     /* el search-global tiene width:340px en design-tokens; lo hacemos fluido aquí */
     .topbar-center .search-global { width: 100%; }
     .topbar-right {
@@ -616,7 +618,9 @@
       </div>
 
       <div class="topbar-center">
-        <input class="search-global" type="text" placeholder="Buscar vecino, DNI, n.º turno…">
+        <input class="search-global" type="text" id="search-global-input" autocomplete="off"
+               placeholder="Buscar vecino, DNI, n.º turno…">
+        <div class="search-global-resultados" id="search-global-resultados"></div>
       </div>
 
       <div class="topbar-right">
@@ -924,7 +928,111 @@ function cambiarVista(nuevaVista) {
   document.getElementById('nav-semana').style.display = vista === 'semana' ? 'flex' : 'none';
   document.getElementById('nav-mes').style.display    = vista === 'mes'    ? 'flex' : 'none';
 
-  cargar();
+  // El buscador global necesita esperar a que termine cargarDia() antes de
+  // poder resaltar el turno encontrado, por eso se devuelve la promesa.
+  return cargar();
+}
+
+// ─── Buscador global (topbar) ───────────────────────────────────────────────
+// Busca turnos por DNI, nombre de vecino o n.º de turno (GET /panel/buscar) y,
+// al elegir un resultado, salta a la vista día de ese turno y lo resalta.
+let buscadorTimeout            = null;
+let buscadorResultadosActuales = [];
+
+function inicializarBuscadorGlobal() {
+  const input = document.getElementById('search-global-input');
+
+  input.addEventListener('input', () => {
+    clearTimeout(buscadorTimeout);
+    const q = input.value.trim();
+    if (q.length < 2) {
+      cerrarBuscadorGlobal();
+      return;
+    }
+    // Debounce: esperamos a que el usuario deje de tipear para no disparar
+    // una consulta por cada tecla.
+    buscadorTimeout = setTimeout(() => ejecutarBusquedaGlobal(q), 300);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      cerrarBuscadorGlobal();
+      input.blur();
+    } else if (e.key === 'Enter' && buscadorResultadosActuales.length > 0) {
+      // Enter va directo al primer resultado (el más próximo en fecha)
+      e.preventDefault();
+      seleccionarResultadoBusqueda(buscadorResultadosActuales[0]);
+    }
+  });
+
+  // Clic fuera del buscador cierra el dropdown de resultados
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.topbar-center')) cerrarBuscadorGlobal();
+  });
+}
+
+async function ejecutarBusquedaGlobal(q) {
+  const res = await apiFetch(`/panel/buscar?q=${encodeURIComponent(q)}`);
+  if (!res) return;
+  // Si mientras esperábamos la respuesta el usuario ya escribió otra cosa,
+  // descartamos este resultado para no pisar una búsqueda más nueva.
+  if (document.getElementById('search-global-input').value.trim() !== q) return;
+  if (!res.ok) { cerrarBuscadorGlobal(); return; }
+  buscadorResultadosActuales = await res.json();
+  renderizarResultadosBusqueda();
+}
+
+function renderizarResultadosBusqueda() {
+  const dropdown = document.getElementById('search-global-resultados');
+
+  if (buscadorResultadosActuales.length === 0) {
+    dropdown.innerHTML = `<div class="search-global-estado">Sin resultados</div>`;
+    dropdown.classList.add('abierto');
+    return;
+  }
+
+  dropdown.innerHTML = buscadorResultadosActuales.map(t => {
+    const fecha  = typeof t.fecha === 'string' ? t.fecha.substring(0, 10) : t.fecha;
+    const [, m, d] = fecha.split('-');
+    return `
+      <div class="search-global-item" onclick="seleccionarResultadoBusquedaPorId(${t.id})">
+        <div class="search-global-item-top">
+          <span class="search-global-nombre">${esc(t.vecino_nombre)}</span>
+          <span class="search-global-meta">${d}/${m} ${esc(t.hora_inicio.substring(0, 5))}</span>
+        </div>
+        <span class="search-global-servicio">DNI ${esc(t.vecino_dni)} · ${esc(t.servicio_nombre)} · ${ESTADOS[t.estado] || t.estado}</span>
+      </div>`;
+  }).join('');
+  dropdown.classList.add('abierto');
+}
+
+function seleccionarResultadoBusquedaPorId(id) {
+  const t = buscadorResultadosActuales.find(x => x.id === id);
+  if (t) seleccionarResultadoBusqueda(t);
+}
+
+async function seleccionarResultadoBusqueda(t) {
+  cerrarBuscadorGlobal();
+  fechaActual = typeof t.fecha === 'string' ? t.fecha.substring(0, 10) : t.fecha;
+  document.getElementById('fecha-input').value = fechaActual;
+  actualizarLabelDia();
+  await cambiarVista('dia');
+  resaltarTurnoEncontrado(t.id);
+}
+
+// Hace scroll hasta la card del turno encontrado y la resalta un momento
+// (clase .resaltado, definida en design-tokens.css) para que sea fácil de ubicar
+// entre el resto de los turnos del día.
+function resaltarTurnoEncontrado(id) {
+  const card = document.querySelector(`.turno-card[data-id="${id}"]`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.add('resaltado');
+  setTimeout(() => card.classList.remove('resaltado'), 3200);
+}
+
+function cerrarBuscadorGlobal() {
+  document.getElementById('search-global-resultados').classList.remove('abierto');
 }
 
 function cargar(silencioso = false) {
@@ -2000,6 +2108,8 @@ function renderizarMiniCal() {
   document.getElementById('modal-fondo').addEventListener('click', (e) => {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
   });
+
+  inicializarBuscadorGlobal();
 
   // Mini-calendario decorativo del sidebar — solo presentación, sin datos de negocio
   renderizarMiniCal();
