@@ -104,7 +104,11 @@
     tr:last-child td { border-bottom: none; }
     tr:hover td { background: var(--bg-4); }
     .td-acciones { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-    .td-mensaje  { max-width: 220px; font-size: var(--text-sm); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* max-width bajado de 220px a 150px: con las otras 6 columnas ya en su
+       ancho mínimo (headers en una sola línea), solo quedan ~155px libres
+       en el contenedor de 668px. 220px era un valor fijo que nunca se
+       calculó contra ese espacio real disponible y causaba el overflow. */
+    .td-mensaje  { max-width: 150px; font-size: var(--text-sm); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* ── Badges de estado ────────────────────────────────────────── */
     /* .role-badge y .role-* vienen de design-tokens.css */
