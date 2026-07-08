@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Turnos · Dirección C+ — Enriquecido</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    html,body,#root{width:100%;height:100%;}
+    body{background:#060d18;}
+    ::-webkit-scrollbar{width:5px;height:5px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:rgba(45,212,160,0.18);border-radius:3px;}
+    select,input{outline:none;cursor:pointer;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="c-plus-shared.jsx"></script>
+<script type="text/babel">
+
+const {P,SH,HRS,tRow,DAYS_DATA,APPT_C,DAY_BG,DAY_HDR,dayColor,
+  USERS_DATA,SERVICES_DATA,AUDIT_DATA,A_COLOR,A_LABEL,ROLE_COLOR,
+  NavIcon,MiniCalendar,Sidebar,DonutChart,BarChartSVG,SparkLine,HeatmapCalendar} = window;
+
+/* ══════════════════════════════════════════════════════
+   SCREEN 1 — AGENDA SEMANA+
+   · Búsqueda global central  · Bloqueados con overlay
+   · Cards: badge + operador  · Today: zona + turno
+══════════════════════════════════════════════════════ */
+function AgendaSemana(){
+  return(
+    <div style={{width:'100%',height:'100%',display:'flex',fontFamily:P.font,overflow:'hidden',background:P.bg2,color:P.t1}}>
+      <Sidebar active="Agenda"/>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+
+        {/* ── TOPBAR 3 columnas ── */}
+        <div style={{height:54,padding:'0 16px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',gap:8,flexShrink:0,background:'rgba(0,0,0,0.18)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+            <span style={{fontSize:15,fontWeight:700,color:P.t1}}>Agenda</span>
+            <div style={{display:'flex',gap:1,padding:'2px',background:P.bg1,borderRadius:6,border:`1px solid ${P.bdr}`}}>
+              {['Día','Semana','Mes'].map(v=>(
+                <div key={v} style={{padding:'3px 10px',borderRadius:4,background:v==='Semana'?P.bg4:'transparent',color:v==='Semana'?P.t1:P.t3,fontSize:11.5,cursor:'pointer',fontWeight:v==='Semana'?600:400}}>{v}</div>
+              ))}
+            </div>
+            <div style={{display:'flex',gap:2}}>
+              {['◀','▶'].map(a=>(<div key={a} style={{width:24,height:24,borderRadius:4,border:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',justifyContent:'center',color:P.t2,fontSize:11,cursor:'pointer'}}>{a}</div>))}
+            </div>
+            <span style={{fontSize:11.5,fontWeight:600,color:P.t1,fontFamily:P.mono,whiteSpace:'nowrap'}}>15–21 Jun 2026</span>
+          </div>
+
+          {/* BÚSQUEDA GLOBAL */}
+          <div style={{flex:1,display:'flex',justifyContent:'center'}}>
+            <div style={{display:'flex',alignItems:'center',gap:9,background:P.bg3,border:`1px solid ${P.bdrHi}`,borderRadius:7,padding:'7px 14px',width:340,cursor:'text'}}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={P.t3} strokeWidth="1.8" strokeLinecap="round"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M11 11l3.5 3.5"/></svg>
+              <span style={{fontSize:12.5,color:P.t3,flex:1}}>Buscar vecino, DNI, n.º turno…</span>
+              <div style={{padding:'1px 7px',borderRadius:4,border:`1px solid ${P.bdr}`,fontSize:10,color:P.t3,fontFamily:P.mono}}>⌘K</div>
+            </div>
+          </div>
+
+          <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+            {[{n:'13',l:'Total',c:P.t2,bg:'rgba(200,220,240,0.07)'},{n:'9',l:'Agendados',c:P.blue,bg:P.blueDim},{n:'3',l:'Presentes',c:P.teal,bg:P.tealDim},{n:'1',l:'Ausentes',c:P.red,bg:P.redDim}].map(s=>(
+              <div key={s.l} style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'2px 8px',borderRadius:5,background:s.bg,minWidth:46}}>
+                <span style={{fontSize:15,fontWeight:800,color:s.c,lineHeight:1.1,fontFamily:P.mono}}>{s.n}</span>
+                <span style={{fontSize:8,color:s.c,opacity:.8,fontWeight:600}}>{s.l}</span>
+              </div>
+            ))}
+            <div style={{marginLeft:4,padding:'6px 14px',borderRadius:5,background:P.teal,color:P.bg0,fontSize:12,fontWeight:700,cursor:'pointer',flexShrink:0}}>+ Nueva Reserva</div>
+          </div>
+        </div>
+
+        {/* Area filter */}
+        <div style={{height:36,padding:'0 16px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <span style={{fontSize:9,color:P.t3,textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:700,flexShrink:0}}>Área</span>
+          {['Todas','Licencias de Conducir','Tribunal de Faltas'].map((a,i)=>(
+            <div key={a} style={{padding:'2px 11px',borderRadius:20,border:`1px solid ${i===0?P.tealMid:P.bdr}`,background:i===0?P.tealDim:'transparent',color:i===0?P.teal:P.t3,fontSize:11.5,cursor:'pointer',fontWeight:i===0?700:400}}>{a}</div>
+          ))}
+          <div style={{marginLeft:'auto',padding:'4px 10px',borderRadius:5,border:`1px solid ${P.bdr}`,fontSize:11.5,color:P.t2,cursor:'pointer'}}>Todos los operadores ▾</div>
+        </div>
+
+        {/* CALENDARIO */}
+        <div style={{flex:1,margin:'8px 16px 10px',border:`1px solid ${P.bdr}`,borderRadius:7,overflow:'hidden',display:'flex',flexDirection:'column',background:P.bg3}}>
+          <div style={{display:'flex',borderBottom:`1px solid ${P.bdr}`,flexShrink:0}}>
+            <div style={{width:46,flexShrink:0,borderRight:`1px solid ${P.bdr}`}}/>
+            {DAYS_DATA.map(day=>{
+              const dc=dayColor(day.status);
+              return(
+                <div key={day.d} style={{flex:1,padding:'5px 4px 4px',textAlign:'center',background:DAY_HDR[day.status]||'transparent',borderLeft:`1px solid ${P.bdr}`}}>
+                  <div style={{fontSize:9,color:dc,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{day.d}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:dc,lineHeight:1.05,fontFamily:P.mono}}>{day.dt}</div>
+                  {day.status==='blocked'
+                    ? <div style={{marginTop:2}}>
+                        <div style={{display:'inline-block',padding:'1px 5px',borderRadius:3,background:'rgba(75,168,248,0.16)',border:`1px solid rgba(75,168,248,0.28)`,fontSize:7.5,color:P.blue,fontWeight:800,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2}}>BLOQUEADO</div>
+                        <div style={{fontSize:8.5,color:P.blue,opacity:.75,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingLeft:2,paddingRight:2}}>{day.blockUser}</div>
+                        <div style={{fontSize:8,color:P.t3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingLeft:2,paddingRight:2}}>{day.blockReason}</div>
+                        {day.count>0&&<div style={{fontSize:7.5,color:P.t3,marginTop:1,opacity:.6}}>{day.count} agendados</div>}
+                      </div>
+                    : <>
+                        {day.lbl&&<div style={{fontSize:8.5,color:dc,opacity:.7,fontWeight:600}}>{day.lbl}</div>}
+                        {day.count>0&&<div style={{fontSize:8,color:dc,opacity:.55}}>{day.count} turnos</div>}
+                      </>
+                  }
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+            <div style={{width:46,flexShrink:0,borderRight:`1px solid ${P.bdr}`}}>
+              {HRS.map(h=>(<div key={h} style={{height:SH,display:'flex',alignItems:'flex-start',justifyContent:'flex-end',paddingRight:6,paddingTop:3,fontSize:9,color:P.t3,fontFamily:P.mono}}>{h.endsWith(':00')?h:''}</div>))}
+            </div>
+            {DAYS_DATA.map(day=>(
+              <div key={day.d} style={{flex:1,position:'relative',borderLeft:`1px solid ${P.bdr}`,background:DAY_BG[day.status]||'transparent'}}>
+                {HRS.map((h,i)=>(<div key={h} style={{position:'absolute',top:i*SH,left:0,right:0,height:1,background:h.endsWith(':00')?P.bdr:'rgba(30,52,80,0.32)'}}/>))}
+
+                {/* BLOQUEADO: rayas + marca de agua */}
+                {day.status==='blocked'&&<>
+                  <div style={{position:'absolute',inset:0,backgroundImage:'repeating-linear-gradient(-45deg,transparent,transparent 10px,rgba(75,168,248,0.055) 10px,rgba(75,168,248,0.055) 20px)',pointerEvents:'none',zIndex:0}}/>
+                  <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',overflow:'hidden',zIndex:0}}>
+                    <span style={{fontSize:14,fontWeight:800,color:'rgba(75,168,248,0.11)',letterSpacing:'0.28em',textTransform:'uppercase',transform:'rotate(-45deg)',fontFamily:P.font,userSelect:'none',whiteSpace:'nowrap'}}>BLOQUEADO</span>
+                  </div>
+                </>}
+
+                {(day.status==='holiday'||day.status==='closed')&&(
+                  <div style={{position:'absolute',inset:0,backgroundImage:'repeating-linear-gradient(-45deg,transparent,transparent 8px,rgba(245,104,104,0.04) 8px,rgba(245,104,104,0.04) 16px)',pointerEvents:'none'}}/>
+                )}
+
+                {/* CARDS: badge + operador */}
+                {day.appts.map(a=>{
+                  const c=APPT_C[a.c];
+                  return(
+                    <div key={a.t+a.n} style={{position:'absolute',top:tRow(a.t)*SH+2,left:3,right:3,height:SH-4,background:c.bg,borderLeft:`3px solid ${c.dot}`,borderRadius:5,padding:'3px 5px',display:'flex',flexDirection:'column',justifyContent:'center',overflow:'hidden',cursor:'pointer',boxShadow:`inset 0 0 0 1px ${c.ring}`,zIndex:1}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:1}}>
+                        <span style={{fontSize:9.5,fontWeight:500,color:c.tx,fontFamily:P.mono}}>{a.t}</span>
+                        <div style={{width:17,height:17,borderRadius:9,background:`${c.dot}22`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:c.tx,flexShrink:0}}>{a.op}</div>
+                      </div>
+                      <div style={{fontSize:11,fontWeight:700,color:P.t1,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.n}</div>
+                      <div style={{marginTop:2,padding:'1px 5px',borderRadius:3,background:`${c.dot}18`,fontSize:8.5,color:c.tx,fontWeight:600,width:'fit-content'}}>{a.svcS}</div>
+                    </div>
+                  );
+                })}
+
+                {/* TODAY: zona agregar */}
+                {day.status==='today'&&(
+                  <div style={{position:'absolute',bottom:8,left:4,right:4,height:30,borderRadius:5,border:`1px dashed ${P.tealMid}`,display:'flex',alignItems:'center',justifyContent:'center',gap:5,cursor:'pointer',color:P.teal,zIndex:1}}>
+                    <span style={{fontSize:16,lineHeight:1}}>+</span>
+                    <span style={{fontSize:10.5,fontWeight:600}}>Agregar turno</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   SCREEN 2 — PRESENCIAL · DRAWER
+   · Agenda de fondo (atenuada) · Drawer paso 2
+   · Selección de fecha + horario disponible
+══════════════════════════════════════════════════════ */
+function PresencialDrawer(){
+  const slots=['08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
+  const taken=['09:00','10:30','12:00'];
+  const sel='11:00';
+  return(
+    <div style={{width:'100%',height:'100%',display:'flex',fontFamily:P.font,overflow:'hidden',background:P.bg2,color:P.t1}}>
+      <Sidebar active="Presencial"/>
+
+      {/* FONDO: calendario fantasma */}
+      <div style={{flex:1,position:'relative',overflow:'hidden'}}>
+        <div style={{position:'absolute',top:0,left:0,right:0,height:54,borderBottom:`1px solid rgba(30,52,80,0.3)`,display:'flex',alignItems:'center',paddingLeft:14,gap:8,opacity:0.14}}>
+          <span style={{fontSize:14,fontWeight:700,color:P.t1}}>Agenda</span>
+          <span style={{fontSize:11,color:P.t2,fontFamily:P.mono}}>15–21 Jun 2026</span>
+        </div>
+        <div style={{position:'absolute',top:90,left:0,right:0,bottom:0,display:'flex',opacity:0.13}}>
+          <div style={{width:46,borderRight:`1px solid ${P.bdr}`}}/>
+          {DAYS_DATA.map(d=>(
+            <div key={d.d} style={{flex:1,borderLeft:`1px solid ${P.bdr}`}}>
+              <div style={{padding:'5px 0',textAlign:'center',borderBottom:`1px solid ${P.bdr}`,background:DAY_HDR[d.status]||'transparent'}}>
+                <div style={{fontSize:8,color:dayColor(d.status),fontWeight:700}}>{d.d}</div>
+                <div style={{fontSize:16,fontWeight:800,color:dayColor(d.status),fontFamily:P.mono}}>{d.dt}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {HRS.map((h,i)=><div key={h} style={{position:'absolute',top:136+i*SH,left:0,right:0,height:1,background:P.bdr,opacity:h.endsWith(':00')?0.13:0.06}}/>)}
+        <div style={{position:'absolute',inset:0,background:'rgba(6,13,24,0.78)'}}/>
+      </div>
+
+      {/* DRAWER */}
+      <div style={{width:560,borderLeft:`1px solid ${P.bdr}`,background:P.bg1,display:'flex',flexDirection:'column',flexShrink:0}}>
+        <div style={{padding:'16px 20px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div>
+            <div style={{fontSize:9,color:P.teal,textTransform:'uppercase',letterSpacing:'0.13em',fontWeight:700,marginBottom:3}}>Nueva Reserva</div>
+            <div style={{fontSize:18,fontWeight:800,color:P.t1}}>Presencial</div>
+          </div>
+          <div style={{width:28,height:28,borderRadius:14,border:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',justifyContent:'center',color:P.t2,fontSize:17,cursor:'pointer',lineHeight:1}}>×</div>
+        </div>
+
+        {/* Steps */}
+        <div style={{padding:'12px 20px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center'}}>
+          {[{n:1,l:'Vecino',done:true},{n:2,l:'Turno',act:true},{n:3,l:'Confirmar'}].map((st,i)=>(
+            <React.Fragment key={st.n}>
+              <div style={{display:'flex',alignItems:'center',gap:7}}>
+                <div style={{width:24,height:24,borderRadius:12,background:st.done?P.teal:st.act?P.blueDim:P.bdr,border:`1px solid ${st.done?P.teal:st.act?P.blue:P.bdr}`,display:'flex',alignItems:'center',justifyContent:'center',color:st.done?P.bg0:st.act?P.blue:P.t3,fontSize:11,fontWeight:700,flexShrink:0}}>
+                  {st.done?'✓':st.n}
+                </div>
+                <span style={{fontSize:12.5,fontWeight:st.act?700:400,color:st.act?P.t1:st.done?P.teal:P.t3}}>{st.l}</span>
+              </div>
+              {i<2&&<div style={{flex:1,height:1,background:P.bdr,margin:'0 10px'}}/>}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Vecino confirmado */}
+        <div style={{padding:'14px 20px',borderBottom:`1px solid ${P.bdr}`}}>
+          <div style={{fontSize:9,color:P.t3,textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:700,marginBottom:8}}>Vecino</div>
+          <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:P.tealDim,border:`1px solid ${P.tealMid}`,borderRadius:7}}>
+            <div style={{width:34,height:34,borderRadius:17,background:'rgba(45,212,160,0.18)',display:'flex',alignItems:'center',justifyContent:'center',color:P.teal,fontSize:14,fontWeight:700,flexShrink:0}}>R</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,color:P.t1}}>Rosa Fuentes</div>
+              <div style={{fontSize:11,color:P.t2,marginTop:1,fontFamily:P.mono}}>DNI 28.432.156 · rosa.f@email.com</div>
+            </div>
+            <span style={{fontSize:11,color:P.teal,fontWeight:700,flexShrink:0}}>✓ Confirmado</span>
+          </div>
+        </div>
+
+        {/* Turno */}
+        <div style={{flex:1,padding:'14px 20px',overflowY:'auto',display:'flex',flexDirection:'column',gap:14}}>
+          <div>
+            <div style={{fontSize:9,color:P.t3,textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:700,marginBottom:8}}>Servicio</div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:P.bg3,border:`1px solid ${P.blue}`,borderRadius:7,cursor:'pointer'}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:P.t1}}>Licencia de Conducir 1ra vez</div>
+                <div style={{fontSize:11,color:P.t2,marginTop:1}}>30 min · Área Licencias</div>
+              </div>
+              <span style={{color:P.t3,fontSize:14}}>▾</span>
+            </div>
+          </div>
+
+          <div>
+            <div style={{fontSize:9,color:P.t3,textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:700,marginBottom:8}}>Fecha</div>
+            <div style={{display:'flex',gap:6}}>
+              {[{d:'JUE',dt:'18',ok:false},{d:'VIE',dt:'19',ok:true,act:true},{d:'LUN',dt:'22',ok:true},{d:'MAR',dt:'23',ok:true}].map(({d,dt,ok,act})=>(
+                <div key={dt} style={{flex:1,padding:'8px 4px',textAlign:'center',borderRadius:7,border:`1px solid ${act?P.blue:P.bdr}`,background:act?P.blueDim:'transparent',cursor:ok?'pointer':'default',opacity:ok?1:0.3}}>
+                  <div style={{fontSize:9,color:act?P.blue:P.t3,fontWeight:700,textTransform:'uppercase'}}>{d}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:act?P.blue:P.t1,fontFamily:P.mono,lineHeight:1.1}}>{dt}</div>
+                  <div style={{fontSize:9,color:act?P.blue:P.t3,marginTop:1}}>{dt==='19'?'Hoy':'Jun'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{fontSize:9,color:P.t3,textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:700,marginBottom:8}}>Horarios disponibles · Vie 19 Jun</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
+              {slots.map(t=>{
+                const isTaken=taken.includes(t), isSel=t===sel;
+                return(
+                  <div key={t} style={{padding:'9px 4px',textAlign:'center',borderRadius:6,border:`1px solid ${isSel?P.teal:isTaken?P.bdr:P.bdrHi}`,background:isSel?P.tealDim:isTaken?'rgba(0,0,0,0.15)':'transparent',cursor:isTaken?'not-allowed':'pointer',opacity:isTaken?0.3:1}}>
+                    <div style={{fontSize:13.5,fontWeight:isSel?700:500,color:isSel?P.teal:isTaken?P.t3:P.t1,fontFamily:P.mono}}>{t}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div style={{padding:'12px 20px',borderTop:`1px solid ${P.bdr}`,display:'flex',gap:8}}>
+          <div style={{flex:1,padding:'10px',borderRadius:6,border:`1px solid ${P.bdr}`,textAlign:'center',fontSize:13,color:P.t2,cursor:'pointer',fontWeight:500}}>Cancelar</div>
+          <div style={{flex:2,padding:'10px',borderRadius:6,background:P.teal,textAlign:'center',fontSize:13,color:P.bg0,cursor:'pointer',fontWeight:700}}>Confirmar Turno →</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   SCREEN 3 — DASHBOARD ANALÍTICAS+
+   · KPIs grandes (DM Mono 38px)  · Heatmap 22 semanas
+══════════════════════════════════════════════════════ */
+function DashAnaliticas(){
+  const kpis=[
+    {l:'Total semana',    v:'13',     delta:'+8%',    up:true, color:P.t1,   spark:[7,10,9,13,11,13]},
+    {l:'Tasa asistencia', v:'84%',    delta:'+3%',    up:true, color:P.teal, spark:[72,78,80,81,82,84]},
+    {l:'Pendientes hoy',  v:'2',      delta:'−1',     up:true, color:P.amber,spark:[5,4,3,2,3,2]},
+    {l:'Prom. espera',    v:'18 min', delta:'−2 min', up:true, color:P.blue, spark:[24,22,21,20,19,18]},
+  ];
+  const donut=[{v:7,color:P.blue,l:'Agendados'},{v:3,color:P.teal,l:'Presentes'},{v:2,color:'#4fd4b2',l:'Atendidos'},{v:1,color:P.red,l:'Ausentes'}];
+  const bars=[{l:'LUN',v:2,hi:false},{l:'MAR',v:3,hi:false},{l:'MIÉ',v:3,hi:false},{l:'JUE',v:3,hi:false},{l:'VIE',v:2,hi:true}];
+  const months=[{l:'Ene',v:42},{l:'Feb',v:38},{l:'Mar',v:51},{l:'Abr',v:48},{l:'May',v:55},{l:'Jun',v:32}];
+  const mMax=55,mMin=32,mPH=78,mW=380;
+  const mPts=months.map((d,i)=>({x:(i/(months.length-1))*(mW-24)+12,y:4+(1-(d.v-mMin)/23)*(mPH-8)}));
+  const mPath=mPts.map((p,i)=>`${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const mArea=mPath+` L${mPts[5].x.toFixed(1)},${mPH} L${mPts[0].x.toFixed(1)},${mPH} Z`;
+
+  return(
+    <div style={{width:'100%',height:'100%',display:'flex',fontFamily:P.font,overflow:'hidden',background:P.bg2,color:P.t1}}>
+      <Sidebar active="Dashboard"/>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{height:54,padding:'0 24px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',gap:10,flexShrink:0,background:'rgba(0,0,0,0.18)'}}>
+          <span style={{fontSize:15,fontWeight:700,color:P.t1}}>Dashboard · Analíticas</span>
+          <div style={{marginLeft:'auto',display:'flex',gap:8}}>
+            {['Semana actual ▾','Exportar PDF'].map((b,i)=>(<div key={b} style={{padding:'5px 12px',borderRadius:5,border:`1px solid ${i===1?P.tealMid:P.bdr}`,background:i===1?P.tealDim:'transparent',fontSize:12,color:i===1?P.teal:P.t2,cursor:'pointer'}}>{b}</div>))}
+          </div>
+        </div>
+
+        <div style={{flex:1,padding:'14px 24px',overflowY:'auto',display:'flex',flexDirection:'column',gap:12}}>
+          {/* KPIs grandes */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+            {kpis.map(k=>(
+              <div key={k.l} style={{background:P.bg3,border:`1px solid ${P.bdr}`,borderRadius:7,padding:'16px 18px',display:'flex',flexDirection:'column',gap:8}}>
+                <div style={{fontSize:11,color:P.t2,fontWeight:600}}>{k.l}</div>
+                <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:6}}>
+                  <span style={{fontSize:38,fontWeight:800,color:k.color,lineHeight:1,fontFamily:P.mono,letterSpacing:'-0.02em'}}>{k.v}</span>
+                  <SparkLine data={k.spark} color={k.color}/>
+                </div>
+                <div style={{fontSize:11,color:k.up?P.teal:P.red,fontWeight:600}}>{k.delta} vs semana anterior</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Charts row 1 */}
+          <div style={{display:'grid',gridTemplateColumns:'1.8fr 1fr',gap:12}}>
+            <div style={{background:P.bg3,border:`1px solid ${P.bdr}`,borderRadius:7,padding:'16px'}}>
+              <div style={{fontSize:13,fontWeight:700,color:P.t1,marginBottom:12}}>Turnos por día · semana actual</div>
+              <BarChartSVG data={bars}/>
+            </div>
+            <div style={{background:P.bg3,border:`1px solid ${P.bdr}`,borderRadius:7,padding:'16px',display:'flex',gap:16,alignItems:'center'}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:P.t1,marginBottom:12}}>Estado</div>
+                <DonutChart data={donut} size={148}/>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {donut.map(d=>(<div key={d.l} style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:8,height:8,borderRadius:4,background:d.color,flexShrink:0}}/>
+                  <span style={{fontSize:12,color:P.t2,flex:1}}>{d.l}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:P.t1,fontFamily:P.mono}}>{d.v}</span>
+                </div>))}
+              </div>
+            </div>
+          </div>
+
+          {/* Charts row 2 */}
+          <div style={{display:'grid',gridTemplateColumns:'1.8fr 1fr',gap:12}}>
+            <div style={{background:P.bg3,border:`1px solid ${P.bdr}`,borderRadius:7,padding:'16px'}}>
+              <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:700,color:P.t1}}>Evolución mensual 2026</span>
+                <span style={{fontSize:11,color:P.t3}}>ene – jun</span>
+              </div>
+              <svg width="100%" height="104" viewBox={`0 0 ${mW} 104`} preserveAspectRatio="xMidYMid meet" style={{display:'block'}}>
+                <defs><linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={P.teal} stopOpacity="0.2"/><stop offset="100%" stopColor={P.teal} stopOpacity="0"/></linearGradient></defs>
+                {[0,1,2,3].map(i=>(<line key={i} x1={12} y1={4+i*(mPH/3)} x2={mW-12} y2={4+i*(mPH/3)} stroke={P.bdr} strokeWidth={1}/>))}
+                <path d={mArea} fill="url(#lg2)"/>
+                <path d={mPath} fill="none" stroke={P.teal} strokeWidth="2" strokeLinejoin="round"/>
+                {mPts.map((p,i)=>(<g key={i}>
+                  <circle cx={p.x} cy={p.y} r="3.5" fill={P.bg3} stroke={P.teal} strokeWidth="1.5"/>
+                  <text x={p.x} y={mPH+16} textAnchor="middle" fontSize="9.5" fill={P.t3} fontFamily={P.font}>{months[i].l}</text>
+                  <text x={p.x} y={p.y-8} textAnchor="middle" fontSize="10" fontWeight="700" fill={P.teal} fontFamily={P.mono}>{months[i].v}</text>
+                </g>))}
+              </svg>
+            </div>
+            <div style={{background:P.bg3,border:`1px solid ${P.bdr}`,borderRadius:7,padding:'16px'}}>
+              <div style={{fontSize:13,fontWeight:700,color:P.t1,marginBottom:14}}>Por área · semana</div>
+              {[{l:'Licencias',v:8,pct:62,c:P.blue},{l:'Tribunal',v:5,pct:38,c:P.teal}].map(a=>(
+                <div key={a.l} style={{marginBottom:14}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+                    <span style={{fontSize:12,color:P.t1,fontWeight:500}}>{a.l}</span>
+                    <span style={{fontSize:12,color:a.c,fontWeight:700,fontFamily:P.mono}}>{a.v} · {a.pct}%</span>
+                  </div>
+                  <div style={{height:6,borderRadius:3,background:P.bdr,overflow:'hidden'}}><div style={{height:'100%',width:`${a.pct}%`,borderRadius:3,background:a.c}}/></div>
+                </div>
+              ))}
+              <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${P.bdr}`}}>
+                <div style={{fontSize:9.5,color:P.t3,fontWeight:700,marginBottom:10,textTransform:'uppercase',letterSpacing:'0.07em'}}>Operadores activos</div>
+                {[{n:'Laura M.',t:9,c:P.teal},{n:'Sofía T.',t:4,c:P.blue},{n:'Carlos R.',t:0,c:P.t3}].map(o=>(
+                  <div key={o.n} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 0',borderBottom:`1px solid rgba(30,52,80,0.5)`}}>
+                    <span style={{fontSize:12,color:P.t1}}>{o.n}</span>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <div style={{height:4,width:Math.max(4,o.t*4),borderRadius:2,background:o.c}}/>
+                      <span style={{fontSize:12,fontWeight:700,color:o.c,minWidth:16,textAlign:'right',fontFamily:P.mono}}>{o.t}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* HEATMAP — la nueva adición */}
+          <HeatmapCalendar/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   SCREEN 4 — AUDITORÍA
+══════════════════════════════════════════════════════ */
+function DashAuditoria(){
+  const counts={create:3,edit:2,block:2,delete:1,system:1};
+  return(
+    <div style={{width:'100%',height:'100%',display:'flex',fontFamily:P.font,overflow:'hidden',background:P.bg2,color:P.t1}}>
+      <Sidebar active="Auditoría"/>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{height:54,padding:'0 24px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',gap:10,flexShrink:0,background:'rgba(0,0,0,0.18)'}}>
+          <span style={{fontSize:15,fontWeight:700,color:P.t1}}>Auditoría</span>
+          <div style={{marginLeft:'auto',display:'flex',gap:8}}>
+            {['Últimos 7 días ▾','Exportar CSV'].map(b=>(<div key={b} style={{padding:'5px 12px',borderRadius:5,border:`1px solid ${P.bdr}`,fontSize:12,color:P.t2,cursor:'pointer'}}>{b}</div>))}
+          </div>
+        </div>
+        <div style={{height:44,padding:'0 24px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <span style={{fontSize:9,color:P.t3,textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:700,flexShrink:0}}>Tipo</span>
+          {Object.keys(A_LABEL).map(k=>(
+            <div key={k} style={{padding:'2px 11px',borderRadius:20,border:`1px solid ${k==='create'?A_COLOR[k]+'55':P.bdr}`,background:k==='create'?`${A_COLOR[k]}18`:'transparent',fontSize:11.5,color:k==='create'?A_COLOR[k]:P.t3,cursor:'pointer',fontWeight:k==='create'?700:400}}>
+              {A_LABEL[k]} ({counts[k]})
+            </div>
+          ))}
+        </div>
+        <div style={{padding:'10px 24px',borderBottom:`1px solid ${P.bdr}`,display:'flex',gap:10,flexShrink:0}}>
+          {Object.keys(A_LABEL).map(k=>(
+            <div key={k} style={{flex:1,padding:'9px 12px',background:P.bg3,border:`1px solid ${P.bdr}`,borderRadius:6,borderTop:`2px solid ${A_COLOR[k]}`}}>
+              <div style={{fontSize:20,fontWeight:800,color:A_COLOR[k],fontFamily:P.mono,lineHeight:1}}>{counts[k]}</div>
+              <div style={{fontSize:9.5,color:P.t3,fontWeight:600,marginTop:2}}>{A_LABEL[k]}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{flex:1,overflowY:'auto'}}>
+          <div style={{display:'grid',gridTemplateColumns:'28px 1fr 160px 130px 90px',padding:'8px 24px',borderBottom:`1px solid ${P.bdr}`,background:'rgba(0,0,0,0.1)',position:'sticky',top:0}}>
+            {['','Acción','Operador','Fecha','Tipo'].map(h=>(<div key={h} style={{fontSize:9,color:P.t3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.09em'}}>{h}</div>))}
+          </div>
+          {AUDIT_DATA.map((a,i)=>(
+            <div key={i} style={{display:'grid',gridTemplateColumns:'28px 1fr 160px 130px 90px',padding:'10px 24px',borderBottom:`1px solid rgba(30,52,80,0.4)`,alignItems:'center'}}>
+              <div style={{width:8,height:8,borderRadius:4,background:A_COLOR[a.type]}}/>
+              <div>
+                <div style={{fontSize:12.5,color:P.t1,fontWeight:500,lineHeight:1.35}}>{a.action}</div>
+                <div style={{fontSize:10.5,color:P.t3,marginTop:1}}>{a.detail}</div>
+              </div>
+              <div style={{fontSize:12,color:P.t2}}>{a.actor}</div>
+              <div style={{fontSize:11.5,color:P.t3,fontFamily:P.mono}}>{a.time}</div>
+              <div style={{padding:'2px 8px',borderRadius:20,background:`${A_COLOR[a.type]}18`,border:`1px solid ${A_COLOR[a.type]}44`,fontSize:10,color:A_COLOR[a.type],fontWeight:700,width:'fit-content'}}>{A_LABEL[a.type]}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   SCREEN 5 — ABM USUARIOS
+══════════════════════════════════════════════════════ */
+function ABMUsuarios(){
+  return(
+    <div style={{width:'100%',height:'100%',display:'flex',fontFamily:P.font,overflow:'hidden',background:P.bg2,color:P.t1}}>
+      <Sidebar active="Usuarios"/>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{height:54,padding:'0 24px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',flexShrink:0,background:'rgba(0,0,0,0.18)'}}>
+          <span style={{fontSize:15,fontWeight:700,color:P.t1}}>Usuarios</span>
+          <div style={{marginLeft:'auto',padding:'6px 16px',borderRadius:5,background:P.teal,color:P.bg0,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>+ Nuevo Usuario</div>
+        </div>
+        <div style={{height:46,padding:'0 24px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+          <input placeholder="Buscar por nombre o email..." style={{flex:1,maxWidth:300,padding:'5px 12px',borderRadius:5,border:`1px solid ${P.bdr}`,background:P.bg3,color:P.t1,fontSize:12,fontFamily:P.font}}/>
+          {['Todos los roles','Todas las áreas'].map(s=>(<select key={s} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${P.bdr}`,background:P.bg3,color:P.t2,fontSize:12,fontFamily:P.font}}><option>{s}</option></select>))}
+          <div style={{marginLeft:'auto',fontSize:12,color:P.t3}}>{USERS_DATA.length} usuarios</div>
+        </div>
+        <div style={{flex:1,overflowY:'auto'}}>
+          <div style={{display:'grid',gridTemplateColumns:'48px 1fr 220px 110px 140px 100px 110px',padding:'8px 24px',borderBottom:`1px solid ${P.bdr}`,background:'rgba(0,0,0,0.1)',position:'sticky',top:0}}>
+            {['','Nombre','Email','Rol','Área','Estado','Acciones'].map(h=>(<div key={h} style={{fontSize:9,color:P.t3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.09em'}}>{h}</div>))}
+          </div>
+          {USERS_DATA.map((u,i)=>{
+            const rc=ROLE_COLOR[u.role]||P.blue;
+            return(
+              <div key={i} style={{display:'grid',gridTemplateColumns:'48px 1fr 220px 110px 140px 100px 110px',padding:'10px 24px',borderBottom:`1px solid rgba(30,52,80,0.4)`,alignItems:'center'}}>
+                <div style={{width:32,height:32,borderRadius:16,background:`${rc}22`,border:`1px solid ${rc}44`,display:'flex',alignItems:'center',justifyContent:'center',color:rc,fontSize:13,fontWeight:700}}>{u.i}</div>
+                <div style={{fontSize:13,fontWeight:600,color:P.t1}}>{u.name}</div>
+                <div style={{fontSize:12,color:P.t2}}>{u.email}</div>
+                <div style={{padding:'2px 9px',borderRadius:20,background:`${rc}18`,border:`1px solid ${rc}44`,fontSize:11,color:rc,fontWeight:700,width:'fit-content'}}>{u.role}</div>
+                <div style={{fontSize:12,color:P.t2}}>{u.area}</div>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <div style={{width:32,height:18,borderRadius:9,background:u.active?P.teal:P.bdr,position:'relative',cursor:'pointer',flexShrink:0}}>
+                    <div style={{position:'absolute',top:2,left:u.active?14:2,width:14,height:14,borderRadius:7,background:u.active?P.bg0:'#5a7a8a'}}/>
+                  </div>
+                  <span style={{fontSize:11,color:u.active?P.teal:P.t3,fontWeight:600}}>{u.active?'Activo':'Inactivo'}</span>
+                </div>
+                <div style={{display:'flex',gap:5}}>
+                  {['Editar','Baja'].map((b,bi)=>(<div key={b} style={{padding:'3px 9px',borderRadius:4,border:`1px solid ${bi===1?P.redMid:P.bdr}`,fontSize:11,color:bi===1?P.red:P.t3,cursor:'pointer'}}>{b}</div>))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{height:44,padding:'0 24px',borderTop:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+          <span style={{fontSize:12,color:P.t3}}>Mostrando 1 – {USERS_DATA.length} de {USERS_DATA.length} usuarios</span>
+          <div style={{display:'flex',gap:4}}>
+            {['‹','1','›'].map(p=>(<div key={p} style={{width:28,height:28,borderRadius:5,border:`1px solid ${p==='1'?P.tealMid:P.bdr}`,background:p==='1'?P.tealDim:'transparent',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:p==='1'?P.teal:P.t3,cursor:'pointer'}}>{p}</div>))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   SCREEN 6 — ABM SERVICIOS
+══════════════════════════════════════════════════════ */
+function ABMServicios(){
+  return(
+    <div style={{width:'100%',height:'100%',display:'flex',fontFamily:P.font,overflow:'hidden',background:P.bg2,color:P.t1}}>
+      <Sidebar active="Servicios"/>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{height:54,padding:'0 24px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',flexShrink:0,background:'rgba(0,0,0,0.18)'}}>
+          <span style={{fontSize:15,fontWeight:700,color:P.t1}}>Servicios</span>
+          <div style={{marginLeft:'auto',padding:'6px 16px',borderRadius:5,background:P.teal,color:P.bg0,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>+ Nuevo Servicio</div>
+        </div>
+        <div style={{height:46,padding:'0 24px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+          <input placeholder="Buscar servicio..." style={{flex:1,maxWidth:280,padding:'5px 12px',borderRadius:5,border:`1px solid ${P.bdr}`,background:P.bg3,color:P.t1,fontSize:12,fontFamily:P.font}}/>
+          <select style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${P.bdr}`,background:P.bg3,color:P.t2,fontSize:12,fontFamily:P.font}}><option>Todas las áreas</option></select>
+          <div style={{marginLeft:'auto',fontSize:12,color:P.t3}}>{SERVICES_DATA.length} servicios</div>
+        </div>
+        <div style={{flex:1,overflowY:'auto'}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 100px 76px 88px 175px 100px 110px',padding:'8px 24px',borderBottom:`1px solid ${P.bdr}`,background:'rgba(0,0,0,0.1)',position:'sticky',top:0}}>
+            {['Servicio','Área','Dur.','Cap.','Canales','Estado','Acciones'].map(h=>(<div key={h} style={{fontSize:9,color:P.t3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.09em'}}>{h}</div>))}
+          </div>
+          {SERVICES_DATA.map((s,i)=>{
+            const ac=s.area==='Licencias'?P.blue:P.teal,adim=s.area==='Licencias'?P.blueDim:P.tealDim,amid=s.area==='Licencias'?P.blueMid:P.tealMid;
+            return(
+              <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 100px 76px 88px 175px 100px 110px',padding:'12px 24px',borderBottom:`1px solid rgba(30,52,80,0.4)`,alignItems:'center'}}>
+                <div style={{fontSize:13,fontWeight:600,color:P.t1}}>{s.name}</div>
+                <div style={{padding:'2px 9px',borderRadius:20,background:adim,border:`1px solid ${amid}`,fontSize:11,color:ac,fontWeight:700,width:'fit-content'}}>{s.area}</div>
+                <div style={{fontSize:12,color:P.t2}}>{s.dur}</div>
+                <div style={{fontSize:12,color:P.t2}}>{s.cap}</div>
+                <div style={{fontSize:11.5,color:P.t2}}>{s.channels}</div>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <div style={{width:32,height:18,borderRadius:9,background:s.active?P.teal:P.bdr,position:'relative',cursor:'pointer',flexShrink:0}}>
+                    <div style={{position:'absolute',top:2,left:s.active?14:2,width:14,height:14,borderRadius:7,background:s.active?P.bg0:'#5a7a8a'}}/>
+                  </div>
+                  <span style={{fontSize:11,color:s.active?P.teal:P.t3,fontWeight:600}}>{s.active?'Activo':'Inactivo'}</span>
+                </div>
+                <div style={{display:'flex',gap:5}}>
+                  {['Editar','Baja'].map((b,bi)=>(<div key={b} style={{padding:'3px 9px',borderRadius:4,border:`1px solid ${bi===1?P.redMid:P.bdr}`,fontSize:11,color:bi===1?P.red:P.t3,cursor:'pointer'}}>{b}</div>))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   SCREEN 7 — VISTA OPERADOR
+   · Nav simplificada (solo Agenda + Presencial)
+   · Banner "en atención" persistente
+   · Vista día con cards horizontales anchas
+   · Panel "Cola de hoy" lateral
+══════════════════════════════════════════════════════ */
+function VistaOperador(){
+  const todayAppts = DAYS_DATA.find(d=>d.status==='today').appts;
+  return(
+    <div style={{width:'100%',height:'100%',display:'flex',fontFamily:P.font,overflow:'hidden',background:P.bg2,color:P.t1}}>
+      <Sidebar active="Agenda" role="op"/>
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+
+        {/* Topbar operador */}
+        <div style={{height:54,padding:'0 20px',borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',gap:10,flexShrink:0,background:'rgba(0,0,0,0.18)'}}>
+          <span style={{fontSize:15,fontWeight:700,color:P.t1}}>Mi Agenda</span>
+          <div style={{display:'flex',gap:1,padding:'2px',background:P.bg1,borderRadius:6,border:`1px solid ${P.bdr}`}}>
+            {['Día','Semana'].map(v=>(<div key={v} style={{padding:'3px 10px',borderRadius:4,background:v==='Día'?P.bg4:'transparent',color:v==='Día'?P.t1:P.t3,fontSize:11.5,cursor:'pointer',fontWeight:v==='Día'?600:400}}>{v}</div>))}
+          </div>
+          <span style={{fontSize:12,fontWeight:600,color:P.t1,fontFamily:P.mono}}>Viernes 19 Jun 2026</span>
+          <div style={{marginLeft:'auto',padding:'3px 12px',borderRadius:20,background:P.blueDim,border:`1px solid ${P.blueMid}`,fontSize:11.5,color:P.blue,fontWeight:600}}>2 turnos pendientes</div>
+        </div>
+
+        {/* BANNER EN ATENCIÓN */}
+        <div style={{height:46,padding:'0 20px',borderBottom:`1px solid rgba(45,212,160,0.2)`,background:'rgba(45,212,160,0.055)',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+          <div style={{width:7,height:7,borderRadius:4,background:P.teal,boxShadow:`0 0 8px ${P.teal}`,flexShrink:0}}/>
+          <span style={{fontSize:9,fontWeight:800,color:P.teal,textTransform:'uppercase',letterSpacing:'0.15em',flexShrink:0}}>EN ATENCIÓN</span>
+          <div style={{width:1,height:18,background:P.bdr,flexShrink:0}}/>
+          <span style={{fontSize:13.5,fontWeight:700,color:P.t1}}>Rosa Fuentes</span>
+          <span style={{fontSize:12.5,color:P.t2}}>· Licencia Conducir 1ra vez</span>
+          <div style={{width:1,height:18,background:P.bdr,flexShrink:0}}/>
+          <span style={{fontSize:11,color:P.t3,fontFamily:P.mono}}>Ingresó 09:02</span>
+          <span style={{fontSize:11,color:P.t3}}>· aprox. 30 min</span>
+          <div style={{marginLeft:'auto',padding:'6px 14px',borderRadius:5,background:P.tealDim,border:`1px solid ${P.tealMid}`,fontSize:12,color:P.teal,fontWeight:700,cursor:'pointer',flexShrink:0}}>Finalizar turno ✓</div>
+        </div>
+
+        {/* Body: Día + Cola */}
+        <div style={{flex:1,display:'flex',overflow:'hidden',padding:'8px 16px',gap:8}}>
+
+          {/* CALENDARIO DÍA */}
+          <div style={{flex:1,border:`1px solid ${P.bdr}`,borderRadius:7,overflow:'hidden',display:'flex',flexDirection:'column',background:P.bg3}}>
+            <div style={{height:54,borderBottom:`1px solid ${P.bdr}`,display:'flex',alignItems:'center',padding:'0 16px',background:'rgba(45,212,160,0.04)',flexShrink:0,gap:10}}>
+              <span style={{fontSize:9,color:P.teal,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.09em'}}>VIE</span>
+              <span style={{fontSize:26,fontWeight:800,color:P.teal,fontFamily:P.mono,lineHeight:1}}>19</span>
+              <span style={{fontSize:11,color:P.t3}}>Junio 2026</span>
+              <div style={{padding:'2px 10px',borderRadius:20,background:P.tealDim,border:`1px solid ${P.tealMid}`,fontSize:11,color:P.teal,fontWeight:700}}>Hoy</div>
+            </div>
+
+            <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+              <div style={{width:44,flexShrink:0,borderRight:`1px solid ${P.bdr}`}}>
+                {HRS.map(h=>(<div key={h} style={{height:SH,display:'flex',alignItems:'flex-start',justifyContent:'flex-end',paddingRight:6,paddingTop:3,fontSize:9,color:P.t3,fontFamily:P.mono}}>{h.endsWith(':00')?h:''}</div>))}
+              </div>
+              <div style={{flex:1,position:'relative',background:'rgba(45,212,160,0.015)'}}>
+                {HRS.map((h,i)=>(<div key={h} style={{position:'absolute',top:i*SH,left:0,right:0,height:1,background:h.endsWith(':00')?P.bdr:'rgba(30,52,80,0.3)'}}/>))}
+                {/* Línea "ahora" ~09:15 */}
+                <div style={{position:'absolute',top:107,left:0,right:0,height:1.5,background:P.teal,opacity:0.65,zIndex:4,pointerEvents:'none'}}/>
+                <div style={{position:'absolute',top:103,left:38,width:8,height:8,borderRadius:4,background:P.teal,zIndex:5,pointerEvents:'none'}}/>
+                {/* Cards anchas con layout horizontal */}
+                {todayAppts.map(a=>{
+                  const c=APPT_C[a.c];
+                  const dur=a.svcS==='TRI'?'45 min':'30 min';
+                  return(
+                    <div key={a.t} style={{position:'absolute',top:tRow(a.t)*SH+2,left:6,right:6,height:SH-4,background:c.bg,borderLeft:`3px solid ${c.dot}`,borderRadius:5,padding:'0 14px',display:'flex',alignItems:'center',gap:14,cursor:'pointer',boxShadow:`inset 0 0 0 1px ${c.ring}`,zIndex:1}}>
+                      <span style={{fontSize:12.5,fontWeight:500,color:c.tx,fontFamily:P.mono,flexShrink:0,width:44}}>{a.t}</span>
+                      <div style={{width:30,height:30,borderRadius:15,background:`${c.dot}22`,display:'flex',alignItems:'center',justifyContent:'center',color:c.tx,fontSize:11,fontWeight:700,flexShrink:0}}>{a.op}</div>
+                      <span style={{fontSize:15,fontWeight:700,color:P.t1,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.n}</span>
+                      <div style={{padding:'3px 10px',borderRadius:4,background:`${c.dot}18`,fontSize:11.5,color:c.tx,fontWeight:600,flexShrink:0}}>{a.svc}</div>
+                      <div style={{padding:'3px 10px',borderRadius:4,background:P.bg4,fontSize:11,color:P.t2,fontWeight:500,flexShrink:0}}>{dur}</div>
+                    </div>
+                  );
+                })}
+                <div style={{position:'absolute',bottom:10,left:6,right:6,height:32,borderRadius:5,border:`1px dashed ${P.tealMid}`,display:'flex',alignItems:'center',justifyContent:'center',gap:6,cursor:'pointer',color:P.teal,zIndex:1}}>
+                  <span style={{fontSize:16,lineHeight:1}}>+</span>
+                  <span style={{fontSize:11,fontWeight:600}}>Agregar turno presencial</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* COLA DE HOY */}
+          <div style={{width:220,border:`1px solid ${P.bdr}`,borderRadius:7,overflow:'hidden',background:P.bg1,display:'flex',flexDirection:'column',flexShrink:0}}>
+            <div style={{padding:'12px 14px',borderBottom:`1px solid ${P.bdr}`}}>
+              <div style={{fontSize:9,color:P.t3,textTransform:'uppercase',letterSpacing:'0.1em',fontWeight:700,marginBottom:4}}>Cola de hoy</div>
+              <div style={{fontSize:14,fontWeight:700,color:P.t1,fontFamily:P.mono}}>Vie 19 Jun</div>
+              <div style={{fontSize:11,color:P.t2,marginTop:2}}>2 turnos · 0 completados</div>
+            </div>
+
+            {/* Atendiendo */}
+            <div style={{padding:'12px 14px',borderBottom:`1px solid ${P.bdr}`,background:'rgba(45,212,160,0.05)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:7}}>
+                <div style={{width:6,height:6,borderRadius:3,background:P.teal,flexShrink:0}}/>
+                <span style={{fontSize:9,fontWeight:800,color:P.teal,textTransform:'uppercase',letterSpacing:'0.13em'}}>Atendiendo</span>
+              </div>
+              <div style={{fontSize:14,fontWeight:700,color:P.t1}}>Rosa Fuentes</div>
+              <div style={{fontSize:11,color:P.t2,marginTop:2,fontFamily:P.mono}}>09:00 · LIC · 30 min</div>
+              <div style={{display:'flex',gap:5,marginTop:9}}>
+                <div style={{flex:1,padding:'5px',borderRadius:4,border:`1px solid ${P.redMid}`,background:P.redDim,textAlign:'center',fontSize:10.5,color:P.red,fontWeight:600,cursor:'pointer'}}>Ausente</div>
+                <div style={{flex:2,padding:'5px',borderRadius:4,background:P.tealDim,border:`1px solid ${P.tealMid}`,textAlign:'center',fontSize:10.5,color:P.teal,fontWeight:700,cursor:'pointer'}}>Finalizar ✓</div>
+              </div>
+            </div>
+
+            {/* En espera */}
+            <div style={{padding:'12px 14px',borderBottom:`1px solid ${P.bdr}`}}>
+              <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:7}}>
+                <div style={{width:6,height:6,borderRadius:3,background:P.amber,flexShrink:0}}/>
+                <span style={{fontSize:9,fontWeight:800,color:P.amber,textTransform:'uppercase',letterSpacing:'0.13em'}}>En espera</span>
+              </div>
+              <div style={{fontSize:13.5,fontWeight:600,color:P.t1}}>Jorge Ibáñez</div>
+              <div style={{fontSize:11,color:P.t2,marginTop:2,fontFamily:P.mono}}>11:00 · TRI · 45 min</div>
+            </div>
+
+            <div style={{flex:1}}/>
+            <div style={{padding:'12px 14px',borderTop:`1px solid ${P.bdr}`}}>
+              <div style={{padding:'9px',borderRadius:6,background:P.bg4,border:`1px solid ${P.bdrHi}`,textAlign:'center',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                <span style={{fontSize:12,fontWeight:700,color:P.t1}}>Llamar siguiente →</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════ APP ══ */
+function App(){
+  return(
+    <DesignCanvas title="Sistema de Turnos · Dirección C+ — Enriquecido">
+      <DCSection id="agenda" title="Agenda">
+        <DCArtboard id="semana" label="Agenda Semana+ · Búsqueda global · Bloqueados · Cards enriquecidas · Zona agregar" width={1440} height={820}>
+          <AgendaSemana/>
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="presencial" title="Presencial">
+        <DCArtboard id="drawer" label="Nueva Reserva Presencial · Drawer — Paso 2: fecha + horarios disponibles" width={1440} height={820}>
+          <PresencialDrawer/>
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="dashboards" title="Dashboards">
+        <DCArtboard id="analiticas" label="Analíticas · KPIs grandes (DM Mono) · Heatmap 22 semanas" width={1440} height={1040}>
+          <DashAnaliticas/>
+        </DCArtboard>
+        <DCArtboard id="auditoria" label="Auditoría · Log de acciones con filtros y resumen" width={1440} height={820}>
+          <DashAuditoria/>
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="abm" title="Administración">
+        <DCArtboard id="usuarios" label="ABM Usuarios" width={1440} height={820}>
+          <ABMUsuarios/>
+        </DCArtboard>
+        <DCArtboard id="servicios" label="ABM Servicios" width={1440} height={820}>
+          <ABMServicios/>
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="roles" title="Vista por Rol">
+        <DCArtboard id="operador" label="Vista Operador · Día · Cola de hoy · Turno en curso" width={1440} height={820}>
+          <VistaOperador/>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
