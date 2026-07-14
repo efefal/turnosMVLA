@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Áreas — Panel MVLA</title>
+  <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
+  <link rel="stylesheet" href="/assets/design-tokens.css">
+  <style>
+    /* ══════════════════════════════════════════════════════════════
+       areas.html — estilos locales (design system C+)
+       Todos los colores vienen de design-tokens.css.
+    ══════════════════════════════════════════════════════════════ */
+
+    /* ── Layout shell ────────────────────────────────────────────── */
+    .app-shell    { display: flex; height: 100vh; overflow: hidden; }
+    .main-content { flex: 1; overflow-y: auto; background: var(--bg-2); }
+    .page-inner   { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+
+    /* ── Header de página ────────────────────────────────────────── */
+    .page-supertitle {
+      font-size: var(--text-xs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--teal);
+      margin-bottom: 0.2rem;
+    }
+    .page-title {
+      font-size: var(--text-xl);
+      font-weight: 800;
+      color: var(--text-1);
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Sidebar (idéntico al resto del panel) ───────────────────── */
+    .sidebar { width: var(--sidebar-width); background: var(--bg-1); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+    .sidebar-header { display: flex; align-items: center; gap: var(--gap-sm); padding: 14px 12px 10px; border-bottom: 1px solid var(--border); }
+    .sidebar-logo { width: 36px; height: 36px; border-radius: var(--radius-xl); background: var(--teal-dim); color: var(--teal); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0; letter-spacing: 0.04em; }
+    .sidebar-muni { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); }
+    .sidebar-ciudad { font-size: 12.5px; font-weight: 700; color: var(--text-1); }
+    .sidebar-user-card { margin: 8px; padding: 7px 9px; border-radius: var(--radius-md); display: flex; align-items: center; gap: var(--gap-sm); }
+    .sidebar-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: var(--text-xs); font-weight: 700; flex-shrink: 0; }
+    .nav-section-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); padding: 10px 12px 4px; }
+    .sidebar-nav { padding: 0 6px; flex: 1; }
+    .sidebar-footer { border-top: 1px solid var(--border); padding: 10px 12px; }
+    .btn-logout-sidebar { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-2); padding: 5px 10px; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer; width: 100%; transition: var(--transition-fast); }
+    .btn-logout-sidebar:hover { background: var(--bg-4); border-color: var(--border-hi); color: var(--text-1); }
+
+    /* ── Card ────────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .card-titulo {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      font-family: var(--font-ui);
+      font-weight: 700;
+      color: var(--text-1);
+      font-size: var(--text-base);
+    }
+
+    /* ── Botones locales ─────────────────────────────────────────── */
+    /* .btn, .btn-primary, .btn-secondary → vienen de design-tokens.css */
+    /* .btn-ghost y .btn-warning se mantienen porque el JS los genera  */
+    /* en template strings de renderAreas() y no se pueden renombrar */
+    .btn-ghost   { background: var(--bg-4); color: var(--text-2); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--border-hi); color: var(--text-1); }
+    .btn-warning { background: var(--amber); color: var(--bg-0); border: none; }
+    .btn-sm      { padding: 0.25rem 0.6rem; font-size: var(--text-sm); }
+
+    /* ── Alertas ─────────────────────────────────────────────────── */
+    .alerta { padding: 0.7rem 1rem; border-radius: var(--radius-md); font-size: var(--text-base); margin-bottom: 1rem; display: none; }
+    .alerta.visible { display: block; }
+    .alerta-error { background: var(--red-dim);  border: 1px solid var(--red-mid);  color: var(--red);  }
+    .alerta-ok    { background: var(--teal-dim); border: 1px solid var(--teal-mid); color: var(--teal); }
+
+    /* ── Tabla ───────────────────────────────────────────────────── */
+    .tabla-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: var(--bg-1);
+      color: var(--text-3);
+      font-family: var(--font-ui);
+      font-weight: 600;
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      /* Padding horizontal en px fijo (no rem): mismo criterio que
+         servicios-admin.html y usuarios.html, para que no escale junto
+         con --text-base y desborde la tabla. */
+      padding: 9px 9px;
+      border-bottom: 2px solid var(--border);
+      text-align: left;
+      white-space: nowrap;
+    }
+    td { padding: 10px 9px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: var(--text-base); color: var(--text-1); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-4); }
+    .td-acciones     { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .td-nombre       { font-weight: 500; }
+    .td-descripcion  { max-width: 220px; font-size: var(--text-sm); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Badges de estado ────────────────────────────────────────── */
+    /* .role-badge y .role-* vienen de design-tokens.css */
+    .badge         { display: inline-block; padding: 0.18rem 0.55rem; border-radius: 99px; font-size: var(--text-xs); font-weight: 600; }
+    .badge-activo  { background: var(--teal-dim); color: var(--teal); }
+    .badge-inactivo{ background: var(--red-dim);  color: var(--red);  }
+
+    /* ── Utilidades ──────────────────────────────────────────────── */
+    .req { color: var(--red); }
+
+    /* ── Formulario ──────────────────────────────────────────────── */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    @media (max-width: 680px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-grupo { display: flex; flex-direction: column; gap: 0.3rem; }
+    .form-grupo.full { grid-column: 1 / -1; }
+    .form-grupo label { font-size: var(--text-sm); font-weight: 500; color: var(--text-2); }
+    .form-grupo input,
+    .form-grupo select { padding: 0.4rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: var(--text-base); font-family: var(--font-ui); background: var(--bg-4); color: var(--text-1); }
+    .form-grupo input:focus, .form-grupo select:focus { outline: none; border-color: var(--border-hi); box-shadow: 0 0 0 2px var(--teal-dim); }
+    .form-pie  { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+    /* ── Modal ───────────────────────────────────────────────────── */
+    .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-fondo.abierto { display: flex; }
+    .modal-caja { background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; max-width: 560px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.55); max-height: 90vh; overflow-y: auto; }
+    .modal-caja h3 { font-family: var(--font-ui); font-size: var(--text-xl); color: var(--text-1); margin-bottom: 1rem; font-weight: 800; }
+    .modal-footer { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+
+    /* ── Misc ────────────────────────────────────────────────────── */
+    .cargando { text-align: center; color: var(--text-3); padding: 3rem; font-style: italic; }
+    .vacio    { text-align: center; color: var(--text-3); padding: 3rem; }
+  </style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <div class="sidebar-header">
+      <div class="sidebar-logo"><img src="/assets/escudo_vla_web_color.png" alt="Municipalidad de Villa La Angostura" style="width: 100%; height: 100%; object-fit: contain;"></div>
+      <div>
+        <div class="sidebar-muni">Municipalidad</div>
+        <div class="sidebar-ciudad">Villa La Angostura</div>
+      </div>
+    </div>
+
+    <div class="sidebar-user-card">
+      <div class="sidebar-avatar" id="sidebar-avatar"></div>
+      <div>
+        <span id="nav-nombre"></span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Calendario</div>
+      <a href="/panel/agenda.html"     class="nav-item">Agenda</a>
+      <a href="/panel/presencial.html" class="nav-item">Presencial</a>
+      <a href="/panel/bloqueos.html"   class="nav-item">Bloqueos</a>
+
+      <!-- Reportes — ocultos por defecto; init() los muestra según rol -->
+      <div class="nav-section-label" id="label-reportes" style="display:none">Reportes</div>
+      <a href="/panel/auditoria.html" class="nav-item" id="nav-auditoria" style="display:none">Auditoría</a>
+      <a href="/panel/dashboard.html" class="nav-item" id="nav-dashboard" style="display:none">Dashboard</a>
+
+      <!-- Admin — Áreas es la página activa; Usuarios/Servicios se muestran según rol -->
+      <div class="nav-section-label" id="label-admin" style="display:none">Admin.</div>
+      <a href="/panel/usuarios.html"        class="nav-item" id="nav-usuarios"  style="display:none">Usuarios</a>
+      <a href="/panel/servicios-admin.html" class="nav-item" id="nav-servicios" style="display:none">Servicios</a>
+      <a href="/panel/areas.html"           class="nav-item active">Áreas</a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-logout-sidebar" onclick="cerrarSesion()">Salir</button>
+    </div>
+
+  </aside>
+
+  <!-- ── Contenido principal ─────────────────────────────────────────── -->
+  <main class="main-content">
+    <div class="page-inner">
+
+      <div class="page-header">
+        <p class="page-supertitle">Panel de gestión</p>
+        <h1 class="page-title">Gestión de áreas</h1>
+      </div>
+
+      <!-- Lista de áreas -->
+      <div class="card">
+        <div class="card-titulo">
+          <span>Áreas del municipio</span>
+          <button class="btn btn-secondary btn-sm" onclick="cargarAreas()">↻ Actualizar</button>
+        </div>
+
+        <div class="alerta alerta-error" id="error-lista"></div>
+        <div class="alerta alerta-ok"    id="ok-lista"></div>
+        <div class="tabla-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Servicios activos</th>
+                <th>Usuarios asignados</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-areas">
+              <tr><td colspan="6" class="cargando">Cargando áreas...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Formulario nueva área -->
+      <div class="card">
+        <div class="card-titulo">Nueva área</div>
+        <div class="alerta alerta-error" id="error-form"></div>
+        <div class="form-grid">
+          <div class="form-grupo">
+            <label for="nuevo-nombre">Nombre <span class="req">*</span></label>
+            <input type="text" id="nuevo-nombre" placeholder="Ej: Tránsito y Habilitaciones">
+          </div>
+          <div class="form-grupo full">
+            <label for="nuevo-descripcion">Descripción (opcional)</label>
+            <input type="text" id="nuevo-descripcion" placeholder="Ej: Gestión de habilitaciones comerciales">
+          </div>
+        </div>
+        <div class="form-pie">
+          <button class="btn btn-primary" onclick="crearArea()">Crear área</button>
+        </div>
+      </div>
+
+    </div><!-- .page-inner -->
+  </main>
+
+</div><!-- .app-shell -->
+
+<!-- Modal de edición -->
+<div class="modal-fondo" id="modal-fondo">
+  <div class="modal-caja">
+    <h3 id="modal-titulo">Editar área</h3>
+    <div class="alerta alerta-error" id="error-modal"></div>
+    <div class="form-grid">
+      <div class="form-grupo">
+        <label for="edit-nombre">Nombre</label>
+        <input type="text" id="edit-nombre">
+      </div>
+      <div class="form-grupo">
+        <label for="edit-activo">Estado</label>
+        <select id="edit-activo">
+          <option value="1">Activo</option>
+          <option value="0">Inactivo</option>
+        </select>
+      </div>
+      <div class="form-grupo full">
+        <label for="edit-descripcion">Descripción</label>
+        <input type="text" id="edit-descripcion">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarEdicion()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Auth ──────────────────────────────────────────────────────────────────
+function getToken() {
+  const t = sessionStorage.getItem('panel_token');
+  if (!t) { window.location.href = '/panel/login.html'; return null; }
+  return t;
+}
+function getUsuario() { return JSON.parse(sessionStorage.getItem('panel_usuario') || '{}'); }
+async function apiFetch(url, opts = {}) {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers },
+  });
+  if (res.status === 401) { sessionStorage.clear(); window.location.href = '/panel/login.html'; return null; }
+  return res;
+}
+async function cerrarSesion() {
+  try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
+  sessionStorage.clear(); window.location.href = '/panel/login.html';
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function rolBadgeHTML(rol) {
+  const cfg = {
+    operador:  { cls: 'role-operador',  label: 'Operador'     },
+    encargado: { cls: 'role-encargado', label: 'Encargado'    },
+    sistemas:  { cls: 'role-sistemas',  label: 'Sistemas'     },
+    directivo: { cls: 'role-directivo', label: 'Solo lectura' },
+  };
+  const { cls, label } = cfg[rol] || { cls: 'role-admin', label: rol };
+  return `<span class="role-badge ${cls}">${label}</span>`;
+}
+
+function mostrarAlerta(idErr, idOk, tipo, msg) {
+  const errEl = document.getElementById(idErr);
+  const okEl  = idOk ? document.getElementById(idOk) : null;
+  if (errEl) errEl.classList.remove('visible');
+  if (okEl)  okEl.classList.remove('visible');
+  if (!msg) return;
+  if (tipo === 'error') { if (errEl) { errEl.textContent = msg; errEl.classList.add('visible'); } }
+  else { if (okEl) { okEl.textContent = msg; okEl.classList.add('visible'); setTimeout(() => okEl.classList.remove('visible'), 4000); } }
+}
+
+function mostrarAlertaModal(tipo, msg) {
+  const el = document.getElementById('error-modal');
+  if (msg && tipo === 'error') { el.textContent = msg; el.classList.add('visible'); }
+  else { el.classList.remove('visible'); }
+}
+
+// ─── Estado de edición ─────────────────────────────────────────────────────
+let idEditando = null;
+
+// ─── Renderizar tabla ──────────────────────────────────────────────────────
+function renderAreas(areas) {
+  if (!areas.length) {
+    document.getElementById('tbody-areas').innerHTML =
+      '<tr><td colspan="6" class="vacio">No hay áreas creadas.</td></tr>';
+    return;
+  }
+  document.getElementById('tbody-areas').innerHTML = areas.map(a => `
+    <tr>
+      <td class="td-nombre">${esc(a.nombre)}</td>
+      <td class="td-descripcion" title="${esc(a.descripcion || '')}">${a.descripcion ? esc(a.descripcion) : '<span class="text-muted">Sin descripción</span>'}</td>
+      <td>${a.servicios_activos}</td>
+      <td>${a.usuarios_asignados}</td>
+      <td><span class="badge ${a.activo ? 'badge-activo' : 'badge-inactivo'}">${a.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="td-acciones">
+        <button class="btn btn-ghost btn-sm"
+                onclick="abrirModal(${a.id}, '${esc(a.nombre)}', \`${(a.descripcion || '').replace(/`/g, '\\`')}\`, ${a.activo ? 1 : 0})">
+          Editar
+        </button>
+        <button class="btn btn-sm ${a.activo ? 'btn-warning' : 'btn-ghost'}"
+                onclick="toggleActivo(${a.id}, ${a.activo ? 0 : 1}, ${a.servicios_activos}, ${a.usuarios_asignados}, \`${esc(a.nombre).replace(/`/g, '\\`')}\`)">
+          ${a.activo ? 'Desactivar' : 'Activar'}
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ─── Cargar áreas ──────────────────────────────────────────────────────────
+async function cargarAreas() {
+  mostrarAlerta('error-lista', 'ok-lista', null, '');
+  document.getElementById('tbody-areas').innerHTML =
+    '<tr><td colspan="6" class="cargando">Cargando...</td></tr>';
+
+  const res = await apiFetch('/panel/areas/admin');
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) {
+    mostrarAlerta('error-lista', 'ok-lista', 'error', data.error || 'Error al cargar las áreas.');
+    return;
+  }
+
+  renderAreas(data);
+}
+
+// ─── Crear área ────────────────────────────────────────────────────────────
+async function crearArea() {
+  mostrarAlerta('error-form', null, null, '');
+
+  const nombre      = document.getElementById('nuevo-nombre').value.trim();
+  const descripcion = document.getElementById('nuevo-descripcion').value.trim();
+
+  if (!nombre) {
+    mostrarAlerta('error-form', null, 'error', 'El nombre es obligatorio.');
+    return;
+  }
+
+  const res = await apiFetch('/panel/areas', {
+    method: 'POST',
+    body: JSON.stringify({ nombre, descripcion: descripcion || null }),
+  });
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) {
+    mostrarAlerta('error-form', null, 'error', data.error || 'Error al crear el área.');
+    return;
+  }
+
+  document.getElementById('nuevo-nombre').value       = '';
+  document.getElementById('nuevo-descripcion').value  = '';
+
+  mostrarAlerta('error-lista', 'ok-lista', 'ok', 'Área creada correctamente.');
+  cargarAreas();
+}
+
+// ─── Modal de edición ──────────────────────────────────────────────────────
+function abrirModal(id, nombre, descripcion, activo) {
+  idEditando = id;
+  document.getElementById('edit-nombre').value      = nombre;
+  document.getElementById('edit-descripcion').value = descripcion;
+  document.getElementById('edit-activo').value      = activo;
+  mostrarAlertaModal(null, '');
+  document.getElementById('modal-fondo').classList.add('abierto');
+}
+
+function cerrarModal() {
+  document.getElementById('modal-fondo').classList.remove('abierto');
+  idEditando = null;
+}
+
+async function guardarEdicion() {
+  if (!idEditando) return;
+  mostrarAlertaModal(null, '');
+
+  const nombre      = document.getElementById('edit-nombre').value.trim();
+  const descripcion = document.getElementById('edit-descripcion').value.trim();
+  const activo      = document.getElementById('edit-activo').value === '1';
+
+  if (!nombre) { mostrarAlertaModal('error', 'El nombre no puede estar vacío.'); return; }
+
+  const res = await apiFetch(`/panel/areas/${idEditando}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ nombre, descripcion: descripcion || null, activo }),
+  });
+  if (!res) return;
+  const data = await res.json();
+
+  if (!res.ok) { mostrarAlertaModal('error', data.error || 'Error al guardar.'); return; }
+
+  cerrarModal();
+  mostrarAlerta('error-lista', 'ok-lista', 'ok', 'Área actualizada correctamente.');
+  cargarAreas();
+}
+
+// ─── Activar / Desactivar directo desde la tabla ──────────────────────────
+// Al desactivar un área que todavía tiene servicios activos y/o usuarios
+// asignados, se avisa con confirm() antes de aplicar el cambio (no bloquea):
+// desactivar el área no oculta esos servicios del bot/web automáticamente
+// (motor.js filtra por servicios.activo, no por areas.activo), así que
+// conviene que quien desactiva sepa qué sigue expuesto.
+async function toggleActivo(id, nuevoActivo, serviciosActivos, usuariosAsignados, nombre) {
+  if (nuevoActivo === 0) {
+    const partes = [];
+    if (serviciosActivos > 0) {
+      const plural = serviciosActivos !== 1;
+      partes.push(`${serviciosActivos} servicio${plural ? 's' : ''} activo${plural ? 's' : ''} que ${plural ? 'seguirán siendo reservables' : 'seguirá siendo reservable'}`);
+    }
+    if (usuariosAsignados > 0) {
+      partes.push(`${usuariosAsignados} usuario${usuariosAsignados === 1 ? '' : 's'} con este rol asignado`);
+    }
+    if (partes.length) {
+      const detalle   = partes.join(', y ');
+      const confirmar = confirm(`¿Desactivar "${nombre}"? Tiene ${detalle} — desactivalos manualmente si querés ocultar los servicios del bot y la web.`);
+      if (!confirmar) return;
+    }
+  }
+
+  const res = await apiFetch(`/panel/areas/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ activo: nuevoActivo === 1 }),
+  });
+  if (!res) return;
+  const data = await res.json();
+  if (!res.ok) {
+    mostrarAlerta('error-lista', 'ok-lista', 'error', data.error || 'No se pudo cambiar el estado.');
+    return;
+  }
+  mostrarAlerta('error-lista', 'ok-lista', 'ok',
+    nuevoActivo ? 'Área activada.' : 'Área desactivada.');
+  cargarAreas();
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────
+(async function init() {
+  const token = getToken();
+  if (!token) return;
+
+  const usuario = getUsuario();
+
+  // Áreas es exclusivo del rol sistemas — a diferencia de usuarios/servicios,
+  // ni encargado ni directivo tienen acceso (ni siquiera de solo lectura).
+  if (usuario.rol !== 'sistemas') {
+    window.location.href = '/panel/agenda.html';
+    return;
+  }
+
+  const nombreEl = document.getElementById('nav-nombre');
+  nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
+
+  // Sidebar avatar: iniciales. Como esta página es exclusiva de sistemas,
+  // el color siempre es el de ese rol (no hace falta el mapa de 4 roles).
+  const avatarEl = document.getElementById('sidebar-avatar');
+  if (avatarEl) {
+    const partes    = (usuario.nombre || '').trim().split(/\s+/);
+    const iniciales = partes.slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '?';
+    avatarEl.textContent      = iniciales;
+    avatarEl.style.background = 'var(--amber-mid)';
+    avatarEl.style.color      = 'var(--amber)';
+  }
+
+  // Labels de sección del sidebar
+  const lRep = document.getElementById('label-reportes');
+  if (lRep) lRep.style.display = '';
+  const lAdm = document.getElementById('label-admin');
+  if (lAdm) lAdm.style.display = '';
+
+  ['nav-auditoria', 'nav-dashboard', 'nav-usuarios', 'nav-servicios'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = '';
+  });
+
+  document.getElementById('modal-fondo').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-fondo')) cerrarModal();
+  });
+
+  await cargarAreas();
+})();
+</script>
+</body>
+</html>
