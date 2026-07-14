@@ -484,7 +484,12 @@ reiniciar el bot. No requiere cambios en el código.
       en las 7 páginas del panel que tienen sidebar/topbar (agenda,
       presencial, bloqueos, dashboard, auditoria, usuarios,
       servicios-admin), no exclusivamente en agenda.html
-- [ ] ABM de áreas en el panel (rol sistemas) — no implementado
+- [x] ABM de áreas en el panel (rol sistemas) — implementado
+      (`public/panel/areas.html` + endpoints `GET /panel/areas/admin`,
+      `POST /panel/areas`, `PATCH /panel/areas/:id` en `routes/panel.js`).
+      Link "Áreas" agregado al sidebar de las 7 páginas existentes,
+      visible solo para rol sistemas. Sin DELETE real (soft-delete via
+      `activo`, mismo patrón que servicios/usuarios).
 - [ ] Vista de detalle de turno con información completa del vecino +
       acciones de comunicación (WhatsApp/email) — no implementado
 - [ ] Dark/Light mode toggle en el panel — no implementado (el sistema
