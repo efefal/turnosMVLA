@@ -362,6 +362,7 @@
       <div class="nav-section-label" id="label-admin" style="display:none">Admin.</div>
       <a href="/panel/usuarios.html"        class="nav-item" id="nav-usuarios" style="display:none">Usuarios</a>
       <a href="/panel/servicios-admin.html" class="nav-item" id="nav-servicios" style="display:none">Servicios</a>
+      <a href="/panel/areas.html"           class="nav-item" id="nav-areas" style="display:none">Áreas</a>
     </nav>
 
     <div class="sidebar-footer">
@@ -899,6 +900,12 @@ async function crearBloqueo() {
     if (lRep) lRep.style.display = '';
     const lAdm = document.getElementById('label-admin');
     if (lAdm) lAdm.style.display = '';
+  }
+
+  // Áreas: exclusivo rol sistemas
+  if (usuario.rol === 'sistemas') {
+    const elArea = document.getElementById('nav-areas');
+    if (elArea) elArea.style.display = '';
   }
 
   // Directivo = solo lectura, no puede crear bloqueos
