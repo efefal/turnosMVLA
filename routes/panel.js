@@ -2357,4 +2357,103 @@ router.get('/areas', async (req, res) => {
 });
 
 
+// =============================================================================
+// N5 — ABM DE ÁREAS (exclusivo rol sistemas)
+// =============================================================================
+
+// GET /panel/areas/admin — lista TODAS las áreas (activas e inactivas) con
+// conteos de servicios activos y usuarios asignados, para el ABM.
+// Distinto del GET /panel/areas de arriba (usado por los chips B9 de otras
+// pantallas): ese solo devuelve {id, nombre} de áreas activas y no se toca.
+router.get('/areas/admin', async (req, res) => {
+  if (!esSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol sistemas.' });
+  }
+
+  try {
+    const [areas] = await pool.query(`
+      SELECT
+        a.id, a.nombre, a.descripcion, a.activo, a.created_at,
+        (SELECT COUNT(*) FROM servicios s WHERE s.area_id = a.id AND s.activo = TRUE) AS servicios_activos,
+        (SELECT COUNT(*) FROM usuario_areas ua WHERE ua.area_id = a.id) AS usuarios_asignados
+      FROM areas a
+      ORDER BY a.nombre ASC
+    `);
+    res.json(areas);
+  } catch (err) {
+    logger.error('[panel] Error al obtener áreas (admin):', err);
+    res.status(500).json({ error: 'No se pudieron obtener las áreas.' });
+  }
+});
+
+
+// POST /panel/areas — crear área nueva
+router.post('/areas', async (req, res) => {
+  if (!esSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol sistemas.' });
+  }
+
+  const { nombre, descripcion } = req.body;
+
+  if (!nombre) {
+    return res.status(400).json({ error: 'El nombre es obligatorio.' });
+  }
+
+  try {
+    const [result] = await pool.query(
+      'INSERT INTO areas (nombre, descripcion) VALUES (?, ?)',
+      [nombre.trim(), descripcion?.trim() || null]
+    );
+
+    await auditar(req.usuario.id, 'area', result.insertId, 'crear',
+      { nombre, descripcion, creado_por: req.usuario.nombre }, req.ip);
+
+    logger.info(`[panel] Área ${result.insertId} (${nombre}) creada por ${req.usuario.nombre}`);
+    res.status(201).json({ ok: true, id: result.insertId });
+  } catch (err) {
+    logger.error('[panel] Error al crear área:', err);
+    res.status(500).json({ error: 'No se pudo crear el área.' });
+  }
+});
+
+
+// PATCH /panel/areas/:id — editar nombre, descripción y/o estado activo/inactivo
+router.patch('/areas/:id', async (req, res) => {
+  if (!esSistemas(req)) {
+    return res.status(403).json({ error: 'Sin permiso. Se requiere rol sistemas.' });
+  }
+
+  const id = parseInt(req.params.id, 10);
+  const { nombre, descripcion, activo } = req.body;
+
+  if (nombre === undefined && descripcion === undefined && activo === undefined) {
+    return res.status(400).json({ error: 'Se requiere al menos un campo para actualizar.' });
+  }
+
+  try {
+    const [rows] = await pool.query('SELECT id FROM areas WHERE id = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Área no encontrada.' });
+    }
+
+    const sets    = [];
+    const valores = [];
+    if (nombre !== undefined)      { sets.push('nombre = ?');      valores.push(nombre.trim()); }
+    if (descripcion !== undefined) { sets.push('descripcion = ?'); valores.push(descripcion?.trim() || null); }
+    if (activo !== undefined)      { sets.push('activo = ?');      valores.push(activo ? 1 : 0); }
+    valores.push(id);
+
+    await pool.query(`UPDATE areas SET ${sets.join(', ')} WHERE id = ?`, valores);
+
+    await auditar(req.usuario.id, 'area', id, 'modificar',
+      { nombre, descripcion, activo, modificado_por: req.usuario.nombre }, req.ip);
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error('[panel] Error al editar área:', err);
+    res.status(500).json({ error: 'No se pudo modificar el área.' });
+  }
+});
+
+
 module.exports = router;
