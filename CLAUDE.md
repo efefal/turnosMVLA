@@ -123,6 +123,14 @@ falta, agregarla ahí primero.
 `panel_token`, `panel_usuario`. Flag `debe_cambiar_clave` fuerza
 redirección a `cambiar-clave.html` en el primer login.
 
+**Excepción intencional — `localStorage`:** el toggle de dark/light
+mode (ver sección de próximos pasos completados) usa
+`localStorage.panel_tema` (`'light'` o `'dark'`). Es el único uso de
+`localStorage` en el panel, y es intencional: a diferencia del JWT,
+el tema es una preferencia de usuario, no un dato de sesión — tiene
+que sobrevivir al cierre del navegador en vez de expirar con él. No
+es un error ni una inconsistencia con la regla de arriba.
+
 **Roles:** `operador`, `encargado`, `directivo`, `sistemas` (máximo
 privilegio). El rol NO está en la tabla `usuarios` — está en la tabla
 `usuario_areas` (un usuario puede tener distinto rol en distintas
@@ -492,8 +500,17 @@ reiniciar el bot. No requiere cambios en el código.
       `activo`, mismo patrón que servicios/usuarios).
 - [ ] Vista de detalle de turno con información completa del vecino +
       acciones de comunicación (WhatsApp/email) — no implementado
-- [ ] Dark/Light mode toggle en el panel — no implementado (el sistema
-      de tokens ya está preparado para esto)
+- [x] Dark/Light mode toggle en el panel — implementado en las 10
+      páginas (`data-theme="light"` en `<html>`, paleta completa en
+      `:root[data-theme="light"]` de `design-tokens.css`, persistencia
+      en `localStorage.panel_tema`). Botón "Modo claro"/"Modo oscuro"
+      en `sidebar-footer` (páginas con sidebar) o dentro de la card
+      (`login.html`, `cambiar-clave.html`, que no tienen sidebar).
+      **Limitación conocida:** los gráficos SVG de `dashboard.html`
+      (`COLORES_CANAL`, `COLORES_ESTADO`, `svgBarras()`) tienen su
+      propio sistema de color al margen de `design-tokens.css` y no
+      reaccionan al cambio de tema — ver `REDESIGN_DARKMODE.md`
+      (categoría D) para el detalle y una eventual Fase 2.
 - [ ] Nginx + SSL en servidor municipal (requisito para salir del modo
       de pruebas del bot)
 - [ ] Migración al número oficial del municipio en Meta
