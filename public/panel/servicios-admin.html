@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Servicios — Panel MVLA</title>
   <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
+  <script>
+    (function() {
+      if (localStorage.getItem('panel_tema') === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="/assets/design-tokens.css">
   <style>
     /* ══════════════════════════════════════════════════════════════
@@ -46,6 +53,8 @@
     .sidebar-footer { border-top: 1px solid var(--border); padding: 10px 12px; }
     .btn-logout-sidebar { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-2); padding: 5px 10px; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer; width: 100%; transition: var(--transition-fast); }
     .btn-logout-sidebar:hover { background: var(--bg-4); border-color: var(--border-hi); color: var(--text-1); }
+    .btn-tema-toggle { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-2); padding: 5px 10px; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer; width: 100%; margin-bottom: 6px; transition: var(--transition-fast); }
+    .btn-tema-toggle:hover { background: var(--bg-4); border-color: var(--border-hi); color: var(--text-1); }
 
     /* ── Card ────────────────────────────────────────────────────── */
     .card {
@@ -133,7 +142,7 @@
     .form-hint { font-size: var(--text-xs); color: var(--text-3); margin-top: 0.2rem; }
 
     /* ── Modal ───────────────────────────────────────────────────── */
-    .modal-fondo { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-fondo { display: none; position: fixed; inset: 0; background: var(--modal-overlay); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
     .modal-fondo.abierto { display: flex; }
     .modal-caja { background: var(--bg-3); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; max-width: 560px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.55); max-height: 90vh; overflow-y: auto; }
     .modal-caja h3 { font-family: var(--font-ui); font-size: var(--text-xl); color: var(--text-1); margin-bottom: 1rem; font-weight: 800; }
@@ -194,6 +203,7 @@
     </nav>
 
     <div class="sidebar-footer">
+      <button class="btn-tema-toggle" id="btn-tema" onclick="toggleTema()"><span id="texto-tema">Modo claro</span></button>
       <button class="btn-logout-sidebar" onclick="cerrarSesion()">Salir</button>
     </div>
 
@@ -342,6 +352,28 @@ async function cerrarSesion() {
   sessionStorage.clear(); window.location.href = '/panel/login.html';
 }
 
+// ─── Tema claro/oscuro ───────────────────────────────────────────────────────
+// Persiste en localStorage (panel_tema) — a diferencia del JWT, es una
+// preferencia de usuario, no un dato de sesión, así que sobrevive al cierre
+// del navegador. El botón siempre describe la acción (a qué modo cambia al
+// hacer clic), no el estado actual.
+function actualizarTextoTema() {
+  const claro = document.documentElement.getAttribute('data-theme') === 'light';
+  const texto = document.getElementById('texto-tema');
+  if (texto) texto.textContent = claro ? 'Modo oscuro' : 'Modo claro';
+}
+function toggleTema() {
+  const claro = document.documentElement.getAttribute('data-theme') === 'light';
+  if (claro) {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('panel_tema', 'dark');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'light');
+    localStorage.setItem('panel_tema', 'light');
+  }
+  actualizarTextoTema();
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -443,13 +475,13 @@ function renderServicios(servicios) {
   document.getElementById('tbody-servicios').innerHTML = servicios.map(s => `
     <tr>
       <td style="font-weight:500">${esc(s.nombre)}</td>
-      <td style="color:#64748b">${esc(s.area_nombre)}</td>
+      <td class="text-secondary">${esc(s.area_nombre)}</td>
       <td>${s.duracion_min} min</td>
       <td>${s.max_dias_anticipacion} días</td>
       <td><span class="badge ${s.activo ? 'badge-activo' : 'badge-inactivo'}">${s.activo ? 'Activo' : 'Inactivo'}</span></td>
-      <td class="td-mensaje" title="${esc(s.mensaje_confirmacion || '')}">${s.mensaje_confirmacion ? esc(s.mensaje_confirmacion) : '<span style="color:#94a3b8">Sin mensaje</span>'}</td>
+      <td class="td-mensaje" title="${esc(s.mensaje_confirmacion || '')}">${s.mensaje_confirmacion ? esc(s.mensaje_confirmacion) : '<span class="text-muted">Sin mensaje</span>'}</td>
       <td class="td-acciones">
-        ${esDirectivo ? '<span style="color:#94a3b8;font-size:.78rem">Solo lectura</span>' : `
+        ${esDirectivo ? '<span class="text-muted" style="font-size:.78rem">Solo lectura</span>' : `
         <button class="btn btn-ghost btn-sm"
                 onclick="abrirModal(${s.id}, '${esc(s.nombre)}', ${s.duracion_min}, ${s.max_dias_anticipacion}, ${s.activo ? 1 : 0}, \`${(s.mensaje_confirmacion || '').replace(/`/g, '\\`')}\`)">
           Editar
@@ -623,6 +655,8 @@ async function toggleActivo(id, nuevoActivo) {
     window.location.href = '/panel/agenda.html';
     return;
   }
+
+  actualizarTextoTema();
 
   const nombreEl = document.getElementById('nav-nombre');
   nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);

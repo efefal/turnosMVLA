@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Auditoría — Panel MVLA</title>
   <link rel="icon" type="image/png" href="/assets/escudo_vla_web.png">
+  <script>
+    (function() {
+      if (localStorage.getItem('panel_tema') === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="/assets/design-tokens.css">
   <style>
     /* ══════════════════════════════════════════════════════════════
@@ -46,6 +53,8 @@
     .sidebar-footer { border-top: 1px solid var(--border); padding: 10px 12px; }
     .btn-logout-sidebar { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-2); padding: 5px 10px; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer; width: 100%; transition: var(--transition-fast); }
     .btn-logout-sidebar:hover { background: var(--bg-4); border-color: var(--border-hi); color: var(--text-1); }
+    .btn-tema-toggle { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-2); padding: 5px 10px; font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer; width: 100%; margin-bottom: 6px; transition: var(--transition-fast); }
+    .btn-tema-toggle:hover { background: var(--bg-4); border-color: var(--border-hi); color: var(--text-1); }
 
     /* ── Card ─────────────────────────────────────────────────── */
     .card {
@@ -212,14 +221,14 @@
       font-weight: 600;
       font-family: var(--font-ui);
     }
-    .accion-crear       { color: var(--teal);   background: rgba(45,212,160,.18);  border: 1px solid rgba(45,212,160,.44);  }
-    .accion-modificar   { color: var(--blue);   background: rgba(75,168,248,.18);  border: 1px solid rgba(75,168,248,.44);  }
-    .accion-cancelar    { color: var(--red);    background: rgba(245,104,104,.18); border: 1px solid rgba(245,104,104,.44); }
-    .accion-eliminar    { color: var(--red);    background: rgba(245,104,104,.18); border: 1px solid rgba(245,104,104,.44); }
-    .accion-bloquear    { color: var(--amber);  background: rgba(245,165,42,.18);  border: 1px solid rgba(245,165,42,.44);  }
-    .accion-desbloquear { color: var(--text-2); background: rgba(110,144,171,.18); border: 1px solid rgba(110,144,171,.44); }
-    .accion-login       { color: var(--text-2); background: rgba(110,144,171,.18); border: 1px solid rgba(110,144,171,.44); }
-    .accion-logout      { color: var(--text-2); background: rgba(110,144,171,.18); border: 1px solid rgba(110,144,171,.44); }
+    .accion-crear       { color: var(--teal);   background: rgba(var(--teal-rgb),.18);    border: 1px solid rgba(var(--teal-rgb),.44);    }
+    .accion-modificar   { color: var(--blue);   background: rgba(var(--blue-rgb),.18);    border: 1px solid rgba(var(--blue-rgb),.44);    }
+    .accion-cancelar    { color: var(--red);    background: rgba(var(--red-rgb),.18);     border: 1px solid rgba(var(--red-rgb),.44);     }
+    .accion-eliminar    { color: var(--red);    background: rgba(var(--red-rgb),.18);     border: 1px solid rgba(var(--red-rgb),.44);     }
+    .accion-bloquear    { color: var(--amber);  background: rgba(var(--amber-rgb),.18);   border: 1px solid rgba(var(--amber-rgb),.44);   }
+    .accion-desbloquear { color: var(--text-2); background: rgba(var(--text-2-rgb),.18);  border: 1px solid rgba(var(--text-2-rgb),.44);  }
+    .accion-login       { color: var(--text-2); background: rgba(var(--text-2-rgb),.18);  border: 1px solid rgba(var(--text-2-rgb),.44);  }
+    .accion-logout      { color: var(--text-2); background: rgba(var(--text-2-rgb),.18);  border: 1px solid rgba(var(--text-2-rgb),.44);  }
 
     /* ── Paginación ──────────────────────────────────────────────── */
     .paginacion {
@@ -282,6 +291,7 @@
     </nav>
 
     <div class="sidebar-footer">
+      <button class="btn-tema-toggle" id="btn-tema" onclick="toggleTema()"><span id="texto-tema">Modo claro</span></button>
       <button class="btn-logout-sidebar" onclick="cerrarSesion()">Salir</button>
     </div>
 
@@ -430,6 +440,28 @@ async function apiFetch(url, opts = {}) {
 async function cerrarSesion() {
   try { await apiFetch('/panel/logout', { method: 'POST' }); } catch {}
   sessionStorage.clear(); window.location.href = '/panel/login.html';
+}
+
+// ─── Tema claro/oscuro ───────────────────────────────────────────────────────
+// Persiste en localStorage (panel_tema) — a diferencia del JWT, es una
+// preferencia de usuario, no un dato de sesión, así que sobrevive al cierre
+// del navegador. El botón siempre describe la acción (a qué modo cambia al
+// hacer clic), no el estado actual.
+function actualizarTextoTema() {
+  const claro = document.documentElement.getAttribute('data-theme') === 'light';
+  const texto = document.getElementById('texto-tema');
+  if (texto) texto.textContent = claro ? 'Modo oscuro' : 'Modo claro';
+}
+function toggleTema() {
+  const claro = document.documentElement.getAttribute('data-theme') === 'light';
+  if (claro) {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('panel_tema', 'dark');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'light');
+    localStorage.setItem('panel_tema', 'light');
+  }
+  actualizarTextoTema();
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -662,15 +694,15 @@ async function cargar(pagina = 1) {
     // B6: mostrar descripcion legible en lugar del ID numérico
     const refText = r.descripcion
       ? esc(r.descripcion)
-      : `<span style="color:#94a3b8">#${r.entidad_id}</span>`;
+      : `<span class="text-muted">#${r.entidad_id}</span>`;
 
     return `<tr>
       <td class="td-fecha">${formatFecha(r.timestamp)}</td>
-      <td>${r.usuario_nombre ? esc(r.usuario_nombre) : '<span style="color:#94a3b8">Sistema</span>'}</td>
+      <td>${r.usuario_nombre ? esc(r.usuario_nombre) : '<span class="text-muted">Sistema</span>'}</td>
       <td>${badgeAccion(r.accion)}</td>
       <td>${esc(r.entidad_tipo)}</td>
       <td class="td-ref">${refText}</td>
-      <td style="color:#64748b">${esc(r.canal)}</td>
+      <td class="text-secondary">${esc(r.canal)}</td>
       <td class="td-detalle">${esc(detalleStr)}</td>
     </tr>`;
   }).join('');
@@ -735,6 +767,8 @@ function rellenarEntidades() {
     window.location.href = '/panel/agenda.html';
     return;
   }
+
+  actualizarTextoTema();
 
   const nombreEl = document.getElementById('nav-nombre');
   nombreEl.innerHTML = esc(usuario.nombre) + ' ' + rolBadgeHTML(usuario.rol);
