@@ -512,6 +512,80 @@ router.get('/feriados-bloqueos', async (req, res) => {
 
 
 // =============================================================================
+// TURNOS — detalle completo (vista de detalle del panel)
+// =============================================================================
+
+// GET /panel/turno/:id/completo
+// Devuelve el turno con todos sus datos relacionados (vecino, servicio,
+// operador, área) más el historial de turnos pasados del mismo vecino.
+// Pensado para el modal de detalle de agenda.html (click en card de turno
+// o selección de un resultado del buscador global).
+//
+// Acceso abierto a cualquier rol autenticado (mismo criterio que
+// GET /panel/vecino/:dni) — incluido el historial completo del vecino.
+// Lo que sí se valida es el área: un usuario no puede ver el detalle de
+// un turno de un área a la que no tiene acceso, aunque adivine el ID.
+router.get('/turno/:id/completo', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) {
+    return res.status(400).json({ error: 'ID de turno inválido.' });
+  }
+
+  try {
+    const [turnoRows] = await pool.query(`
+      SELECT
+        t.id, t.fecha, t.hora_inicio, t.hora_fin, t.estado,
+        t.canal_origen, t.motivo_cancelacion, t.created_at,
+        v.id       AS vecino_id,
+        v.dni      AS vecino_dni,
+        v.nombre   AS vecino_nombre,
+        v.telefono AS vecino_telefono,
+        s.id       AS servicio_id,
+        s.nombre   AS servicio_nombre,
+        t.operador_id,
+        u.nombre   AS operador_nombre,
+        a.id       AS area_id,
+        a.nombre   AS area_nombre
+      FROM turnos t
+      JOIN vecinos   v ON t.vecino_id   = v.id
+      JOIN servicios s ON t.servicio_id = s.id
+      LEFT JOIN usuarios u ON t.operador_id = u.id
+      JOIN areas     a ON s.area_id     = a.id
+      WHERE t.id = ?
+    `, [id]);
+
+    if (turnoRows.length === 0) {
+      return res.status(404).json({ error: 'Turno no encontrado.' });
+    }
+    const turno = turnoRows[0];
+
+    if (!tieneAccesoAlArea(req, turno.area_id)) {
+      return res.status(403).json({ error: 'No tenés acceso a esta área.' });
+    }
+
+    // Historial: últimos 10 turnos pasados del mismo vecino (más reciente
+    // primero), excluyendo el turno que se está mostrando. idx_turnos_vecino
+    // ya cubre vecino_id, la consulta es barata.
+    const [historial] = await pool.query(`
+      SELECT
+        t.id, t.fecha, t.hora_inicio, t.estado,
+        s.nombre AS servicio_nombre
+      FROM turnos t
+      JOIN servicios s ON t.servicio_id = s.id
+      WHERE t.vecino_id = ? AND t.id != ?
+      ORDER BY t.fecha DESC, t.hora_inicio DESC
+      LIMIT 10
+    `, [turno.vecino_id, id]);
+
+    res.json({ turno, historial });
+  } catch (err) {
+    logger.error('[panel] Error al obtener detalle de turno:', err);
+    res.status(500).json({ error: 'No se pudo obtener el detalle del turno.' });
+  }
+});
+
+
+// =============================================================================
 // TURNOS — tomar turno (asignar operador)
 // =============================================================================
 
