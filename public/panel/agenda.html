@@ -1121,6 +1121,9 @@ async function seleccionarResultadoBusqueda(t) {
   actualizarLabelDia();
   await cambiarVista('dia');
   resaltarTurnoEncontrado(t.id);
+  // El modal se abre encima de la vista día ya resaltada — al cerrarlo,
+  // el operador queda parado ahí, listo para operar sin volver a buscar.
+  await abrirDetalleTurno(t.id);
 }
 
 // Hace scroll hasta la card del turno encontrado y la resalta un momento
@@ -1172,9 +1175,11 @@ function detenerPolling() {
 }
 
 async function tickPolling() {
-  // Con el modal de cancelación abierto no tocamos el DOM para no interrumpir
-  // al operador en medio de una acción — ni siquiera hacemos el fetch.
+  // Con el modal de cancelación o el de detalle de turno abiertos no tocamos
+  // el DOM para no interrumpir al operador en medio de una acción o mientras
+  // está leyendo el detalle — ni siquiera hacemos el fetch.
   if (document.getElementById('modal-fondo').classList.contains('abierto')) return;
+  if (document.getElementById('modal-detalle-fondo').classList.contains('abierto')) return;
 
   try {
     await cargar(true);
@@ -1408,24 +1413,28 @@ function renderizarTablaDia(turnos) {
 
       // Botones de acción — replica la lógica de renderizarAcciones() con clases del
       // design system (btn-primary/secondary/danger en lugar de btn-success/warning/ghost)
+      //
+      // event.stopPropagation() en cada botón: la card completa ahora abre el modal
+      // de detalle al hacer click (ver más abajo), así que sin esto un click en
+      // "Tomar"/"Cancelar"/etc. dispararía también la apertura del modal.
       let accionesHTML = '';
       if (usuarioRol !== 'directivo') {
         if (!t.operador_id && t.estado === 'agendado') {
           // Turno sin tomar → Tomar + Cancelar
           accionesHTML = compacto ? `
-            <button class="btn btn-secondary" onclick="tomarTurno(${t.id})" title="Tomar">✓</button>
-            <button class="btn btn-danger"    onclick="abrirCancelar(${t.id})" title="Cancelar">✕</button>` : `
-            <button class="btn btn-secondary" onclick="tomarTurno(${t.id})">Tomar</button>
-            <button class="btn btn-danger"    onclick="abrirCancelar(${t.id})">Cancelar</button>`;
+            <button class="btn btn-secondary" onclick="event.stopPropagation(); tomarTurno(${t.id})" title="Tomar">✓</button>
+            <button class="btn btn-danger"    onclick="event.stopPropagation(); abrirCancelar(${t.id})" title="Cancelar">✕</button>` : `
+            <button class="btn btn-secondary" onclick="event.stopPropagation(); tomarTurno(${t.id})">Tomar</button>
+            <button class="btn btn-danger"    onclick="event.stopPropagation(); abrirCancelar(${t.id})">Cancelar</button>`;
         } else if (t.operador_id && t.estado === 'agendado') {
           // Turno tomado → Presente + Ausente + Liberar
           accionesHTML = compacto ? `
-            <button class="btn btn-primary"   onclick="cambiarEstado(${t.id},'presente')" title="Presente">✓</button>
-            <button class="btn btn-danger"    onclick="cambiarEstado(${t.id},'ausente')" title="Ausente">✕</button>
-            <button class="btn btn-secondary" onclick="liberarTurno(${t.id})" title="Liberar">↺</button>` : `
-            <button class="btn btn-primary"   onclick="cambiarEstado(${t.id},'presente')">Presente</button>
-            <button class="btn btn-danger"    onclick="cambiarEstado(${t.id},'ausente')">Ausente</button>
-            <button class="btn btn-secondary" onclick="liberarTurno(${t.id})">Liberar</button>`;
+            <button class="btn btn-primary"   onclick="event.stopPropagation(); cambiarEstado(${t.id},'presente')" title="Presente">✓</button>
+            <button class="btn btn-danger"    onclick="event.stopPropagation(); cambiarEstado(${t.id},'ausente')" title="Ausente">✕</button>
+            <button class="btn btn-secondary" onclick="event.stopPropagation(); liberarTurno(${t.id})" title="Liberar">↺</button>` : `
+            <button class="btn btn-primary"   onclick="event.stopPropagation(); cambiarEstado(${t.id},'presente')">Presente</button>
+            <button class="btn btn-danger"    onclick="event.stopPropagation(); cambiarEstado(${t.id},'ausente')">Ausente</button>
+            <button class="btn btn-secondary" onclick="event.stopPropagation(); liberarTurno(${t.id})">Liberar</button>`;
         }
         // Estados finales (presente, ausente, atendido) o rol directivo → sin botones
       }
@@ -1433,7 +1442,8 @@ function renderizarTablaDia(turnos) {
       return `
         <div class="turno-card ${cardColor}"
              style="top:${top}px; height:auto; min-height:40px; ${posStyle}"
-             data-id="${t.id}">
+             data-id="${t.id}"
+             onclick="abrirDetalleTurno(${t.id})">
           <div class="turno-card-inner">
             <div class="turno-row-1">
               <span class="turno-hora font-mono">${esc(t.hora_inicio.substring(0, 5))}</span>
