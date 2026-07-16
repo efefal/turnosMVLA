@@ -539,6 +539,46 @@
     .modal-caja textarea.input-base:focus { outline: none; }
     .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
 
+    /* ── Modal detalle de turno ───────────────────────────────── */
+    /* .modal-caja-detalle es un modificador sobre .modal-caja (igual patrón
+       que .modal-caja-sm en usuarios.html) — el modal de cancelar de acá
+       arriba necesita poco ancho (460px), el de detalle necesita más
+       espacio para mostrar turno + vecino + historial sin apretar. */
+    .modal-caja-detalle { max-width: 640px; }
+
+    .detalle-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; gap: 12px; }
+    .detalle-header h3 { margin-bottom: 0; }
+    .detalle-turno-id { color: var(--text-3); font-size: var(--text-sm); margin-bottom: 16px; }
+
+    .detalle-seccion { padding: 14px 0; border-top: 1px solid var(--border); }
+    .detalle-seccion:first-of-type { border-top: none; padding-top: 0; }
+    .detalle-seccion-titulo {
+      font-size: var(--text-xs); font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--text-3); margin-bottom: 8px;
+    }
+    .detalle-fila { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: var(--text-sm); }
+    .detalle-fila-label { color: var(--text-2); }
+    .detalle-fila-valor { color: var(--text-1); font-weight: 600; text-align: right; }
+
+    .detalle-telefono { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); }
+
+    /* Pill de estado — mismos tokens de color que ya usan las cards del calendario */
+    .estado-pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: var(--text-xs); font-weight: 700; }
+    .estado-pill.agendado     { background: rgba(var(--blue-rgb), .15);    color: var(--blue); }
+    .estado-pill.presente,
+    .estado-pill.atendido     { background: rgba(var(--teal-rgb), .15);    color: var(--teal); }
+    .estado-pill.ausente      { background: rgba(var(--red-rgb), .15);     color: var(--red); }
+    .estado-pill.cancelado,
+    .estado-pill.reprogramado { background: rgba(var(--text-2-rgb), .15);  color: var(--text-2); }
+
+    .detalle-historial-item { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: var(--text-sm); border-top: 1px solid var(--border); }
+    .detalle-historial-item:first-child { border-top: none; }
+    .detalle-historial-vacio { color: var(--text-3); font-size: var(--text-sm); padding: 8px 0; }
+
+    /* .btn-sm no existía en este archivo — mismo valor que ya usan
+       areas.html / usuarios.html / servicios-admin.html para el botón "Copiar" */
+    .btn-sm { padding: 0.25rem 0.6rem; font-size: var(--text-sm); }
+
     /* ── Badge de turno sin operador asignado ─────────────────── */
     /* Usado en renderizarTablaDia() y renderizarSemana() cuando operador_nombre === null */
     .badge-sin-tomar {
@@ -702,6 +742,20 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="cerrarModal()">Volver</button>
       <button class="btn btn-danger" id="btn-confirmar" onclick="confirmarCancelacion()">Confirmar cancelación</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de detalle de turno — mismo criterio que el modal de cancelar
+     (fuera del app-shell, evita problemas de z-index/stacking context).
+     ID distinto (modal-detalle-fondo) para no chocar con el modal cancelar. -->
+<div class="modal-fondo" id="modal-detalle-fondo">
+  <div class="modal-caja modal-caja-detalle">
+    <div id="detalle-cargando" class="cargando">Cargando...</div>
+    <div class="alerta alerta-error" id="detalle-error"></div>
+    <div id="detalle-contenido"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="cerrarDetalleTurno()">Cerrar</button>
     </div>
   </div>
 </div>
@@ -1535,15 +1589,146 @@ function inicialesOp(nombre) {
   return nombre.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase();
 }
 
-// Abre el detalle de un turno al hacer clic en su card del calendario semanal.
-// Implementación completa en Paso 8; por ahora navega a la vista día de ese turno.
-function abrirDetalleTurno(id) {
-  const t = turnosActuales.find(x => x.id === id);
-  if (!t) return;
-  const f = typeof t.fecha === 'string' ? t.fecha.substring(0, 10) : t.fecha;
-  fechaActual = f;
-  document.getElementById('fecha-input').value = fechaActual;
-  cambiarVista('dia');
+// ─── Modal de detalle de turno ──────────────────────────────────────────────
+// Se abre desde: click en card de turno (vista semana y vista día) y desde
+// la selección de un resultado del buscador global (ver seleccionarResultadoBusqueda).
+const CANALES = { whatsapp: 'WhatsApp', web: 'Web', presencial: 'Presencial' };
+
+// Trae el turno completo (turno + vecino + historial) del endpoint nuevo
+// y arma el contenido del modal. No cambia fechaActual ni la vista — el
+// modal se abre encima de donde ya está parado el operador.
+async function abrirDetalleTurno(id) {
+  document.getElementById('modal-detalle-fondo').classList.add('abierto');
+  document.getElementById('detalle-cargando').style.display = 'block';
+  document.getElementById('detalle-error').classList.remove('visible');
+  document.getElementById('detalle-contenido').innerHTML = '';
+
+  const res = await apiFetch(`/panel/turno/${id}/completo`);
+  document.getElementById('detalle-cargando').style.display = 'none';
+
+  if (!res || !res.ok) {
+    document.getElementById('detalle-error').textContent = 'No se pudo cargar el detalle del turno.';
+    document.getElementById('detalle-error').classList.add('visible');
+    return;
+  }
+
+  const data = await res.json();
+  renderizarDetalleTurno(data);
+}
+
+function cerrarDetalleTurno() {
+  document.getElementById('modal-detalle-fondo').classList.remove('abierto');
+}
+
+// Formatea "YYYY-MM-DD" → "DD/MM/AAAA"
+function formatoFechaLarga(str) {
+  const [y, m, d] = str.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// Formatea "YYYY-MM-DD HH:MM:SS" (created_at) → "DD/MM/AAAA HH:MM"
+function formatoFechaHora(str) {
+  const [fecha, hora] = str.split(' ');
+  return `${formatoFechaLarga(fecha)} ${hora.substring(0, 5)} hs`;
+}
+
+function renderizarDetalleTurno(data) {
+  const t = data.turno;
+  const fechaStr = typeof t.fecha === 'string' ? t.fecha.substring(0, 10) : t.fecha;
+
+  // Teléfono: puede ser null si el vecino se registró por web sin cargarlo
+  // (vecinos.telefono admite NULL — confirmado contra la base real).
+  const telefonoHTML = t.vecino_telefono
+    ? `<div class="detalle-telefono">
+         <span>${esc(t.vecino_telefono)}</span>
+         <button class="btn btn-secondary btn-sm" onclick="copiarTelefono('${esc(t.vecino_telefono)}', this)">Copiar</button>
+       </div>`
+    : `<span class="detalle-historial-vacio" style="padding:0">Sin teléfono registrado</span>`;
+
+  const operadorTexto = t.operador_nombre ? esc(t.operador_nombre) : 'Sin asignar';
+  const canalTexto    = CANALES[t.canal_origen] || t.canal_origen;
+
+  const motivoHTML = t.motivo_cancelacion
+    ? `<div class="detalle-fila">
+         <span class="detalle-fila-label">Motivo cancelación</span>
+         <span class="detalle-fila-valor">${esc(t.motivo_cancelacion)}</span>
+       </div>`
+    : '';
+
+  const historialHTML = data.historial.length === 0
+    ? `<p class="detalle-historial-vacio">Sin turnos anteriores.</p>`
+    : data.historial.map(h => `
+        <div class="detalle-historial-item">
+          <span>${esc(formatoFechaLarga(typeof h.fecha === 'string' ? h.fecha.substring(0, 10) : h.fecha))} — ${esc(h.servicio_nombre)}</span>
+          <span class="estado-pill ${h.estado}">${ESTADOS[h.estado] || h.estado}</span>
+        </div>`).join('');
+
+  document.getElementById('detalle-contenido').innerHTML = `
+    <div class="detalle-header">
+      <h3>${esc(t.servicio_nombre)}</h3>
+      <span class="estado-pill ${t.estado}">${ESTADOS[t.estado] || t.estado}</span>
+    </div>
+    <p class="detalle-turno-id">Turno #${t.id} · ${formatoFechaLarga(fechaStr)} · ${t.hora_inicio.substring(0, 5)} hs</p>
+
+    <div class="detalle-seccion">
+      <div class="detalle-seccion-titulo">Vecino</div>
+      <div class="detalle-fila">
+        <span class="detalle-fila-label">Nombre</span>
+        <span class="detalle-fila-valor">${esc(t.vecino_nombre)}</span>
+      </div>
+      <div class="detalle-fila">
+        <span class="detalle-fila-label">DNI</span>
+        <span class="detalle-fila-valor">${esc(t.vecino_dni)}</span>
+      </div>
+      <div class="detalle-fila">
+        <span class="detalle-fila-label">Teléfono</span>
+        ${telefonoHTML}
+      </div>
+    </div>
+
+    <div class="detalle-seccion">
+      <div class="detalle-seccion-titulo">Turno</div>
+      <div class="detalle-fila">
+        <span class="detalle-fila-label">Área</span>
+        <span class="detalle-fila-valor">${esc(t.area_nombre)}</span>
+      </div>
+      <div class="detalle-fila">
+        <span class="detalle-fila-label">Operador</span>
+        <span class="detalle-fila-valor">${operadorTexto}</span>
+      </div>
+      <div class="detalle-fila">
+        <span class="detalle-fila-label">Canal</span>
+        <span class="detalle-fila-valor">${esc(canalTexto)}</span>
+      </div>
+      <div class="detalle-fila">
+        <span class="detalle-fila-label">Cargado</span>
+        <span class="detalle-fila-valor">${formatoFechaHora(t.created_at)}</span>
+      </div>
+      ${motivoHTML}
+    </div>
+
+    <div class="detalle-seccion detalle-acciones-placeholder">
+      <div class="detalle-seccion-titulo">Comunicación</div>
+      <p class="detalle-historial-vacio">Próximamente: enviar recordatorio por WhatsApp o email.</p>
+    </div>
+
+    <div class="detalle-seccion">
+      <div class="detalle-seccion-titulo">Historial del vecino (últimos ${data.historial.length})</div>
+      ${historialHTML}
+    </div>
+  `;
+}
+
+// Copia el teléfono al portapapeles y da feedback visual momentáneo en el botón.
+async function copiarTelefono(telefono, btn) {
+  try {
+    await navigator.clipboard.writeText(telefono);
+    const textoOriginal = btn.textContent;
+    btn.textContent = 'Copiado ✓';
+    setTimeout(() => { btn.textContent = textoOriginal; }, 1500);
+  } catch (err) {
+    alert('No se pudo copiar el teléfono. Copialo manualmente: ' + telefono);
+  }
 }
 
 function renderizarSemana(turnos, dias) {
