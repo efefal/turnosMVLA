@@ -498,8 +498,23 @@ reiniciar el bot. No requiere cambios en el código.
       Link "Áreas" agregado al sidebar de las 7 páginas existentes,
       visible solo para rol sistemas. Sin DELETE real (soft-delete via
       `activo`, mismo patrón que servicios/usuarios).
-- [ ] Vista de detalle de turno con información completa del vecino +
-      acciones de comunicación (WhatsApp/email) — no implementado
+- [x] Vista de detalle de turno — implementado como modal en
+      `agenda.html` (`#modal-detalle-fondo`), reusando
+      `.modal-fondo`/`.modal-caja` con el modificador
+      `.modal-caja-detalle`. Muestra turno + datos de contacto del
+      vecino (nombre, DNI, teléfono con botón "Copiar" — no hay
+      columna de email en `vecinos`) + historial de los últimos 10
+      turnos del mismo vecino. Se abre desde: click en card de turno
+      (vista semana y vista día) y desde la selección de un resultado
+      del buscador global (que además navega a la vista día y resalta
+      la card antes de abrir el modal). Endpoint nuevo:
+      `GET /panel/turno/:id/completo`, acceso abierto a cualquier rol
+      autenticado con validación de área. Ver
+      `public/panel/REDESIGN_DETALLE_TURNO.md` para el detalle completo.
+      **Acciones de comunicación (WhatsApp/email) quedan para una fase
+      futura** — el modal ya tiene una sección "Comunicación" reservada
+      en el layout a modo de placeholder, para no tener que rediseñar
+      el modal cuando se implementen los botones reales.
 - [x] Dark/Light mode toggle en el panel — implementado en las 10
       páginas (`data-theme="light"` en `<html>`, paleta completa en
       `:root[data-theme="light"]` de `design-tokens.css`, persistencia
