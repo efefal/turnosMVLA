@@ -1,6 +1,6 @@
 // routes/auth.js — Autenticación del panel de empleados
 //
-// POST /panel/login  → valida email+password, devuelve JWT (8h)
+// POST /panel/login  → valida usuario+password, devuelve JWT (8h)
 // POST /panel/logout → registra logout en auditoría, el cliente borra el token
 //
 // Los empleados viven en la tabla `usuarios` con password_hash bcrypt.
@@ -20,10 +20,12 @@ const { verificarJWT } = require('../middleware/auth');
 // ─── POST /panel/login ────────────────────────────────────────────────────────
 // Verifica credenciales y devuelve el JWT si son correctas.
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  // Se renombra el valor recibido a `usuarioIngresado` para no confundirlo
+  // con la variable `usuario` que más abajo guarda la fila completa de la BD.
+  const { usuario: usuarioIngresado, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Faltan datos: se requieren email y password.' });
+  if (!usuarioIngresado || !password) {
+    return res.status(400).json({ error: 'Faltan datos: se requieren usuario y password.' });
   }
 
   try {
@@ -34,7 +36,7 @@ router.post('/login', async (req, res) => {
       SELECT
         u.id,
         u.nombre,
-        u.email,
+        u.usuario,
         u.password_hash,
         u.activo,
         u.debe_cambiar_clave,
@@ -48,12 +50,12 @@ router.post('/login', async (req, res) => {
       FROM usuarios u
       LEFT JOIN usuario_areas ua ON u.id = ua.usuario_id
       LEFT JOIN areas a          ON ua.area_id = a.id
-      WHERE u.email = ?
+      WHERE u.usuario = ?
       GROUP BY u.id
-    `, [email]);
+    `, [usuarioIngresado]);
 
     if (rows.length === 0) {
-      // No decimos si el email existe o no — siempre "credenciales incorrectas"
+      // No decimos si el usuario existe o no — siempre "credenciales incorrectas"
       return res.status(401).json({ error: 'Credenciales incorrectas.' });
     }
 
@@ -95,7 +97,7 @@ router.post('/login', async (req, res) => {
 
     // Payload del JWT. password_hash no va nunca en el token.
     // expiresIn 8h = una jornada laboral, el usuario tiene que loguearse cada día.
-    const payload = { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol, areaIds };
+    const payload = { id: usuario.id, nombre: usuario.nombre, usuario: usuario.usuario, rol, areaIds };
     const token   = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
 
     // Actualizar ultimo_acceso y registrar en auditoría en paralelo
@@ -107,19 +109,19 @@ router.post('/login', async (req, res) => {
         [
           usuario.id,
           usuario.id,
-          JSON.stringify({ email: usuario.email }),
+          JSON.stringify({ usuario: usuario.usuario }),
           req.ip || null,
         ]
       ),
     ]);
 
-    logger.info(`[auth] Login exitoso — ${usuario.email} (ID ${usuario.id}, rol: ${rol})`);
+    logger.info(`[auth] Login exitoso — ${usuario.usuario} (ID ${usuario.id}, rol: ${rol})`);
 
     // Si el usuario tiene contraseña temporal, avisamos al cliente para redirigir a cambiar-clave.html.
     // El token se genera igual — el usuario solo puede hacer una cosa: cambiar su contraseña.
     const respuesta = {
       token,
-      usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol, areaIds, areas },
+      usuario: { id: usuario.id, nombre: usuario.nombre, usuario: usuario.usuario, rol, areaIds, areas },
     };
     if (usuario.debe_cambiar_clave) respuesta.debe_cambiar_clave = true;
 
@@ -142,7 +144,7 @@ router.post('/logout', verificarJWT, async (req, res) => {
        VALUES (?, 'usuario', ?, 'logout', NULL, 'panel', ?)`,
       [req.usuario.id, req.usuario.id, req.ip || null]
     );
-    logger.info(`[auth] Logout — ${req.usuario.email} (ID ${req.usuario.id})`);
+    logger.info(`[auth] Logout — ${req.usuario.usuario} (ID ${req.usuario.id})`);
   } catch (err) {
     // Si falla la auditoría, igual respondemos OK — no queremos bloquear el logout
     logger.error('[auth] Error al registrar logout en auditoría:', err);

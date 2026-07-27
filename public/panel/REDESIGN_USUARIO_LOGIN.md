@@ -91,6 +91,16 @@ ALTER TABLE usuarios MODIFY usuario VARCHAR(50) NOT NULL;
 ALTER TABLE usuarios DROP COLUMN email;
 ```
 
+> **Corrección detectada durante el Paso 2 (no prevista originalmente):**
+> `email` seguía siendo `NOT NULL` sin default. El alta de usuario
+> (`INSERT INTO usuarios (nombre, usuario, password_hash, debe_cambiar_clave)
+> VALUES (...)`, que ya no incluye `email`) fallaba con
+> `Field 'email' doesn't have a default value`. Se aplicó, con
+> confirmación explícita, un `ALTER TABLE usuarios MODIFY email
+> VARCHAR(255) NULL;` — **no** se tocó el contenido ni se eliminó la
+> columna, solo se relajó la restricción para no bloquear altas nuevas
+> mientras `email` sigue existiendo hasta la Fase C real.
+
 ---
 
 ## 2. Reglas de validación de `usuario`

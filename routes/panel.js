@@ -83,6 +83,14 @@ function resolverAreaIds(req, areasQuery) {
   return areasParam.filter(id => areaIds.includes(id));
 }
 
+// Valida el formato del nombre de usuario de login (columna `usuario`).
+// Reglas: 3-50 caracteres, minúsculas/números/punto/guion bajo, no puede
+// empezar con punto ni guion bajo (evita nombres raros tipo "._admin").
+const USUARIO_REGEX = /^[a-z0-9][a-z0-9._]{2,49}$/;
+function esUsuarioValido(usuario) {
+  return USUARIO_REGEX.test(usuario);
+}
+
 // Inserta un registro en la tabla de auditoría.
 // Se llama desde todos los endpoints que modifican datos.
 async function auditar(usuarioId, entidadTipo, entidadId, accion, detalle, ip) {
@@ -1540,7 +1548,7 @@ router.get('/auditoria', async (req, res) => {
         a.id,
         a.timestamp,
         u.nombre    AS usuario_nombre,
-        u.email     AS usuario_email,
+        u.usuario   AS usuario_login,
         a.accion,
         a.entidad_tipo,
         a.entidad_id,
@@ -1592,12 +1600,12 @@ router.get('/auditoria/usuarios', async (req, res) => {
     let params = [];
 
     if (esSistemas(req)) {
-      query = 'SELECT id, nombre, email FROM usuarios WHERE activo = TRUE ORDER BY nombre ASC';
+      query = 'SELECT id, nombre, usuario FROM usuarios WHERE activo = TRUE ORDER BY nombre ASC';
     } else {
       const { areaIds } = req.usuario;
       const ph = areaIds.map(() => '?').join(',');
       query = `
-        SELECT DISTINCT u.id, u.nombre, u.email
+        SELECT DISTINCT u.id, u.nombre, u.usuario
         FROM usuarios u
         JOIN usuario_areas ua ON u.id = ua.usuario_id
         WHERE ua.area_id IN (${ph})
@@ -1746,7 +1754,7 @@ router.get('/usuarios', async (req, res) => {
       // Sistemas ve todos los usuarios con todas sus áreas y roles
       [rows] = await pool.query(`
         SELECT
-          u.id, u.nombre, u.email, u.activo, u.ultimo_acceso, u.created_at,
+          u.id, u.nombre, u.usuario, u.activo, u.ultimo_acceso, u.created_at,
           JSON_ARRAYAGG(
             JSON_OBJECT('area_id', ua.area_id, 'area_nombre', a.nombre,
                         'rol', ua.rol, 'atiende_turnos', ua.atiende_turnos)
@@ -1763,7 +1771,7 @@ router.get('/usuarios', async (req, res) => {
       const ph = areaIds.map(() => '?').join(',');
       [rows] = await pool.query(`
         SELECT
-          u.id, u.nombre, u.email, u.activo, u.ultimo_acceso, u.created_at,
+          u.id, u.nombre, u.usuario, u.activo, u.ultimo_acceso, u.created_at,
           JSON_ARRAYAGG(
             JSON_OBJECT('area_id', ua.area_id, 'area_nombre', a.nombre,
                         'rol', ua.rol, 'atiende_turnos', ua.atiende_turnos)
@@ -1787,7 +1795,7 @@ router.get('/usuarios', async (req, res) => {
                         : areas.some(a => a.rol === 'directivo') ? 'directivo'
                         : areas.length > 0 ? 'operador'
                         : null;
-      return { id: u.id, nombre: u.nombre, email: u.email, activo: u.activo,
+      return { id: u.id, nombre: u.nombre, usuario: u.usuario, activo: u.activo,
                ultimo_acceso: u.ultimo_acceso, created_at: u.created_at,
                rol: rolEfectivo, areas };
     });
@@ -1811,7 +1819,7 @@ router.post('/usuarios', async (req, res) => {
     return res.status(403).json({ error: 'Sin permiso. Se requiere rol encargado o sistemas.' });
   }
 
-  const { nombre, email, password, rol } = req.body;
+  const { nombre, usuario, password, rol } = req.body;
   // areas puede ser un array de IDs o area_id legado (un solo ID) para retro-compatibilidad
   const areas = req.body.areas
     ? [].concat(req.body.areas).map(Number).filter(Boolean)
@@ -1819,9 +1827,16 @@ router.post('/usuarios', async (req, res) => {
 
   // Directivo no necesita áreas (acceso de solo lectura a todo el sistema)
   const requiereAreas = rol !== 'directivo';
-  if (!nombre || !email || !password || (requiereAreas && !areas.length) || !rol) {
+  if (!nombre || !usuario || !password || (requiereAreas && !areas.length) || !rol) {
     return res.status(400).json({
-      error: 'Faltan datos: nombre, email, password y rol son obligatorios. Las áreas son obligatorias salvo para el rol directivo.'
+      error: 'Faltan datos: nombre, usuario, password y rol son obligatorios. Las áreas son obligatorias salvo para el rol directivo.'
+    });
+  }
+
+  const usuarioLimpio = usuario.trim().toLowerCase();
+  if (!esUsuarioValido(usuarioLimpio)) {
+    return res.status(400).json({
+      error: 'Usuario inválido: debe tener 3-50 caracteres, solo minúsculas/números/punto/guion bajo, y no puede empezar con punto ni guion bajo.'
     });
   }
 
@@ -1845,9 +1860,9 @@ router.post('/usuarios', async (req, res) => {
   const atiendeT = rol === 'operador' ? 1 : 0;
 
   try {
-    const [existe] = await pool.query('SELECT id FROM usuarios WHERE email = ?', [email]);
+    const [existe] = await pool.query('SELECT id FROM usuarios WHERE usuario = ?', [usuarioLimpio]);
     if (existe.length > 0) {
-      return res.status(409).json({ error: 'Ya existe un usuario con ese email.' });
+      return res.status(409).json({ error: 'Ya existe un usuario con ese nombre de usuario.' });
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -1858,8 +1873,8 @@ router.post('/usuarios', async (req, res) => {
       // debe_cambiar_clave=1 porque toda clave creada desde el panel es temporal:
       // el usuario deberá cambiarla en su primer acceso.
       const [result] = await conn.query(
-        'INSERT INTO usuarios (nombre, email, password_hash, debe_cambiar_clave) VALUES (?, ?, ?, 1)',
-        [nombre.trim(), email.trim().toLowerCase(), hash]
+        'INSERT INTO usuarios (nombre, usuario, password_hash, debe_cambiar_clave) VALUES (?, ?, ?, 1)',
+        [nombre.trim(), usuarioLimpio, hash]
       );
       const nuevoId = result.insertId;
 
@@ -1887,12 +1902,12 @@ router.post('/usuarios', async (req, res) => {
         `INSERT INTO auditoria (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal, ip)
          VALUES (?, 'usuario', ?, 'crear', ?, 'panel', ?)`,
         [req.usuario.id, nuevoId,
-         JSON.stringify({ nombre, email, rol, areas, atiende_turnos: !!atiendeT, creado_por: req.usuario.nombre }),
+         JSON.stringify({ nombre, usuario: usuarioLimpio, rol, areas, atiende_turnos: !!atiendeT, creado_por: req.usuario.nombre }),
          req.ip || null]
       );
 
       await conn.commit();
-      logger.info(`[panel] Usuario ${nuevoId} (${email}) creado por ${req.usuario.nombre}`);
+      logger.info(`[panel] Usuario ${nuevoId} (${usuarioLimpio}) creado por ${req.usuario.nombre}`);
       res.status(201).json({ ok: true, id: nuevoId });
     } catch (txErr) {
       await conn.rollback();
@@ -2363,7 +2378,7 @@ router.post('/usuarios/:id/resetear-clave', async (req, res) => {
   const id = parseInt(req.params.id, 10);
 
   try {
-    const [rows] = await pool.query('SELECT id, nombre, email FROM usuarios WHERE id = ?', [id]);
+    const [rows] = await pool.query('SELECT id, nombre, usuario FROM usuarios WHERE id = ?', [id]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Usuario no encontrado.' });
     }
@@ -2388,7 +2403,7 @@ router.post('/usuarios/:id/resetear-clave', async (req, res) => {
       usuario_afectado: rows[0].nombre,
     }, req.ip);
 
-    logger.info(`[panel] Contraseña de usuario ${id} (${rows[0].email}) reseteada por ${req.usuario.nombre}`);
+    logger.info(`[panel] Contraseña de usuario ${id} (${rows[0].usuario}) reseteada por ${req.usuario.nombre}`);
     res.json({ ok: true, clave_temporal: claveTemporal });
 
   } catch (err) {

@@ -9,7 +9,7 @@
 // Si es válido, agrega req.usuario con el payload decodificado:
 //   req.usuario.id      → ID del empleado en tabla usuarios
 //   req.usuario.nombre  → Nombre completo
-//   req.usuario.email   → Email (usado como nombre de usuario)
+//   req.usuario.usuario → Nombre de usuario (login)
 //   req.usuario.rol     → 'operador' o 'encargado' (el rol más alto del usuario)
 //   req.usuario.areaIds → Array de IDs de áreas donde trabaja [1, 2, ...]
 //

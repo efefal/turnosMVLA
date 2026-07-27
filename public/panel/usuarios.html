@@ -320,7 +320,7 @@
             <thead>
               <tr>
                 <th>Nombre</th>
-                <th>Email</th>
+                <th>Usuario</th>
                 <th>Rol</th>
                 <th>Área(s)</th>
                 <th>Estado</th>
@@ -345,8 +345,8 @@
             <input type="text" id="nuevo-nombre" placeholder="Ej: Sofía Romero">
           </div>
           <div class="form-grupo">
-            <label for="nuevo-email">Email (para iniciar sesión) <span class="req">*</span></label>
-            <input type="email" id="nuevo-email" placeholder="ejemplo@municipio.gov.ar">
+            <label for="nuevo-usuario">Usuario (para iniciar sesión) <span class="req">*</span></label>
+            <input type="text" id="nuevo-usuario" placeholder="nombre.apellido">
           </div>
           <div class="form-grupo">
             <label for="nuevo-password">Contraseña temporal <span class="req">*</span></label>
@@ -648,7 +648,7 @@ function renderUsuarios(data) {
 
     return `<tr>
       <td style="font-weight:500">${esc(u.nombre)}</td>
-      <td class="text-secondary">${esc(u.email)}</td>
+      <td class="text-secondary">${esc(u.usuario)}</td>
       <td>${badgeRol(u.rol)}</td>
       <td class="text-secondary" style="font-size:.8rem">${areas}</td>
       <td><span class="badge ${u.activo ? 'badge-activo' : 'badge-inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
@@ -805,12 +805,12 @@ async function cargarUsuarios() {
 async function crearUsuario() {
   mostrarAlerta('error-form', null, null, '');
   const nombre   = document.getElementById('nuevo-nombre').value.trim();
-  const email    = document.getElementById('nuevo-email').value.trim();
+  const usuario  = document.getElementById('nuevo-usuario').value.trim();
   const password = document.getElementById('nuevo-password').value;
   const rol      = document.getElementById('nuevo-rol').value;
   const { areas, atiendeAreas } = leerAreasSeleccionadas('nuevo-areas-lista');
 
-  if (!nombre || !email || !password || !rol) {
+  if (!nombre || !usuario || !password || !rol) {
     mostrarAlerta('error-form', null, 'error', 'Completá todos los campos obligatorios.'); return;
   }
   // Directivo no requiere área asignada (acceso de solo lectura a todo el sistema)
@@ -823,7 +823,7 @@ async function crearUsuario() {
 
   const res = await apiFetch('/panel/usuarios', {
     method: 'POST',
-    body: JSON.stringify({ nombre, email, password, rol, areas, atiendeAreas }),
+    body: JSON.stringify({ nombre, usuario, password, rol, areas, atiendeAreas }),
   });
   if (!res) return;
   const data = await res.json();
@@ -833,7 +833,7 @@ async function crearUsuario() {
   }
 
   document.getElementById('nuevo-nombre').value   = '';
-  document.getElementById('nuevo-email').value    = '';
+  document.getElementById('nuevo-usuario').value  = '';
   document.getElementById('nuevo-password').value = '';
   document.getElementById('nuevo-rol').value      = '';
   construirAreaCheckboxes('nuevo-areas-lista');
