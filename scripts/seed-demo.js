@@ -4,7 +4,7 @@
 //   node scripts/seed-demo.js
 //
 // IDEMPOTENTE: si se ejecuta dos veces no duplica datos.
-//   Usuarios y vecinos → solo se crean si no existen (chequeo por email/DNI)
+//   Usuarios y vecinos → solo se crean si no existen (chequeo por usuario/DNI)
 //   Horarios           → INSERT IGNORE (clave única por operador+servicio+día)
 //   Turnos             → se omiten si ya hay ≥ 150 para los vecinos de demo
 //   Auditoría          → se genera junto con los turnos; se omite si se omiten los turnos
@@ -26,15 +26,23 @@ const db     = require('../db');
 const PASSWORD_DEMO = 'Demo1234!';
 
 // Empleados municipales ficticios: 3 op. Licencias, 2 op. Tribunal, 2 encargados, 1 sistemas
+//
+// Los valores de `usuario` coinciden con los ya migrados en la base real
+// (ver public/panel/REDESIGN_USUARIO_LOGIN.md § 3 — mapeo de datos confirmado).
+// El caso 'sistemas.demo' NO es la derivación automática del email
+// (que daría 'sistemas') — es el override manual ya aplicado en la
+// migración, porque colisionaba con el usuario real 'sistemas'. Si este
+// seed corre de nuevo, tiene que buscar por este mismo valor para
+// encontrar la fila ya migrada y no crear un usuario duplicado.
 const USUARIOS_DEMO = [
-  { nombre: 'Alejandro Bianchi',   email: 'op1.lic@demo.mvla.gob.ar',   rol: 'operador',  areaNombre: 'Licencias de Conducir' },
-  { nombre: 'Valeria Muñoz',       email: 'op2.lic@demo.mvla.gob.ar',   rol: 'operador',  areaNombre: 'Licencias de Conducir' },
-  { nombre: 'Diego Saavedra',      email: 'op3.lic@demo.mvla.gob.ar',   rol: 'operador',  areaNombre: 'Licencias de Conducir' },
-  { nombre: 'Claudia Ferreira',    email: 'op1.trib@demo.mvla.gob.ar',  rol: 'operador',  areaNombre: 'Tribunal de Faltas'    },
-  { nombre: 'Marcelo Ríos',        email: 'op2.trib@demo.mvla.gob.ar',  rol: 'operador',  areaNombre: 'Tribunal de Faltas'    },
-  { nombre: 'Laura Montoya',       email: 'enc.lic@demo.mvla.gob.ar',   rol: 'encargado', areaNombre: 'Licencias de Conducir' },
-  { nombre: 'Roberto Ceballos',    email: 'enc.trib@demo.mvla.gob.ar',  rol: 'encargado', areaNombre: 'Tribunal de Faltas'    },
-  { nombre: 'Admin Sistemas Demo', email: 'sistemas@demo.mvla.gob.ar',  rol: 'sistemas',  areaNombre: 'Licencias de Conducir' },
+  { nombre: 'Alejandro Bianchi',   usuario: 'op1.lic',        rol: 'operador',  areaNombre: 'Licencias de Conducir' },
+  { nombre: 'Valeria Muñoz',       usuario: 'op2.lic',        rol: 'operador',  areaNombre: 'Licencias de Conducir' },
+  { nombre: 'Diego Saavedra',      usuario: 'op3.lic',        rol: 'operador',  areaNombre: 'Licencias de Conducir' },
+  { nombre: 'Claudia Ferreira',    usuario: 'op1.trib',       rol: 'operador',  areaNombre: 'Tribunal de Faltas'    },
+  { nombre: 'Marcelo Ríos',        usuario: 'op2.trib',       rol: 'operador',  areaNombre: 'Tribunal de Faltas'    },
+  { nombre: 'Laura Montoya',       usuario: 'enc.lic',        rol: 'encargado', areaNombre: 'Licencias de Conducir' },
+  { nombre: 'Roberto Ceballos',    usuario: 'enc.trib',       rol: 'encargado', areaNombre: 'Tribunal de Faltas'    },
+  { nombre: 'Admin Sistemas Demo', usuario: 'sistemas.demo',  rol: 'sistemas',  areaNombre: 'Licencias de Conducir' },
 ];
 
 // Banco de nombres y apellidos para 50 vecinos ficticios
@@ -201,12 +209,12 @@ async function main() {
   for (const u of USUARIOS_DEMO) {
     const area = areaPorNombre[u.areaNombre];
     if (!area) {
-      console.warn(`  ⚠️  Área "${u.areaNombre}" no encontrada en BD. Saltando ${u.email}.`);
+      console.warn(`  ⚠️  Área "${u.areaNombre}" no encontrada en BD. Saltando ${u.usuario}.`);
       continue;
     }
 
-    // Idempotencia: buscar por email antes de crear
-    const [rowsUser] = await db.query('SELECT id FROM usuarios WHERE email = ?', [u.email]);
+    // Idempotencia: buscar por usuario antes de crear
+    const [rowsUser] = await db.query('SELECT id FROM usuarios WHERE usuario = ?', [u.usuario]);
     let uid;
 
     if (rowsUser.length > 0) {
@@ -220,8 +228,8 @@ async function main() {
         await conn.beginTransaction();
 
         const [insUser] = await conn.query(
-          'INSERT INTO usuarios (nombre, email, password_hash) VALUES (?, ?, ?)',
-          [u.nombre, u.email, passwordHash]
+          'INSERT INTO usuarios (nombre, usuario, password_hash) VALUES (?, ?, ?)',
+          [u.nombre, u.usuario, passwordHash]
         );
         uid = insUser.insertId;
 
@@ -233,7 +241,7 @@ async function main() {
         await conn.query(
           `INSERT INTO auditoria (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal)
            VALUES (NULL, 'usuario', ?, 'crear', ?, 'sistema')`,
-          [uid, JSON.stringify({ nombre: u.nombre, email: u.email, rol: u.rol, area: area.nombre })]
+          [uid, JSON.stringify({ nombre: u.nombre, usuario: u.usuario, rol: u.rol, area: area.nombre })]
         );
 
         await conn.commit();
@@ -490,11 +498,11 @@ async function main() {
     console.log(`  ℹ️  Ya existen ${loginsExistentes} registros de login. Se omite este paso.\n`);
   } else {
     // Buscar los IDs de todos los usuarios de demo que ya existen en la BD
-    const emailsDemo = USUARIOS_DEMO.map(u => u.email);
-    const phEmails   = emailsDemo.map(() => '?').join(',');
+    const usuariosDemo = USUARIOS_DEMO.map(u => u.usuario);
+    const phUsuarios   = usuariosDemo.map(() => '?').join(',');
     const [rowsUsers] = await db.query(
-      `SELECT id FROM usuarios WHERE email IN (${phEmails})`,
-      emailsDemo
+      `SELECT id FROM usuarios WHERE usuario IN (${phUsuarios})`,
+      usuariosDemo
     );
     const userIdsDemo = rowsUsers.map(u => u.id);
 
@@ -549,9 +557,9 @@ async function main() {
   console.log('╔══════════════════════════════════════════════════════════╗');
   console.log('║  ✅  Seed completado. Credenciales de acceso al panel:   ║');
   console.log('║                                                          ║');
-  console.log('║  Sistemas:   sistemas@demo.mvla.gob.ar                   ║');
-  console.log('║  Encargado:  enc.lic@demo.mvla.gob.ar                    ║');
-  console.log('║  Operador:   op1.lic@demo.mvla.gob.ar                    ║');
+  console.log('║  Sistemas:   sistemas.demo                               ║');
+  console.log('║  Encargado:  enc.lic                                     ║');
+  console.log('║  Operador:   op1.lic                                     ║');
   console.log(`║  Contraseña: ${PASSWORD_DEMO.padEnd(47)}║`);
   console.log('╚══════════════════════════════════════════════════════════╝');
 }

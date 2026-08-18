@@ -6,7 +6,7 @@
 // Cómo usar:
 //   1. Asegurarse de que el servidor esté corriendo: node index.js
 //   2. Setear las credenciales de un usuario encargado:
-//        $env:TEST_EMAIL="email@municipio.gov.ar"
+//        $env:TEST_USUARIO="nombre.apellido"
 //        $env:TEST_PASSWORD="la_contraseña"
 //   3. Ejecutar: node test-panel.js
 //
@@ -18,9 +18,9 @@
 
 require('dotenv').config();
 
-const BASE  = `http://localhost:${process.env.PORT || 3000}/panel`;
-const EMAIL = process.env.TEST_EMAIL    || '';
-const PASS  = process.env.TEST_PASSWORD || '';
+const BASE    = `http://localhost:${process.env.PORT || 3000}/panel`;
+const USUARIO = process.env.TEST_USUARIO  || '';
+const PASS    = process.env.TEST_PASSWORD || '';
 
 // Colores para la consola (terminal ANSI)
 const OK  = '\x1b[32m✓\x1b[0m';
@@ -56,16 +56,16 @@ async function testLoginSinCredenciales() {
 }
 
 async function testLoginCredencialesWrong() {
-  const { body } = await req('POST', '/login', { email: 'noexiste@test.com', password: 'mal' }, 401);
+  const { body } = await req('POST', '/login', { usuario: 'noexiste', password: 'mal' }, 401);
   console.log(`${OK} Login credenciales incorrectas → 401: "${body.error}"`);
 }
 
 async function testLogin() {
-  if (!EMAIL || !PASS) {
-    console.log(`${ERR} TEST_EMAIL y TEST_PASSWORD no configurados — saltando tests autenticados`);
+  if (!USUARIO || !PASS) {
+    console.log(`${ERR} TEST_USUARIO y TEST_PASSWORD no configurados — saltando tests autenticados`);
     process.exit(1);
   }
-  const { body } = await req('POST', '/login', { email: EMAIL, password: PASS }, 200);
+  const { body } = await req('POST', '/login', { usuario: USUARIO, password: PASS }, 200);
 
   if (!body.token) throw new Error('No vino token en la respuesta');
 
@@ -221,14 +221,14 @@ async function main() {
   await run('Token inválido',          testTokenInvalido);
   await run('Sin token',               testSinToken);
 
-  // 2. Login (necesita TEST_EMAIL y TEST_PASSWORD)
+  // 2. Login (necesita TEST_USUARIO y TEST_PASSWORD)
   console.log('\n── Autenticación ──');
   let usuario;
   try {
     usuario = await testLogin();
   } catch (e) {
     console.log(`${ERR} Login: ${e.message}`);
-    console.log('\nNo se pueden ejecutar los tests autenticados. Configurá TEST_EMAIL y TEST_PASSWORD.\n');
+    console.log('\nNo se pueden ejecutar los tests autenticados. Configurá TEST_USUARIO y TEST_PASSWORD.\n');
     process.exit(1);
   }
 

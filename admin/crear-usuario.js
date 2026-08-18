@@ -1,12 +1,12 @@
 // admin/crear-usuario.js — Crea un empleado municipal en la base de datos
 //
 // USO:
-//   node admin/crear-usuario.js --nombre "Ana García" --email ana@mvla.gob.ar \
+//   node admin/crear-usuario.js --nombre "Ana García" --usuario ana.garcia \
 //     --password secreto123 --area 1 --rol operador
 //
 // ARGUMENTOS OBLIGATORIOS:
 //   --nombre   Nombre completo del empleado
-//   --email    Email (se usa como nombre de usuario para el login)
+//   --usuario  Nombre de usuario para el login (minúsculas, números, punto, guion bajo)
 //   --password Contraseña en texto plano (se encripta con bcrypt antes de guardar)
 //   --area     ID numérico del área a la que pertenece
 //   --rol      Rol en esa área: "operador" o "encargado"
@@ -22,7 +22,7 @@ const db     = require('../db');
 // Node.js pone todos los argumentos en process.argv.
 // Los primeros dos son siempre: ruta de node y ruta del script.
 // El resto son los argumentos que escribió el usuario.
-// Ejemplo: ["node", "crear-usuario.js", "--nombre", "Ana García", "--email", "..."]
+// Ejemplo: ["node", "crear-usuario.js", "--nombre", "Ana García", "--usuario", "..."]
 function parsearArgs() {
   const args  = process.argv.slice(2); // descartamos los primeros dos
   const mapa  = {};
@@ -40,11 +40,11 @@ function parsearArgs() {
 function mostrarUso() {
   console.error(`
 USO:
-  node admin/crear-usuario.js --nombre "Nombre Apellido" --email email@mvla.gob.ar \\
+  node admin/crear-usuario.js --nombre "Nombre Apellido" --usuario nombre.apellido \\
     --password contraseña --area ID_AREA --rol operador|encargado
 
 EJEMPLO:
-  node admin/crear-usuario.js --nombre "Ana García" --email ana@mvla.gob.ar \\
+  node admin/crear-usuario.js --nombre "Ana García" --usuario ana.garcia \\
     --password secreto123 --area 1 --rol operador
 `);
 }
@@ -53,7 +53,7 @@ async function main() {
   const args = parsearArgs();
 
   // Verificar que todos los argumentos obligatorios estén presentes
-  const obligatorios = ['nombre', 'email', 'password', 'area', 'rol'];
+  const obligatorios = ['nombre', 'usuario', 'password', 'area', 'rol'];
   const faltantes    = obligatorios.filter((k) => !args[k]);
 
   if (faltantes.length > 0) {
@@ -84,10 +84,10 @@ async function main() {
   }
   console.log(`📍 Área encontrada: ${areas[0].nombre}`);
 
-  // --- Verificar que el email no esté ya registrado ---
-  const [existentes] = await db.query('SELECT id FROM usuarios WHERE email = ?', [args.email]);
+  // --- Verificar que el usuario no esté ya registrado ---
+  const [existentes] = await db.query('SELECT id FROM usuarios WHERE usuario = ?', [args.usuario]);
   if (existentes.length > 0) {
-    console.error(`❌ Ya existe un usuario con el email "${args.email}" (ID: ${existentes[0].id})`);
+    console.error(`❌ Ya existe un usuario con el nombre de usuario "${args.usuario}" (ID: ${existentes[0].id})`);
     process.exit(1);
   }
 
@@ -105,8 +105,8 @@ async function main() {
     await conn.beginTransaction();
 
     const [insertUsuario] = await conn.query(
-      'INSERT INTO usuarios (nombre, email, password_hash) VALUES (?, ?, ?)',
-      [args.nombre, args.email, passwordHash]
+      'INSERT INTO usuarios (nombre, usuario, password_hash) VALUES (?, ?, ?)',
+      [args.nombre, args.usuario, passwordHash]
     );
     const usuarioId = insertUsuario.insertId;
 
@@ -124,7 +124,7 @@ async function main() {
        VALUES (NULL, 'usuario', ?, 'crear', ?, 'sistema')`,
       [
         usuarioId,
-        JSON.stringify({ nombre: args.nombre, email: args.email, area: areaId, rol: args.rol }),
+        JSON.stringify({ nombre: args.nombre, usuario: args.usuario, area: areaId, rol: args.rol }),
       ]
     );
 
@@ -133,7 +133,7 @@ async function main() {
     console.log(`\n✅ Usuario creado correctamente:`);
     console.log(`   ID:     ${usuarioId}`);
     console.log(`   Nombre: ${args.nombre}`);
-    console.log(`   Email:  ${args.email}`);
+    console.log(`   Usuario: ${args.usuario}`);
     console.log(`   Área:   ${areas[0].nombre} (ID: ${areaId})`);
     console.log(`   Rol:    ${args.rol}`);
 
