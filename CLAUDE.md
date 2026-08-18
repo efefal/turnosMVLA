@@ -118,10 +118,12 @@ por ahora (light mode no implementado).
 color o tamaño. Si `design-tokens.css` no tiene la variable que hace
 falta, agregarla ahí primero.
 
-**Autenticación del panel:** JWT guardado en `sessionStorage` (no
-`localStorage`, para que la sesión expire al cerrar el navegador). Keys:
-`panel_token`, `panel_usuario`. Flag `debe_cambiar_clave` fuerza
-redirección a `cambiar-clave.html` en el primer login.
+**Autenticación del panel:** login por `usuario` (nombre de usuario, no
+email — ver "Migración email → usuario" en Próximos pasos técnicos) +
+password. JWT guardado en `sessionStorage` (no `localStorage`, para que
+la sesión expire al cerrar el navegador). Keys: `panel_token`,
+`panel_usuario`. Flag `debe_cambiar_clave` fuerza redirección a
+`cambiar-clave.html` en el primer login.
 
 **Excepción intencional — `localStorage`:** el toggle de dark/light
 mode (ver sección de próximos pasos completados) usa
@@ -150,7 +152,7 @@ horarios         — disponibilidad de cada operador por servicio
 servicios        — trámites disponibles (con area_id, duracion_min, mensaje_confirmacion)
 turnos           — reservas (fecha, hora_inicio, estado, operador_id, vecino asociado)
 usuario_areas    — junction table: usuario_id + area_id + rol + atiende_turnos
-usuarios         — id, nombre, email, password_hash, activo, debe_cambiar_clave
+usuarios         — id, nombre, usuario, password_hash, activo, debe_cambiar_clave
 vecinos          — id, dni, nombre, telefono, canal_registro
 ```
 
@@ -526,6 +528,25 @@ reiniciar el bot. No requiere cambios en el código.
       propio sistema de color al margen de `design-tokens.css` y no
       reaccionan al cambio de tema — ver `REDESIGN_DARKMODE.md`
       (categoría D) para el detalle y una eventual Fase 2.
+- [x] Migración email → usuario en autenticación del panel —
+      completada. Columna `email` de `usuarios` eliminada por completo
+      (no quedó como columna opcional); reemplazada por `usuario`
+      (varchar(50), NOT NULL, UNIQUE, formato `^[a-z0-9][a-z0-9._]{2,49}$`,
+      normalizado a lowercase). Migración en 4 pasos con backup manual
+      previo al DROP — ver `public/panel/REDESIGN_USUARIO_LOGIN.md`
+      para el detalle completo (mapeo de los 18 usuarios reales, los 2
+      casos de colisión resueltos con override manual — `sistemas` para
+      la cuenta real, `sistemas.demo` para la de seed/demo — y los
+      checkpoints de verificación de cada paso). Afectó: `routes/auth.js`
+      (login, JWT), `routes/panel.js` (alta, listados, auditoría, reset
+      de clave), `public/panel/login.html` y `usuarios.html`,
+      `admin/crear-usuario.js`, `scripts/seed-demo.js`, `test-panel.js`.
+      **No relacionado y no tocado:** el email ficticio de `vecinos`
+      (`dni_NUMERODNI@municipio.local`, usado en `motor.js`/`ea.js` vía
+      `obtenerCitasDelCliente(email)`) es un mecanismo completamente
+      distinto para identificar vecinos ante Easy!Appointments — sigue
+      existiendo igual que antes, esta migración fue exclusiva de la
+      tabla `usuarios` (empleados del panel).
 - [ ] Nginx + SSL en servidor municipal (requisito para salir del modo
       de pruebas del bot)
 - [ ] Migración al número oficial del municipio en Meta
