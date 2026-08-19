@@ -408,7 +408,15 @@ function mostrarAlertaModal(tipo, msg) {
 let idEditando = null;
 
 // ─── Estado global ─────────────────────────────────────────────────────────
-let areasDisponibles = {}; // { id: nombre } — para el select de nuevo servicio
+// areasGlobales: array de áreas reales [{ id, nombre }] desde GET /panel/areas.
+// Es la fuente para los chips de filtro Y para el select de nuevo servicio
+// (mismo patrón que usuarios.html / bloqueos.html).
+let areasGlobales = [];
+// areasDisponibles: mapa area_id -> area_nombre derivado de los servicios ya
+// existentes. Ya NO se usa para poblar el select de nuevo servicio — un área
+// sin servicios quedaba invisible ahí (bug corregido). Se mantiene por si
+// hiciera falta en el futuro, no tiene otro uso activo hoy.
+let areasDisponibles = {};
 let todosLosServicios = []; // caché de todos los servicios cargados (para filtro B9)
 
 // ─── B9: Chips de área ─────────────────────────────────────────────────────
@@ -510,10 +518,10 @@ async function cargarServicios() {
     return;
   }
 
-  // Actualizar lista de áreas disponibles para el select de nuevo servicio
+  // areasDisponibles: se recalcula por compatibilidad, pero ya no alimenta
+  // el select de nuevo servicio (ver poblarSelectArea, llamada desde init()).
   areasDisponibles = {};
   data.forEach(s => { areasDisponibles[s.area_id] = s.area_nombre; });
-  poblarSelectArea();
 
   // Guardar en caché y renderizar respetando el filtro de área activo
   todosLosServicios = data;
@@ -521,12 +529,15 @@ async function cargarServicios() {
 }
 
 // ─── Poblar select de área ─────────────────────────────────────────────────
-function poblarSelectArea() {
+// Recibe el array de áreas reales (id + nombre) de GET /panel/areas — no se
+// deriva de los servicios existentes, para que un área recién creada sin
+// servicios todavía aparezca como opción disponible.
+function poblarSelectArea(areas) {
   const select = document.getElementById('nuevo-area');
   select.innerHTML = '<option value="">— Seleccioná un área —</option>';
-  Object.entries(areasDisponibles).forEach(([id, nombre]) => {
+  areas.forEach(a => {
     const opt = document.createElement('option');
-    opt.value = id; opt.textContent = nombre;
+    opt.value = a.id; opt.textContent = a.nombre;
     select.appendChild(opt);
   });
 }
@@ -704,11 +715,14 @@ async function toggleActivo(id, nuevoActivo) {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
   });
 
-  // B9: cargar áreas accesibles y construir chips si hay más de una
+  // Cargar áreas accesibles: chips de filtro (B9) y select de nuevo servicio.
+  // Se guarda en areasGlobales para no depender de que cargarServicios() ya
+  // haya corrido (mismo patrón que usuarios.html/bloqueos.html).
   const resAreas = await apiFetch('/panel/areas');
   if (resAreas && resAreas.ok) {
-    const areas = await resAreas.json();
-    inicializarChipsServicios(areas);
+    areasGlobales = await resAreas.json();
+    inicializarChipsServicios(areasGlobales);
+    poblarSelectArea(areasGlobales);
   }
 
   await cargarServicios();
