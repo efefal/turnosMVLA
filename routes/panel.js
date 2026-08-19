@@ -1446,17 +1446,34 @@ router.get('/operadores', async (req, res) => {
 // Lista los servicios de las áreas del usuario.
 // El formulario presencial lo usa para el dropdown de trámites.
 router.get('/servicios', async (req, res) => {
-  const { areaIds } = req.usuario;
-
   try {
-    const [servicios] = await pool.query(`
-      SELECT id, nombre, duracion_min AS duration, area_id
-      FROM   servicios
-      WHERE  area_id IN (${areaIds.map(() => '?').join(',')})
-        AND  activo = TRUE
-      ORDER BY nombre ASC
-    `, areaIds);
+    let query;
+    let params = [];
 
+    // Sistemas tiene acceso completo sin restricción de área (igual que
+    // /servicios/admin) — si no, un sistemas sin usuario_areas para un área
+    // recién creada se queda sin ver sus servicios aunque el rol debería
+    // ignorar esa restricción por completo.
+    if (esSistemas(req)) {
+      query = `
+        SELECT id, nombre, duracion_min AS duration, area_id
+        FROM   servicios
+        WHERE  activo = TRUE
+        ORDER BY nombre ASC
+      `;
+    } else {
+      const { areaIds } = req.usuario;
+      query = `
+        SELECT id, nombre, duracion_min AS duration, area_id
+        FROM   servicios
+        WHERE  area_id IN (${areaIds.map(() => '?').join(',')})
+          AND  activo = TRUE
+        ORDER BY nombre ASC
+      `;
+      params = areaIds;
+    }
+
+    const [servicios] = await pool.query(query, params);
     res.json(servicios);
   } catch (err) {
     logger.error('[panel] Error al obtener servicios del panel:', err);
