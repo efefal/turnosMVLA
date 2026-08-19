@@ -425,25 +425,32 @@ router.get('/feriados-bloqueos', async (req, res) => {
       [desde, hasta]
     );
 
-    const { areaIds } = req.usuario;
+    // resolverAreaIds: null = sistemas/directivo sin filtro de área (ve todo),
+    // igual que /panel/bloqueos — antes se usaba req.usuario.areaIds crudo, que
+    // siempre filtraba por las áreas del JWT sin excepción de rol.
+    const filtroAreas = resolverAreaIds(req, req.query.areas);
     let bloqueados           = [];
     const bloqueosIndividuales = {}; // { "YYYY-MM-DD": ["Sofía García", ...] }
 
-    if (areaIds.length > 0) {
-      const ph = areaIds.map(() => '?').join(','); // placeholders para areaIds
-
+    if (filtroAreas === null || filtroAreas.length > 0) {
       // ── Bloqueos de OFICINA de día completo ──────────────────────────────
       // Solo mostramos las áreas del usuario: un operador de Licencias no ve
-      // los bloqueos de Tribunal de Faltas, que no le afectan.
+      // los bloqueos de Tribunal de Faltas, que no le afectan. Sistemas y
+      // directivo (filtroAreas === null) ven todas, sin condición de área.
+      const condOficina   = ["tipo = 'oficina'", 'hora_inicio IS NULL'];
+      const paramsOficina = [];
+      if (filtroAreas !== null) {
+        condOficina.push(`area_id IN (${filtroAreas.map(() => '?').join(',')})`);
+        paramsOficina.push(...filtroAreas);
+      }
+      condOficina.push('fecha_inicio <= ?', 'fecha_fin >= ?');
+      paramsOficina.push(hasta, desde);
+
       const [bloqueoOficina] = await pool.query(`
         SELECT fecha_inicio, fecha_fin
         FROM bloqueos
-        WHERE tipo        = 'oficina'
-          AND hora_inicio IS NULL
-          AND area_id     IN (${ph})
-          AND fecha_inicio <= ?
-          AND fecha_fin    >= ?
-      `, [...areaIds, hasta, desde]);
+        WHERE ${condOficina.join(' AND ')}
+      `, paramsOficina);
 
       bloqueoOficina.forEach(b => {
         const curDate = new Date(b.fecha_inicio.substring(0, 10) + 'T12:00:00');
@@ -457,28 +464,32 @@ router.get('/feriados-bloqueos', async (req, res) => {
 
       // ── Bloqueos INDIVIDUALES de día completo ─────────────────────────────
       // Qué operadores se incluyen según el rol y el filtro del dropdown:
-      //   Operador regular     → solo sus propios bloqueos
-      //   Encargado sin filtro → todos los operadores de sus áreas
-      //   Encargado con filtro → solo ese operador específico
-      const condInd = [
-        "b.tipo        = 'individual'",
-        'b.hora_inicio IS NULL',
-        `b.area_id     IN (${ph})`,
-        'b.fecha_inicio <= ?',
-        'b.fecha_fin    >= ?',
-      ];
-      const paramsInd = [...areaIds, hasta, desde];
+      //   Operador regular             → solo sus propios bloqueos
+      //   Encargado/sistemas/directivo sin filtro → todos los operadores del área
+      //   Encargado/sistemas/directivo con filtro → solo ese operador específico
+      const condInd   = ["b.tipo = 'individual'", 'b.hora_inicio IS NULL'];
+      const paramsInd = [];
+      if (filtroAreas !== null) {
+        condInd.push(`b.area_id IN (${filtroAreas.map(() => '?').join(',')})`);
+        paramsInd.push(...filtroAreas);
+      }
+      condInd.push('b.fecha_inicio <= ?', 'b.fecha_fin >= ?');
+      paramsInd.push(hasta, desde);
 
-      if (!esEncargado(req)) {
-        // Operador: solo puede ver sus propios bloqueos
+      // Antes se usaba !esEncargado(req), que también restringía a sistemas y
+      // directivo a "solo mis propios bloqueos" (ninguno de los dos es
+      // 'encargado'). El chequeo correcto es por rol exacto — mismo patrón
+      // que /panel/bloqueos ("Operador solo ve sus propios... Encargado,
+      // sistemas y directivo ven todos").
+      if (req.usuario.rol === 'operador') {
         condInd.push('b.usuario_id = ?');
         paramsInd.push(req.usuario.id);
       } else if (operadorIdFiltro) {
-        // Encargado con un operador específico seleccionado en el dropdown
+        // Encargado/sistemas/directivo con un operador específico en el dropdown
         condInd.push('b.usuario_id = ?');
         paramsInd.push(operadorIdFiltro);
       }
-      // Encargado sin filtro → no se agrega condición de usuario_id → devuelve todos
+      // Encargado/sistemas/directivo sin filtro → no se agrega condición de usuario_id
 
       const [bloqueosInd] = await pool.query(`
         SELECT b.fecha_inicio, b.fecha_fin, u.nombre AS operador_nombre
@@ -1408,7 +1419,6 @@ router.patch('/servicios/:id/mensaje', async (req, res) => {
 // Con ?areaId=N filtra solo ese área (para el selector de operador en bloqueos).
 // Sistemas puede consultar cualquier área.
 router.get('/operadores', async (req, res) => {
-  const { areaIds } = req.usuario;
   const areaIdParam = req.query.areaId ? parseInt(req.query.areaId, 10) : null;
 
   // Validar que el área pedida esté dentro de las permitidas (salvo sistemas)
@@ -1416,23 +1426,31 @@ router.get('/operadores', async (req, res) => {
     return res.status(403).json({ error: 'Sin acceso a esa área.' });
   }
 
-  // Si se pidió un área específica, filtrar por esa; si no, todas las del usuario
-  const filtroAreas = areaIdParam ? [areaIdParam] : areaIds;
+  // Si se pidió un área específica, filtrar por esa. Si no, resolverAreaIds():
+  // null = sistemas/directivo sin restricción (ve operadores de todas las áreas,
+  // como dice el comentario de arriba — antes usaba areaIds crudo del JWT y no
+  // cumplía esa promesa si sistemas no tenía usuario_areas para todas las áreas).
+  const filtroAreas = areaIdParam ? [areaIdParam] : resolverAreaIds(req);
 
-  if (!filtroAreas.length) {
+  if (filtroAreas !== null && !filtroAreas.length) {
     return res.json([]);
   }
 
   try {
+    const condiciones = ['u.activo = TRUE', "ua.rol != 'directivo'"];
+    const params = [];
+    if (filtroAreas !== null) {
+      condiciones.push(`ua.area_id IN (${filtroAreas.map(() => '?').join(',')})`);
+      params.push(...filtroAreas);
+    }
+
     const [operadores] = await pool.query(`
       SELECT DISTINCT u.id, u.nombre
       FROM   usuarios u
       JOIN   usuario_areas ua ON u.id = ua.usuario_id
-      WHERE  ua.area_id IN (${filtroAreas.map(() => '?').join(',')})
-        AND  u.activo = TRUE
-        AND  ua.rol != 'directivo'
+      WHERE  ${condiciones.join(' AND ')}
       ORDER BY u.nombre ASC
-    `, filtroAreas);
+    `, params);
 
     res.json(operadores);
   } catch (err) {
