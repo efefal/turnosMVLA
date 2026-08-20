@@ -1048,7 +1048,11 @@ function inicializarBuscadorGlobal() {
   input.addEventListener('input', () => {
     clearTimeout(buscadorTimeout);
     const q = input.value.trim();
-    if (q.length < 2) {
+    // Mismo criterio que el backend (GET /panel/buscar): el mínimo de 2
+    // caracteres evita ruido en nombre/DNI parcial, pero no aplica a un
+    // número de turno de 1 dígito (igualdad exacta sobre PK, no un LIKE).
+    const soloDigitos = /^\d+$/.test(q);
+    if (!soloDigitos && q.length < 2) {
       cerrarBuscadorGlobal();
       return;
     }

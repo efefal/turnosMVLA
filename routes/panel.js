@@ -326,10 +326,14 @@ router.get('/agenda', async (req, res) => {
 // saltar directo a la vista día del turno encontrado.
 router.get('/buscar', async (req, res) => {
   const q = (req.query.q || '').trim();
+  const soloDigitos = /^\d+$/.test(q);
 
-  // Menos de 2 caracteres da demasiado ruido (y en nombre, sin índice,
-  // sería un table scan grande para poco resultado útil).
-  if (q.length < 2) {
+  // Menos de 2 caracteres da demasiado ruido en las búsquedas por LIKE
+  // (nombre, DNI parcial) — sin índice sería un table scan grande para poco
+  // resultado útil. No aplica al caso "solo dígitos, 1 dígito": ahí la
+  // única búsqueda posible es t.id = ? (igualdad exacta sobre PK), y un
+  // turno de 1 dígito es un resultado válido y la comparación es barata.
+  if (!soloDigitos && q.length < 2) {
     return res.json([]);
   }
 
@@ -340,13 +344,19 @@ router.get('/buscar', async (req, res) => {
 
     const condiciones = ["t.estado != 'cancelado'"];
     const params      = [];
-
-    const soloDigitos = /^\d+$/.test(q);
     const like = `%${q}%`;
-    if (soloDigitos) {
-      // Todo dígitos: puede ser un n.º de turno, un DNI completo, o parte de un DNI.
+
+    if (soloDigitos && q.length >= 2) {
+      // 2+ dígitos: puede ser un n.º de turno, un DNI completo, o parte de un DNI.
       condiciones.push('(t.id = ? OR v.dni LIKE ?)');
       params.push(parseInt(q, 10), like);
+    } else if (soloDigitos) {
+      // 1 dígito: solo tiene sentido como ID de turno exacto. Un DNI de 1
+      // dígito buscado por LIKE generaría demasiado ruido, así que esa
+      // parte de la búsqueda se omite acá (mismo criterio que el gate de
+      // arriba, aplicado solo a la sub-rama de DNI parcial).
+      condiciones.push('t.id = ?');
+      params.push(parseInt(q, 10));
     } else {
       condiciones.push('v.nombre LIKE ?');
       params.push(like);
