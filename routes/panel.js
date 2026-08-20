@@ -2152,11 +2152,24 @@ router.get('/servicios/admin', async (req, res) => {
     let query;
     let params = [];
 
+    // turnos_activos: turnos agendados a futuro de este servicio — misma
+    // definición que el chequeo anti-duplicado de routes/publico.js y
+    // routes/panel.js (crearCita), para que "activo" signifique lo mismo
+    // en todo el sistema. Se usa en servicios-admin.html para el aviso
+    // condicional al desactivar un servicio.
+    const turnosActivosSubquery = `(
+      SELECT COUNT(*) FROM turnos t
+      WHERE t.servicio_id = s.id
+        AND t.estado = 'agendado'
+        AND (t.fecha > CURDATE() OR (t.fecha = CURDATE() AND t.hora_inicio > CURTIME()))
+    ) AS turnos_activos`;
+
     if (esSistemas(req)) {
       query = `
         SELECT s.id, s.nombre, s.duracion_min, s.max_dias_anticipacion,
                s.mensaje_confirmacion, s.activo, s.created_at,
-               a.id AS area_id, a.nombre AS area_nombre
+               a.id AS area_id, a.nombre AS area_nombre,
+               ${turnosActivosSubquery}
         FROM servicios s
         JOIN areas a ON s.area_id = a.id
         ORDER BY a.nombre ASC, s.nombre ASC
@@ -2167,7 +2180,8 @@ router.get('/servicios/admin', async (req, res) => {
       query = `
         SELECT s.id, s.nombre, s.duracion_min, s.max_dias_anticipacion,
                s.mensaje_confirmacion, s.activo, s.created_at,
-               a.id AS area_id, a.nombre AS area_nombre
+               a.id AS area_id, a.nombre AS area_nombre,
+               ${turnosActivosSubquery}
         FROM servicios s
         JOIN areas a ON s.area_id = a.id
         WHERE s.area_id IN (${ph})

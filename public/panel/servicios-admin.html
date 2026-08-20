@@ -495,7 +495,7 @@ function renderServicios(servicios) {
           Editar
         </button>
         <button class="btn btn-sm ${s.activo ? 'btn-warning' : 'btn-ghost'}"
-                onclick="toggleActivo(${s.id}, ${s.activo ? 0 : 1})">
+                onclick="toggleActivo(${s.id}, ${s.activo ? 0 : 1}, ${s.turnos_activos}, '${esc(s.nombre).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">
           ${s.activo ? 'Desactivar' : 'Activar'}
         </button>`}
       </td>
@@ -639,7 +639,21 @@ async function guardarEdicion() {
 }
 
 // ─── Activar / Desactivar directo desde la tabla ──────────────────────────
-async function toggleActivo(id, nuevoActivo) {
+// Si se está desactivando un servicio con turnos futuros agendados, se
+// avisa con confirm() antes de aplicar el cambio (no bloquea) — mismo
+// patrón que toggleActivo() en areas.html. Desactivar el servicio no
+// cancela esos turnos, solo bloquea reservas nuevas.
+async function toggleActivo(id, nuevoActivo, turnosActivos, nombre) {
+  if (nuevoActivo === 0 && turnosActivos > 0) {
+    const plural = turnosActivos !== 1;
+    const confirmar = confirm(
+      `¿Desactivar "${nombre}"? Tiene ${turnosActivos} turno${plural ? 's' : ''} ` +
+      `agendado${plural ? 's' : ''} a futuro — no se van a cancelar, pero el trámite ` +
+      `dejará de estar disponible para nuevas reservas hasta que lo reactives.`
+    );
+    if (!confirmar) return;
+  }
+
   const res = await apiFetch(`/panel/servicios/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ activo: nuevoActivo === 1 }),
