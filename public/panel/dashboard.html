@@ -534,22 +534,33 @@ function svgTorta(datos, radio) {
 
   const cx = radio + 5, cy = radio + 5;
   const r  = radio;
-  let angulo = -Math.PI / 2; // empezar arriba
   let paths  = '';
 
-  datos.forEach(d => {
-    if (d.valor === 0) return;
-    const pct  = d.valor / total;
-    const ang2 = angulo + pct * 2 * Math.PI;
-    const x1 = cx + r * Math.cos(angulo);
-    const y1 = cy + r * Math.sin(angulo);
-    const x2 = cx + r * Math.cos(ang2);
-    const y2 = cy + r * Math.sin(ang2);
-    const large = pct > 0.5 ? 1 : 0;
-    paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z"
-                    fill="${d.color}" stroke="white" stroke-width="2"/>`;
-    angulo = ang2;
-  });
+  const conValor = datos.filter(d => d.valor > 0);
+
+  if (conValor.length === 1) {
+    // Una sola categoría al 100%: el punto de inicio y fin de un arco de
+    // 360° coinciden (o casi, por redondeo de punto flotante), y SVG no
+    // puede dibujar un arco degenerado de esa forma — no se ve nada. Un
+    // <circle> completo evita el caso por completo en vez de intentar
+    // ajustar el redondeo de los ángulos.
+    paths = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${conValor[0].color}" stroke="white" stroke-width="2"/>`;
+  } else {
+    let angulo = -Math.PI / 2; // empezar arriba
+    datos.forEach(d => {
+      if (d.valor === 0) return;
+      const pct  = d.valor / total;
+      const ang2 = angulo + pct * 2 * Math.PI;
+      const x1 = cx + r * Math.cos(angulo);
+      const y1 = cy + r * Math.sin(angulo);
+      const x2 = cx + r * Math.cos(ang2);
+      const y2 = cy + r * Math.sin(ang2);
+      const large = pct > 0.5 ? 1 : 0;
+      paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z"
+                      fill="${d.color}" stroke="white" stroke-width="2"/>`;
+      angulo = ang2;
+    });
+  }
 
   const size = (radio + 5) * 2;
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${paths}</svg>`;
