@@ -729,6 +729,13 @@ async function toggleActivo(id, nuevoActivo, turnosActivos, nombre) {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
   });
 
+  // Escape cierra el modal si está abierto
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('modal-fondo').classList.contains('abierto')) {
+      cerrarModal();
+    }
+  });
+
   // Cargar áreas accesibles: chips de filtro (B9) y select de nuevo servicio.
   // Se guarda en areasGlobales para no depender de que cargarServicios() ya
   // haya corrido (mismo patrón que usuarios.html/bloqueos.html).

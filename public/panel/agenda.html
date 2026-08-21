@@ -434,6 +434,11 @@
       font-size: var(--text-sm); font-weight: 700; color: var(--text-1);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .turno-tramite {
+      font-size: var(--text-xs); color: var(--text-3);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      margin-top: 1px;
+    }
     .turno-blue .turno-avatar { background: var(--blue-mid); color: var(--blue); }
     .turno-teal .turno-avatar { background: var(--teal-mid); color: var(--teal); }
     .turno-red  .turno-avatar { background: var(--red-mid);  color: var(--red); }
@@ -1395,19 +1400,16 @@ function renderizarTablaDia(turnos) {
 
       // Color por serviceId — misma lógica que renderizarSemana
       const svcId = t.service_id || t.serviceId;
-      let cardColor, badgeCls, badgeLabel;
-      if      (svcId == 2) { cardColor = 'turno-blue'; badgeCls = 'svc-blue'; badgeLabel = 'LIC'; }
-      else if (svcId == 3) { cardColor = 'turno-teal'; badgeCls = 'svc-teal'; badgeLabel = 'TRI'; }
+      let cardColor;
+      if      (svcId == 2) { cardColor = 'turno-blue'; }
+      else if (svcId == 3) { cardColor = 'turno-teal'; }
       else if (svcId) {
-        cardColor  = 'turno-red';
-        badgeCls   = 'svc-red';
-        badgeLabel = (t.servicio_nombre || '???').substring(0, 3).toUpperCase();
+        cardColor = 'turno-red';
       } else {
         // Sin serviceId: determinar color por estado del turno
-        if      (t.estado === 'agendado') { cardColor = 'turno-blue'; badgeCls = 'svc-blue'; }
-        else if (t.estado === 'presente') { cardColor = 'turno-teal'; badgeCls = 'svc-teal'; }
-        else                              { cardColor = 'turno-red';  badgeCls = 'svc-red';  }
-        badgeLabel = (t.servicio_nombre || '???').substring(0, 3).toUpperCase();
+        if      (t.estado === 'agendado') cardColor = 'turno-blue';
+        else if (t.estado === 'presente') cardColor = 'turno-teal';
+        else                              cardColor = 'turno-red';
       }
 
       // Avatar con iniciales del operador; badge "?" si el turno no fue tomado
@@ -1450,11 +1452,10 @@ function renderizarTablaDia(turnos) {
              onclick="abrirDetalleTurno(${t.id})">
           <div class="turno-card-inner">
             <div class="turno-row-1">
-              <span class="turno-hora font-mono">${esc(t.hora_inicio.substring(0, 5))}</span>
               ${avatarHTML}
               <span class="turno-nombre" style="flex:1">${esc(t.vecino_nombre)}</span>
-              <span class="svc-badge ${badgeCls}">${badgeLabel}</span>
             </div>
+            <div class="turno-tramite">${esc(t.servicio_nombre || '')}</div>
             ${accionesHTML ? `<div class="turno-acciones"${compacto ? ' style="margin-top:1px"' : ''}>${accionesHTML}</div>` : ''}
           </div>
         </div>`;
@@ -1877,27 +1878,25 @@ function renderizarSemana(turnos, dias) {
       // badge + avatar completos. En vez de forzar un ancho fijo que
       // desborda la columna (bug real visto en captura: la card sobrante
       // termina invadiendo el día siguiente), colapsamos el contenido a lo
-      // esencial: hora + un punto de color en vez del badge de texto. La
-      // card sigue ocupando exactamente su porcentaje del ancho real —
-      // nunca se sale de la columna — y el title da el detalle completo al
-      // pasar el mouse.
+      // esencial: avatar/iniciales del operador (o "?" si no está tomado).
+      // La hora se descarta primero — ya la muestra la posición vertical
+      // en la grilla, es redundante — y las iniciales dicen más (quién
+      // atiende) que un punto de color. La card sigue ocupando exactamente
+      // su porcentaje del ancho real — nunca se sale de la columna — y el
+      // title da el detalle completo al pasar el mouse.
       const compacto = n >= 3;
-      const dotColorVar = badgeCls === 'svc-blue' ? 'var(--blue)' : badgeCls === 'svc-teal' ? 'var(--teal)' : 'var(--red)';
 
       // LIMITACIÓN CONOCIDA: con N>=4 turnos en la misma franja
       // en vista semana, las cards resultantes (~15-20px) son
       // difíciles de clickear con precisión y el contenido
-      // visible se reduce a un punto de color. Funcionalmente
-      // correctas (sin fuga de columna, click funciona si se
-      // acierta el target), pero la UX en este caso extremo
-      // es pobre. Mejora futura: mostrar un contador "+N"
-      // agrupado en vez de N cards individuales cuando N>=4.
+      // visible se reduce al avatar. Funcionalmente correctas
+      // (sin fuga de columna, click funciona si se acierta el
+      // target), pero la UX en este caso extremo es pobre.
+      // Mejora futura: mostrar un contador "+N" agrupado en vez
+      // de N cards individuales cuando N>=4.
 
       const contenidoHTML = compacto
-        ? `<div class="turno-row-1">
-             <span class="turno-hora font-mono">${esc(tc.hora_inicio.substring(0, 5))}</span>
-             <span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:${dotColorVar};flex-shrink:0;"></span>
-           </div>`
+        ? `<div class="turno-row-1">${avatarHTML}</div>`
         : `<div class="turno-row-1">
              <span class="turno-hora font-mono">${esc(tc.hora_inicio.substring(0, 5))}</span>
              ${avatarHTML}
@@ -2363,6 +2362,17 @@ function renderizarMiniCal() {
 
   document.getElementById('modal-fondo').addEventListener('click', (e) => {
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
+  });
+  // Backdrop-click del modal de detalle — el modal cancelar ya lo tenía, este faltaba.
+  document.getElementById('modal-detalle-fondo').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('modal-detalle-fondo')) cerrarDetalleTurno();
+  });
+
+  // Escape cierra el modal que esté abierto (a lo sumo uno de los dos a la vez)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('modal-fondo').classList.contains('abierto')) cerrarModal();
+    else if (document.getElementById('modal-detalle-fondo').classList.contains('abierto')) cerrarDetalleTurno();
   });
 
   inicializarBuscadorGlobal();

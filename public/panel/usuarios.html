@@ -1236,6 +1236,13 @@ async function guardarHorarios() {
     if (e.target === document.getElementById('modal-reset-fondo')) cerrarModalReset();
   });
 
+  // Escape cierra el modal que esté abierto
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('modal-fondo').classList.contains('abierto')) cerrarModal();
+    else if (document.getElementById('modal-reset-fondo').classList.contains('abierto')) cerrarModalReset();
+  });
+
   // Cargar áreas accesibles (B2: checkboxes en formulario; B9: chips filtro de lista)
   const resAreas = await apiFetch('/panel/areas');
   if (resAreas && resAreas.ok) {

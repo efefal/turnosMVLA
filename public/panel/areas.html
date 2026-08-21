@@ -562,6 +562,13 @@ async function toggleActivo(id, nuevoActivo, serviciosActivos, usuariosAsignados
     if (e.target === document.getElementById('modal-fondo')) cerrarModal();
   });
 
+  // Escape cierra el modal si está abierto
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('modal-fondo').classList.contains('abierto')) {
+      cerrarModal();
+    }
+  });
+
   await cargarAreas();
 })();
 </script>
