@@ -659,11 +659,19 @@ router.patch('/turno/:id/notas', async (req, res) => {
       modificado_por: req.usuario.nombre,
     }, req.ip);
 
+    // Traer notas_actualizada_en ya formateada por MySQL ("YYYY-MM-DD HH:MM:SS",
+    // mismo formato que devuelve GET /turno/:id/completo) — evita depender de
+    // cómo Express serializa un Date de JS (ISO con "T", que rompería
+    // formatoFechaHora() en el frontend, pensado para el formato de MySQL).
+    const [[fresh]] = await pool.query(
+      'SELECT notas_actualizada_en FROM turnos WHERE id = ?', [id]
+    );
+
     res.json({
       ok: true,
       notas: notasLimpias,
       notas_actualizada_por: req.usuario.nombre,
-      notas_actualizada_en: new Date(),
+      notas_actualizada_en: fresh.notas_actualizada_en,
     });
 
   } catch (err) {
