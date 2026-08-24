@@ -565,6 +565,8 @@ router.get('/turno/:id/completo', async (req, res) => {
       SELECT
         t.id, t.fecha, t.hora_inicio, t.hora_fin, t.estado,
         t.canal_origen, t.motivo_cancelacion, t.created_at,
+        t.notas, t.notas_actualizada_en,
+        un.nombre  AS notas_actualizada_por_nombre,
         v.id       AS vecino_id,
         v.dni      AS vecino_dni,
         v.nombre   AS vecino_nombre,
@@ -578,7 +580,8 @@ router.get('/turno/:id/completo', async (req, res) => {
       FROM turnos t
       JOIN vecinos   v ON t.vecino_id   = v.id
       JOIN servicios s ON t.servicio_id = s.id
-      LEFT JOIN usuarios u ON t.operador_id = u.id
+      LEFT JOIN usuarios u  ON t.operador_id           = u.id
+      LEFT JOIN usuarios un ON t.notas_actualizada_por = un.id
       JOIN areas     a ON s.area_id     = a.id
       WHERE t.id = ?
     `, [id]);
@@ -597,7 +600,7 @@ router.get('/turno/:id/completo', async (req, res) => {
     // ya cubre vecino_id, la consulta es barata.
     const [historial] = await pool.query(`
       SELECT
-        t.id, t.fecha, t.hora_inicio, t.estado,
+        t.id, t.fecha, t.hora_inicio, t.estado, t.notas,
         s.nombre AS servicio_nombre
       FROM turnos t
       JOIN servicios s ON t.servicio_id = s.id
@@ -610,6 +613,62 @@ router.get('/turno/:id/completo', async (req, res) => {
   } catch (err) {
     logger.error('[panel] Error al obtener detalle de turno:', err);
     res.status(500).json({ error: 'No se pudo obtener el detalle del turno.' });
+  }
+});
+
+
+// PATCH /panel/turno/:id/notas
+// Actualiza (o borra, si se manda vacío) la nota del turno. A diferencia
+// de /turno/:id/estado, no tiene restricción de transición de estado —
+// una nota es información de contexto, no depende de en qué estado esté
+// el turno (ej. anotar por qué faltó alguien en un turno ya 'ausente').
+// Sin restricción de "solo mis turnos asignados": el caso de uso es que
+// cualquier operador del área pueda ver qué anotó otro, y un turno puede
+// necesitar una nota antes de que nadie lo tome.
+router.patch('/turno/:id/notas', async (req, res) => {
+  if (esDirectivo(req)) return rechazarDirectivo(res);
+
+  const id = parseInt(req.params.id, 10);
+  const { notas } = req.body;
+
+  try {
+    const [rows] = await pool.query(`
+      SELECT t.id, s.area_id
+      FROM   turnos t
+      JOIN   servicios s ON t.servicio_id = s.id
+      WHERE  t.id = ?
+    `, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Turno no encontrado.' });
+    }
+    if (!tieneAccesoAlArea(req, rows[0].area_id)) {
+      return res.status(403).json({ error: 'Sin permiso para modificar este turno.' });
+    }
+
+    // "Solo espacios" se guarda como NULL, no como string vacío/con espacios.
+    const notasLimpias = (notas || '').trim() || null;
+
+    await pool.query(
+      'UPDATE turnos SET notas = ?, notas_actualizada_por = ?, notas_actualizada_en = NOW() WHERE id = ?',
+      [notasLimpias, req.usuario.id, id]
+    );
+
+    await auditar(req.usuario.id, 'turno', id, 'modificar', {
+      campo: 'notas',
+      modificado_por: req.usuario.nombre,
+    }, req.ip);
+
+    res.json({
+      ok: true,
+      notas: notasLimpias,
+      notas_actualizada_por: req.usuario.nombre,
+      notas_actualizada_en: new Date(),
+    });
+
+  } catch (err) {
+    logger.error('[panel] Error al actualizar notas del turno:', err);
+    res.status(500).json({ error: 'No se pudieron guardar las notas.' });
   }
 });
 
