@@ -38,8 +38,10 @@ reservas (`motor.js`) y los mismos endpoints de disponibilidad — un
 turno reservado por un canal se refleja de inmediato en el otro.
 
 Actualmente en fase de Prueba de Concepto (PoC) con número de prueba de
-Meta para el bot. El panel de empleados está en uso en ambiente local
-de desarrollo.
+Meta para el bot. El panel de empleados fue sometido a una ronda extensa
+de pruebas manuales con datos reales en ambiente local (ver sección
+"Ronda de pruebas manuales" más abajo) y está considerablemente más
+maduro que en revisiones anteriores de este documento.
 
 ---
 
@@ -89,6 +91,29 @@ conexión adicionales por fuera de `db.js` — centralizar el pool ahí.
 
 ---
 
+## ⚠️ REGLA CRÍTICA — Filtrado de área en endpoints nuevos
+
+**Cualquier endpoint que filtre datos por área debe usar
+`resolverAreaIds(req, ...)`, nunca `req.usuario.areaIds` crudo.** El uso
+directo del array del JWT ignora el bypass que necesita el rol
+`sistemas` (acceso a todas las áreas sin restricción).
+
+Este patrón de bug apareció de forma **idéntica 4 veces** en una sola
+ronda de pruebas manuales con datos reales (`/panel/servicios`,
+`/panel/feriados-bloqueos`, `/panel/operadores`, y el filtro del
+buscador global) — estaba latente desde antes de esa sesión, oculto
+porque los datos de prueba anteriores siempre le daban acceso total al
+usuario `sistemas` por casualidad (todas las áreas asignadas de
+entrada). Un reset de la base con un usuario `sistemas` realista (sin
+todas las áreas preasignadas) fue lo que expuso el problema.
+
+**Antes de agregar un endpoint nuevo con lógica de filtrado por área,
+verificar explícitamente contra este patrón** — ya sea reusando
+`resolverAreaIds()` o, si el caso es genuinamente distinto, dejar
+documentado por qué no aplica.
+
+---
+
 ## Panel de empleados (public/panel/)
 
 Interfaz web para operadores, encargados, directivos y administradores
@@ -105,52 +130,55 @@ public/panel/
 ├── dashboard.html        — KPIs, gráficos, analíticas
 ├── auditoria.html        — log de acciones del sistema con filtros
 ├── usuarios.html         — ABM de usuarios y horarios (rol sistemas)
-└── servicios-admin.html  — ABM de servicios/trámites (rol sistemas)
+├── servicios-admin.html  — ABM de servicios/trámites (rol sistemas)
+└── areas.html            — ABM de áreas municipales (rol sistemas)
 ```
 
 **Design system:** `public/assets/design-tokens.css` — variables CSS
 (colores, tipografía, espaciado, componentes). Todo el CSS de las 9
 páginas usa exclusivamente estas variables, sin colores hardcodeados.
-Fuentes: Outfit (UI) + DM Mono (números/horarios). Tema dark único
-por ahora (light mode no implementado).
+Fuentes: Outfit (UI) + DM Mono (números/horarios). **Dark/Light mode
+implementado** (ver sección propia más abajo).
 
 **Regla de oro para cualquier cambio visual:** nunca hardcodear un
 color o tamaño. Si `design-tokens.css` no tiene la variable que hace
 falta, agregarla ahí primero.
 
-**Autenticación del panel:** login por `usuario` (nombre de usuario, no
-email — ver "Migración email → usuario" en Próximos pasos técnicos) +
-password. JWT guardado en `sessionStorage` (no `localStorage`, para que
-la sesión expire al cerrar el navegador). Keys: `panel_token`,
-`panel_usuario`. Flag `debe_cambiar_clave` fuerza redirección a
-`cambiar-clave.html` en el primer login.
-
-**Excepción intencional — `localStorage`:** el toggle de dark/light
-mode (ver sección de próximos pasos completados) usa
-`localStorage.panel_tema` (`'light'` o `'dark'`). Es el único uso de
-`localStorage` en el panel, y es intencional: a diferencia del JWT,
-el tema es una preferencia de usuario, no un dato de sesión — tiene
-que sobrevivir al cierre del navegador en vez de expirar con él. No
-es un error ni una inconsistencia con la regla de arriba.
+**Autenticación del panel:** JWT guardado en `sessionStorage` (no
+`localStorage`, para que la sesión expire al cerrar el navegador). Keys:
+`panel_token`, `panel_usuario`. Flag `debe_cambiar_clave` fuerza
+redirección a `cambiar-clave.html` en el primer login. JWT con
+expiración de 1 hora — sesiones largas de trabajo pueden requerir
+volver a loguearse.
 
 **Roles:** `operador`, `encargado`, `directivo`, `sistemas` (máximo
 privilegio). El rol NO está en la tabla `usuarios` — está en la tabla
 `usuario_areas` (un usuario puede tener distinto rol en distintas
 áreas). Columna `atiende_turnos` (boolean) distingue encargados que
-atienden turnos de los que solo administran.
+atienden turnos de los que solo administran. El rol `directivo` es de
+**solo lectura** en todo el panel — patrón consistente: ocultar
+controles de escritura en el frontend (botones, campos editables) Y
+rechazar con 403 en el backend (defensa en profundidad, nunca confiar
+solo en ocultar el botón).
+
+**Dato de UX pendiente, no crítico:** el sidebar de `directivo` hoy
+muestra los links "Usuarios" y "Servicios" aunque el backend rechaza el
+acceso con 403 al entrar — decisión consciente de dejarlo así por
+ahora, no es un bug no detectado.
 
 ---
 
 ## Esquema de base de datos (motor_turnos)
 
 ```
-areas            — Licencias de Conducir, Tribunal de Faltas, etc.
+areas            — Licencias de Conducir, Tribunal de Faltas, etc. (ABM completo)
 auditoria        — log de acciones del sistema
 bloqueos         — bloqueos de oficina o de operador individual
 feriados         — feriados nacionales/locales
 horarios         — disponibilidad de cada operador por servicio
 servicios        — trámites disponibles (con area_id, duracion_min, mensaje_confirmacion)
-turnos           — reservas (fecha, hora_inicio, estado, operador_id, vecino asociado)
+turnos           — reservas (fecha, hora_inicio, estado, operador_id, vecino asociado,
+                    notas, notas_actualizada_por, notas_actualizada_en)
 usuario_areas    — junction table: usuario_id + area_id + rol + atiende_turnos
 usuarios         — id, nombre, usuario, password_hash, activo, debe_cambiar_clave
 vecinos          — id, dni, nombre, telefono, canal_registro
@@ -167,15 +195,27 @@ vecinos          — id, dni, nombre, telefono, canal_registro
 Los documentos de planificación viejos mencionan "Licencia ID:2,
 Pago Multas ID:3" — esos eran los IDs de Easy!Appointments, **ya no
 corresponden**. Usar siempre los IDs reales de la tabla `servicios`
-del motor propio. Este mismatch ya causó un bug real (badges de
-servicio mal mapeados en el panel) — verificar contra la base antes
-de hardcodear cualquier ID de servicio en código nuevo.
+del motor propio.
+
+**Login por `usuario`, no por `email`.** La columna `email` fue
+eliminada de `usuarios` — el login es exclusivamente por `usuario`
+(nombre de usuario simple, no email). El email ficticio de `vecinos`
+(`dni_NUMERODNI@municipio.local`) es un mecanismo completamente
+distinto, para el bot, y no fue tocado por este cambio.
 
 **Charset:** el pool de `db.js` fuerza `charset: 'utf8mb4'`. Si se
 insertan datos con caracteres especiales (tildes, ñ) fuera de la
 aplicación (por ejemplo, ejecutando un `.sql` con un cliente que no
-declare utf8mb4), pueden corromperse — ya ocurrió una vez con el seed
-inicial de `servicios` y `areas`, corregido en el commit `4e64853`.
+declare utf8mb4), pueden corromperse.
+
+**Notas de turno:** columna `turnos.notas` (TEXT, nullable) — una nota
+única por turno, editable las veces que haga falta (no versionado).
+Trazabilidad de quién y cuándo vía `notas_actualizada_por` (FK a
+`usuarios.id`) y `notas_actualizada_en` (datetime). Editable por
+cualquier rol con acceso al área del turno (no restringido a "solo mi
+turno asignado" — el caso de uso es justamente que otro operador vea
+contexto de un turno que no tomó él). `directivo` no puede editar
+(solo lectura, defensa en ambas capas).
 
 ---
 
@@ -192,7 +232,7 @@ inicial de `servicios` y `areas`, corregido en el commit `4e64853`.
 - `logger.js` — Configuración de Winston para logging en consola y
   archivos rotativos.
 - `routes/panel.js` — Endpoints REST del panel de empleados (agenda,
-  turnos, usuarios, bloqueos, auditoría, etc.)
+  turnos, usuarios, bloqueos, auditoría, áreas, notas, etc.)
 - `routes/publico.js` — Endpoints públicos usados por el selector web
   (`presencial.html` y la web de reserva del vecino).
 - `docker-compose.yml` — Levanta Easy!Appointments + MySQL en
@@ -239,20 +279,9 @@ cancelarCita(appointmentId)                             // Elimina cita por ID n
 obtenerCitasDelCliente(email)                           // Citas activas buscando por email ficticio
 ```
 
-Email ficticio del vecino (patrón LEGADO — ya no necesario):
+Email ficticio del vecino (patrón LEGADO — ya no necesario en el motor
+propio, ver esquema de base de datos arriba):
 `dni_NUMERODNI@municipio.local`
-
-**Contexto histórico:** Easy!Appointments no ofrecía un campo nativo de
-"DNI" para identificar al contribuyente, así que el campo `email` se
-reutilizaba con este formato como identificador indirecto.
-
-**Confirmado (2026-07-08):** la tabla `vecinos` del motor propio ya
-tiene una columna `dni` real (`varchar(15)`, `UNIQUE`). Este patrón de
-email ficticio **ya no es necesario** y no debe replicarse en código
-nuevo — identificar al vecino directamente por `vecinos.dni`.
-
-Si aparece código que sigue generando o parseando este formato de
-email, es candidato a limpieza/refactor, no a mantenimiento.
 
 `motor.js` implementa el mismo contrato de funciones sobre MySQL directo.
 
@@ -297,8 +326,25 @@ email, es candidato a limpieza/refactor, no a mantenimiento.
     simple.**
 
 11. **Identificar al vecino por `vecinos.dni` directamente.** No usar
-    el patrón de email ficticio en código nuevo (ver sección de
-    funciones de `ea.js` arriba).
+    el patrón de email ficticio en código nuevo.
+
+12. **Ver la regla crítica de `resolverAreaIds()` más arriba** —
+    aplica a cualquier endpoint nuevo con filtrado por área.
+
+13. **Reusar funciones existentes en vez de duplicar lógica al agregar
+    UI nueva que dispara la misma acción desde otro lugar.** Ejemplo
+    real: los botones de acción del modal de detalle de turno llaman a
+    las mismas funciones que usan las cards de la agenda
+    (`tomarTurno()`, `cambiarEstado()`, `liberarTurno()`), envueltas en
+    wrappers finos que solo agregan el comportamiento extra necesario
+    (refresco del modal), sin reimplementar la llamada a la API.
+
+14. **Los modales del panel cierran con Escape y con click en el
+    backdrop, además del botón explícito.** Cada archivo con modales
+    tiene su propio listener de `keydown` (no hay una función genérica
+    cross-archivo — cada modal limpia su propio estado interno al
+    cerrarse, y no hay sistema de módulos entre archivos vanilla JS).
+    Al agregar un modal nuevo, replicar este patrón.
 
 ---
 
@@ -310,7 +356,8 @@ email, es candidato a limpieza/refactor, no a mantenimiento.
 - Rate limiting: 15 mensajes por 60 segundos por número, con whitelist
   configurable
 - `.env` en `.gitignore`
-- JWT en `sessionStorage` para el panel (expira al cerrar navegador)
+- JWT en `sessionStorage` para el panel (expira al cerrar navegador,
+  también expira a la hora — ver nota en sección "Panel de empleados")
 
 ---
 
@@ -329,6 +376,11 @@ ESPERANDO_CONFIRMACION → Confirmar o cancelar el turno (botones de respuesta r
 ESPERANDO_CANCELACION  → Elegir qué turno cancelar (lista interactiva)
 ESPERANDO_MODIFICACION → Elegir qué turno modificar (lista interactiva)
 ```
+
+**Nota:** el bot de WhatsApp no fue tocado ni probado en la ronda de
+pruebas manuales más reciente (todo el trabajo fue sobre el panel de
+empleados). No debería estar afectado por ninguno de esos cambios,
+pero eso no fue confirmado con evidencia — sigue pendiente.
 
 ---
 
@@ -377,9 +429,14 @@ El bot reconoce estas palabras en cualquier punto del flujo:
 
 ## Límite de turnos por vecino
 
-Un vecino no puede tener más de un turno activo por trámite. Si ya
-tiene un turno futuro de "Licencia de Conducir", no puede sacar otro
-del mismo trámite hasta que ese turno pase o lo cancele.
+Un vecino no puede tener más de un turno activo por trámite. Se
+considera "activo" un turno con `estado='agendado'` y fecha/hora
+futura (`fecha > CURDATE() OR (fecha = CURDATE() AND hora_inicio >
+CURTIME())`) — esta es la definición exacta usada de forma consistente
+en `routes/publico.js` y `routes/panel.js` para el chequeo
+anti-duplicado. Un turno ya `presente`/`ausente`/`atendido` no cuenta
+como activo, así que un vecino puede sacar un turno nuevo del mismo
+trámite una vez que el anterior ya fue procesado.
 
 No hay límite total de turnos por chatId. Esto es intencional: permite
 que una persona gestione turnos para distintos familiares en trámites
@@ -396,8 +453,7 @@ baja al ritmo actual de uso.
 Los recordatorios de WhatsApp (08:00 y 18:00) están implementados con
 `setTimeout` recursivo en `cron.js`, sin depender de n8n. La
 dependencia de n8n fue evaluada y **descartada** — no está en el
-stack activo. Los documentos de planificación viejos la listan como
-"planificada"; ese plan cambió.
+stack activo.
 
 ---
 
@@ -431,22 +487,8 @@ incorporó directamente a la base de datos y al panel: la columna
 editable desde `servicios-admin.html` sin depender de un servicio
 externo.
 
-Lo que sigue documentado abajo es el mecanismo viejo, que ya no se usa
-— se deja como referencia histórica por si aparece código muerto que
-todavía lo invoque:
-
-- La hoja se leía en cada confirmación (sin caché) para reflejar
-  ediciones inmediatas
-- Formato: CSV publicado públicamente desde Google Sheets
-- Columna A: nombre exacto del trámite (debía coincidir con el campo
-  `name` del servicio)
-- Columna B: texto de requisitos
-- La función `obtenerRequisitos(tramiteNombre)` manejaba redirecciones
-  301, 302 y 307
-- Fallaba silenciosamente con `logger.error()` si había error
-
-**Si aparece `GOOGLE_SHEET_REQUISITOS_URL` en `.env` o una llamada a
-`obtenerRequisitos()` en código activo, señalarlo** — es candidato a
+Si aparece `GOOGLE_SHEET_REQUISITOS_URL` en `.env` o una llamada a
+`obtenerRequisitos()` en código activo, señalarlo — es candidato a
 limpieza, no a mantenimiento.
 
 ---
@@ -465,6 +507,7 @@ reiniciar el bot. No requiere cambios en el código.
 
 ## Funcionalidades implementadas — panel de empleados
 
+### Núcleo
 - Login con JWT, roles por área, cambio de contraseña forzado en
   primer ingreso
 - Agenda con vista día/semana/mes, toma/liberación de turnos,
@@ -473,83 +516,114 @@ reiniciar el bot. No requiere cambios en el código.
   re-renderiza si no hay cambios) y pausa cuando la pestaña no está
   visible o hay un modal abierto
 - Carga de turnos presenciales (formulario multi-paso con stepper)
-- Bloqueos de oficina o de operador individual, por día u horario
+- Bloqueos de oficina o de operador individual, por día u horario,
+  con overlay diagonal + watermark visible en la agenda
 - Dashboard con KPIs, gráficos, analíticas
-- Auditoría con log de acciones y filtros
-- ABM de usuarios (rol sistemas): alta, edición, horarios, reset de
-  contraseña
-- ABM de servicios (rol sistemas)
+- Auditoría con log de acciones y filtros (por usuario, acción,
+  entidad, área, rango de fechas)
+- ABM de usuarios (rol sistemas): alta, edición, horarios, resetear
+  contraseña (genera clave temporal), desactivar/reactivar
+- ABM de servicios (rol sistemas): alta, edición, desactivar con
+  aviso condicional si hay turnos futuros asociados
+- ABM de áreas (rol sistemas): alta, edición, desactivar con aviso
+  condicional si hay servicios o usuarios asociados
 - Turnos superpuestos en la misma franja: se dividen horizontalmente
-  en lugar de superponerse (fix en commits `721f16a`, `e7da473`)
+  entre las cards disponibles, sin fuga hacia columnas vecinas —
+  validado con hasta 4 operadores reales y 4 turnos simultáneos en
+  las 3 vistas (día, semana, mes)
+
+### Buscador global
+Funcional en agenda.html: busca por nombre parcial (con o sin tildes),
+DNI (completo o parcial), y número de turno exacto (incluidos IDs de
+un solo dígito). Click en un resultado navega a la fecha correcta,
+resalta la card, y abre el modal de detalle de ese turno.
+
+### Dark/Light mode
+Implementado en las 10 páginas del panel. Toggle persistente vía
+`localStorage` bajo la clave `panel_tema` — **única excepción**
+documentada a la regla de "todo en `sessionStorage`" (es una
+preferencia de usuario, no un dato de sesión). Los gráficos SVG del
+dashboard (`svgTorta()`, `svgBarras()`) usan colores hardcodeados por
+diseño (son datos de dominio, no decoración) y no reaccionan al
+cambio de tema — limitación conocida y aceptada, no un bug.
+
+### Vista detallada de turno (modal)
+Al clickear un turno (desde cualquier vista de agenda o desde el
+buscador) se abre un modal con:
+- Datos completos del vecino (nombre, DNI, teléfono con botón
+  "Copiar")
+- Datos del turno (área, operador, canal, fecha de carga)
+- **Botones de acción** (Tomar/Presente/Ausente/Liberar/Cancelar) —
+  idénticos en lógica a los de la card de agenda, mismas funciones
+  reusadas, con refresco in-place del modal tras cada acción exitosa
+  (el modal no se cierra, se actualiza mostrando el nuevo estado)
+- **Sección de notas** editable (una nota por turno, reescribible,
+  con trazabilidad de quién y cuándo la editó por última vez).
+  `directivo` ve la nota pero no puede editarla (readonly + sin botón
+  + 403 si se fuerza por API)
+- **Historial del vecino**, expandible por turno (acordeón): al
+  clickear un turno anterior se despliega su nota completa in-place,
+  con un link "Ver turno completo →" que navega hasta ese turno viejo
+  (mismo mecanismo que el buscador global: cambia fecha, cambia a
+  vista día, resalta la card, reabre el modal ahí)
+- Placeholder para comunicación directa (WhatsApp/email al vecino) —
+  todavía sin implementar, espacio ya reservado en el layout
+
+### Modales — cierre con Escape y backdrop-click
+Los 6 modales del panel (agenda x2 — cancelar y detalle —, usuarios
+x2 — editar y reset de clave —, servicios-admin, areas) cierran con
+la tecla Escape y con click fuera de la caja (backdrop), además del
+botón explícito. Cada archivo tiene su propio listener, reusando la
+función de cierre real de cada modal (que limpia su propio estado
+interno) — no hay una función genérica compartida entre archivos.
+
+---
+
+## Ronda de pruebas manuales (referencia histórica)
+
+El panel de empleados fue sometido a una ronda extensa de pruebas
+manuales usando Claude for Chrome, con datos reales generados desde
+cero (ambiente local reseteado, 4 usuarios de cada rol, múltiples
+operadores, vecinos y turnos reales). La ronda cubrió: ABMs completos,
+acciones sobre turnos, presencial, bloqueos, dashboard, auditoría,
+buscador, dark/light mode, y el escenario de turnos superpuestos con
+múltiples operadores reales.
+
+Esa ronda encontró y corrigió 6 bugs reales que estaban latentes desde
+antes (ver la regla crítica de `resolverAreaIds()` más arriba para el
+patrón que explica 4 de los 6). El detalle completo de cada uno vive
+en el historial de git de la sesión correspondiente — no se repite acá
+para no duplicar información que ya está mejor documentada en los
+commits mismos.
 
 ---
 
 ## Próximos pasos técnicos
 
-- [ ] Resolver legibilidad de cards con 4+ turnos superpuestos en
-      vista semana del panel (limitación conocida, documentada en
-      código — ver commit `e7da473`)
-- [ ] Buscador global del panel (`search-global`) — actualmente
-      decorativo, sin funcionalidad conectada. Debe quedar funcional
-      en las 7 páginas del panel que tienen sidebar/topbar (agenda,
-      presencial, bloqueos, dashboard, auditoria, usuarios,
-      servicios-admin), no exclusivamente en agenda.html
-- [x] ABM de áreas en el panel (rol sistemas) — implementado
-      (`public/panel/areas.html` + endpoints `GET /panel/areas/admin`,
-      `POST /panel/areas`, `PATCH /panel/areas/:id` en `routes/panel.js`).
-      Link "Áreas" agregado al sidebar de las 7 páginas existentes,
-      visible solo para rol sistemas. Sin DELETE real (soft-delete via
-      `activo`, mismo patrón que servicios/usuarios).
-- [x] Vista de detalle de turno — implementado como modal en
-      `agenda.html` (`#modal-detalle-fondo`), reusando
-      `.modal-fondo`/`.modal-caja` con el modificador
-      `.modal-caja-detalle`. Muestra turno + datos de contacto del
-      vecino (nombre, DNI, teléfono con botón "Copiar" — no hay
-      columna de email en `vecinos`) + historial de los últimos 10
-      turnos del mismo vecino. Se abre desde: click en card de turno
-      (vista semana y vista día) y desde la selección de un resultado
-      del buscador global (que además navega a la vista día y resalta
-      la card antes de abrir el modal). Endpoint nuevo:
-      `GET /panel/turno/:id/completo`, acceso abierto a cualquier rol
-      autenticado con validación de área. Ver
-      `public/panel/REDESIGN_DETALLE_TURNO.md` para el detalle completo.
-      **Acciones de comunicación (WhatsApp/email) quedan para una fase
-      futura** — el modal ya tiene una sección "Comunicación" reservada
-      en el layout a modo de placeholder, para no tener que rediseñar
-      el modal cuando se implementen los botones reales.
-- [x] Dark/Light mode toggle en el panel — implementado en las 10
-      páginas (`data-theme="light"` en `<html>`, paleta completa en
-      `:root[data-theme="light"]` de `design-tokens.css`, persistencia
-      en `localStorage.panel_tema`). Botón "Modo claro"/"Modo oscuro"
-      en `sidebar-footer` (páginas con sidebar) o dentro de la card
-      (`login.html`, `cambiar-clave.html`, que no tienen sidebar).
-      **Limitación conocida:** los gráficos SVG de `dashboard.html`
-      (`COLORES_CANAL`, `COLORES_ESTADO`, `svgBarras()`) tienen su
-      propio sistema de color al margen de `design-tokens.css` y no
-      reaccionan al cambio de tema — ver `REDESIGN_DARKMODE.md`
-      (categoría D) para el detalle y una eventual Fase 2.
-- [x] Migración email → usuario en autenticación del panel —
-      completada. Columna `email` de `usuarios` eliminada por completo
-      (no quedó como columna opcional); reemplazada por `usuario`
-      (varchar(50), NOT NULL, UNIQUE, formato `^[a-z0-9][a-z0-9._]{2,49}$`,
-      normalizado a lowercase). Migración en 4 pasos con backup manual
-      previo al DROP — ver `public/panel/REDESIGN_USUARIO_LOGIN.md`
-      para el detalle completo (mapeo de los 18 usuarios reales, los 2
-      casos de colisión resueltos con override manual — `sistemas` para
-      la cuenta real, `sistemas.demo` para la de seed/demo — y los
-      checkpoints de verificación de cada paso). Afectó: `routes/auth.js`
-      (login, JWT), `routes/panel.js` (alta, listados, auditoría, reset
-      de clave), `public/panel/login.html` y `usuarios.html`,
-      `admin/crear-usuario.js`, `scripts/seed-demo.js`, `test-panel.js`.
-      **No relacionado y no tocado:** el email ficticio de `vecinos`
-      (`dni_NUMERODNI@municipio.local`, usado en `motor.js`/`ea.js` vía
-      `obtenerCitasDelCliente(email)`) es un mecanismo completamente
-      distinto para identificar vecinos ante Easy!Appointments — sigue
-      existiendo igual que antes, esta migración fue exclusiva de la
-      tabla `usuarios` (empleados del panel).
-- [ ] Nginx + SSL en servidor municipal (requisito para salir del modo
-      de pruebas del bot)
-- [ ] Migración al número oficial del municipio en Meta
+### Pendientes de esta ronda de pruebas (bajo riesgo, no probados aún)
+- [ ] Polling con dos sesiones simultáneas — nunca probado con dos
+      pestañas reales tomando el mismo turno en paralelo
+- [ ] Login con credenciales incorrectas / usuario inexistente —
+      confirmar que el mensaje de error es genérico en ambos casos
+      (no filtrar si el usuario existe)
+- [ ] Buscador — caso "sin resultados" sin probar explícitamente
+- [ ] Filtro por operador en la agenda (dropdown "Todos los
+      operadores") sin probar explícitamente
+- [ ] Bug menor: `agenda.html?fecha=YYYY-MM-DD` como parámetro de URL
+      no cambia la fecha por defecto — hay que setear el input
+      manualmente
+- [ ] Bug menor: "Ver agenda del día" desde la pantalla de éxito de
+      `presencial.html` no navega a la fecha del turno recién creado
+
+### Funcionalidades más grandes, sin empezar
+- [ ] Vista de detalle de turno: acciones de comunicación directa
+      (WhatsApp/email) — el placeholder ya está en el modal, falta
+      implementar el envío real
+- [ ] Deploy a producción — Fase 2 y 3 del plan de despliegue:
+      backup + análisis de datos reales del servidor cloud, deploy
+      del código, migraciones de esquema en producción, Nginx + SSL,
+      registro del webhook de Meta, migración al número oficial de
+      WhatsApp
 - [ ] Verificación de Meta Business Portfolio
 - [ ] Límite de turnos por chatId (anti-abuso, prioridad baja)
 - [ ] Fase 7 (futuro): módulo de cola presencial — kiosco, TV,
@@ -591,9 +665,9 @@ Branch activo: web
 2. Trabajar de a una tarea por vez. Si el archivo es grande (`index.js`,
    los HTML del panel), dos cambios simultáneos sobre el mismo archivo
    dan resultados impredecibles.
-3. Para cambios visuales en el panel: siempre plan primero (documento
-   `REDESIGN_*.md`), aprobación, después ejecución paso a paso con un
-   commit por paso.
+3. Para cambios visuales o funcionales de tamaño medio/grande en el
+   panel: siempre plan primero (documento `REDESIGN_*.md`), aprobación,
+   después ejecución paso a paso con un commit por paso.
 4. Después de completar cada tarea y verificar que funciona, hacer
    commit con mensaje descriptivo y `git push` antes de continuar.
 5. Al terminar la sesión, actualizar la sección "Próximos pasos"
