@@ -580,6 +580,9 @@
     .detalle-historial-item:first-child { border-top: none; }
     .detalle-historial-vacio { color: var(--text-3); font-size: var(--text-sm); padding: 8px 0; }
 
+    /* ── Acciones dentro del modal de detalle ────────────────────── */
+    .detalle-acciones { display: flex; gap: var(--gap-sm); flex-wrap: wrap; }
+
     /* .btn-sm no existía en este archivo — mismo valor que ya usan
        areas.html / usuarios.html / servicios-admin.html para el botón "Copiar" */
     .btn-sm { padding: 0.25rem 0.6rem; font-size: var(--text-sm); }
@@ -1678,6 +1681,32 @@ function renderizarDetalleTurno(data) {
           <span class="estado-pill ${h.estado}">${ESTADOS[h.estado] || h.estado}</span>
         </div>`).join('');
 
+  // Botones de acción — misma lógica exacta que renderizarTablaDia() (agenda.html,
+  // sección de cards del día): Tomar/Cancelar si no está tomado, Presente/Ausente/
+  // Liberar si sí, sin botones en estados finales o para rol directivo. Los wrappers
+  // ...DesdeDetalle() llaman a la función real (tomarTurno/cambiarEstado/liberarTurno,
+  // sin tocar) y además refrescan este modal in-place — ver definición más abajo.
+  let accionesHTML = '';
+  if (usuarioRol !== 'directivo') {
+    if (!t.operador_id && t.estado === 'agendado') {
+      accionesHTML = `
+        <button class="btn btn-secondary" onclick="tomarTurnoDesdeDetalle(${t.id})">Tomar</button>
+        <button class="btn btn-danger"    onclick="abrirCancelar(${t.id})">Cancelar</button>`;
+    } else if (t.operador_id && t.estado === 'agendado') {
+      accionesHTML = `
+        <button class="btn btn-primary"   onclick="cambiarEstadoDesdeDetalle(${t.id}, 'presente')">Presente</button>
+        <button class="btn btn-danger"    onclick="cambiarEstadoDesdeDetalle(${t.id}, 'ausente')">Ausente</button>
+        <button class="btn btn-secondary" onclick="liberarTurnoDesdeDetalle(${t.id})">Liberar</button>`;
+    }
+    // Estados finales (presente, ausente, atendido, cancelado) → sin botones, igual que en la card
+  }
+  const accionesSeccionHTML = accionesHTML
+    ? `<div class="detalle-seccion">
+         <div class="detalle-seccion-titulo">Acciones</div>
+         <div class="detalle-acciones">${accionesHTML}</div>
+       </div>`
+    : '';
+
   document.getElementById('detalle-contenido').innerHTML = `
     <div class="detalle-header">
       <h3>${esc(t.servicio_nombre)}</h3>
@@ -1727,11 +1756,38 @@ function renderizarDetalleTurno(data) {
       <p class="detalle-historial-vacio">Próximamente: enviar recordatorio por WhatsApp o email.</p>
     </div>
 
+    ${accionesSeccionHTML}
+
     <div class="detalle-seccion">
       <div class="detalle-seccion-titulo">Historial del vecino (últimos ${data.historial.length})</div>
       ${historialHTML}
     </div>
   `;
+}
+
+// Wrappers: llaman a la acción real (tomarTurno/cambiarEstado/liberarTurno, sin
+// tocar — las usan también las cards de la agenda) y, si el modal de detalle
+// está abierto para ese mismo turno, lo refrescan in-place trayendo el estado
+// fresco (para que los botones cambien solos: Tomar → Presente/Ausente/Liberar,
+// etc.). Si la acción se dispara desde una card (no desde el modal), el chequeo
+// de .abierto da false y no hace nada extra — mismo comportamiento de siempre.
+async function tomarTurnoDesdeDetalle(id) {
+  await tomarTurno(id);
+  if (document.getElementById('modal-detalle-fondo').classList.contains('abierto')) {
+    await abrirDetalleTurno(id);
+  }
+}
+async function cambiarEstadoDesdeDetalle(id, estado) {
+  await cambiarEstado(id, estado);
+  if (document.getElementById('modal-detalle-fondo').classList.contains('abierto')) {
+    await abrirDetalleTurno(id);
+  }
+}
+async function liberarTurnoDesdeDetalle(id) {
+  await liberarTurno(id);
+  if (document.getElementById('modal-detalle-fondo').classList.contains('abierto')) {
+    await abrirDetalleTurno(id);
+  }
 }
 
 // Copia el teléfono al portapapeles y da feedback visual momentáneo en el botón.
@@ -2172,6 +2228,14 @@ async function cambiarEstado(id, estado) {
 }
 
 // ─── Cancelar turno ────────────────────────────────────────────────────────
+// Depende de que `id` ya esté en turnosActuales (los turnos de la vista
+// día/semana/mes actualmente cargada) para leer nombre/DNI del vecino.
+// Se cumple siempre en las 3 formas de llegar acá: click en una card (el
+// turno ya es parte de la vista visible), buscador global y "Ver turno
+// completo →" del historial (ambos navegan primero — cambian fechaActual,
+// cambian de vista y recargan turnosActuales — recién después abren o
+// llaman a este modal). No hace falta un chequeo defensivo extra mientras
+// se respete ese orden en cualquier nuevo punto de entrada al modal.
 function abrirCancelar(id) {
   const t = turnosActuales.find(x => x.id === id);
   turnoACancelar = id;
@@ -2221,9 +2285,16 @@ async function confirmarCancelacion() {
     return;
   }
 
+  const idCancelado = turnoACancelar; // guardar antes de cerrarModal(), que lo pone en null
   cerrarModal();
   mostrarAlerta('ok', 'Turno cancelado correctamente.');
   cargar();
+
+  // Si el modal de detalle está abierto para este turno, refrescarlo in-place:
+  // queda mostrando "Cancelado" y sin botones, en vez de cerrarse.
+  if (document.getElementById('modal-detalle-fondo').classList.contains('abierto')) {
+    await abrirDetalleTurno(idCancelado);
+  }
 }
 
 // ─── Encargado: cargar dropdown de operadores ──────────────────────────────
