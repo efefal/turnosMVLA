@@ -150,15 +150,27 @@
          con los 4 contadores. flex: 1 1 200px garantiza que siempre tenga espacio mínimo
          y pueda ceder al resto sin desaparecer. (Fix necesario desde Paso 4, Paso 10 √) */
       flex: 1 1 200px;
-      min-width: 0;
+      /* min-width explícito (no "auto"): medido en vivo a 1366px, el
+         contenido real (título + toggle Día/Semana/Mes + navegación de
+         fecha, todo con flex-shrink:0) necesita 457px en vista Día, 462px
+         en Semana y 428px en Mes — el máximo de los tres es 462px. Sin
+         este piso, a 1366px el bloque se encogía a ~340-436px (probado:
+         ni siquiera "min-width:auto" alcanza a protegerlo del todo cuando
+         no entra el espacio total de la fila) y el sobrante se pintaba
+         oculto detrás del buscador, tapando la flecha ▶. Con este mínimo
+         explícito, el achique recae siempre en .topbar-center, que está
+         pensado para cederlo. */
+      min-width: 465px;
     }
     /* flex: 0 1 340px — el buscador puede achicarse en pantallas <1100px
        sin robar espacio al bloque de navegación ni a los contadores */
     /* position:relative ancla el dropdown de resultados (.search-global-resultados,
        definido en design-tokens.css) justo debajo del input */
     .topbar-center { flex: 0 1 340px; min-width: 0; position: relative; }
-    /* el search-global tiene width:340px en design-tokens; lo hacemos fluido aquí */
-    .topbar-center .search-global { width: 100%; }
+    /* el search-global tiene width:340px en design-tokens; lo hacemos fluido aquí.
+       min-width evita que en pantallas muy angostas se achique al punto de
+       volverse inutilizable para escribir o leer resultados. */
+    .topbar-center .search-global { width: 100%; min-width: 140px; }
     .topbar-right {
       display: flex;
       align-items: center;
@@ -535,10 +547,15 @@
        DOM (detalle viene después) lo tapa. Usamos el id para que gane
        por especificidad sin tocar el z-index general de la clase. */
     #modal-fondo { z-index: 210; }
+    /* max-height + overflow-y: mismo patrón ya usado en usuarios.html,
+       servicios-admin.html y areas.html. Acá faltaba — a 1366x768, el
+       modal de detalle (con notas + historial expandido) crecía sin
+       límite y se cortaba arriba y abajo sin ninguna forma de scrollear. */
     .modal-caja {
       background: var(--bg-3); border: 1px solid var(--border);
       border-radius: var(--radius-lg); padding: 24px;
       max-width: 460px; width: 100%;
+      max-height: 90vh; overflow-y: auto;
       box-shadow: 0 20px 60px rgba(0,0,0,.5);
     }
     .modal-caja h3 {
