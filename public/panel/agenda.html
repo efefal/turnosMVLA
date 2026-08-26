@@ -371,6 +371,12 @@
     .cal-day-col[data-state="holiday"] .cal-day-header { background: var(--day-hdr-holiday); }
     .cal-day-col[data-state="closed"]  .cal-day-header { background: var(--day-hdr-closed); }
 
+    /* Encabezado de día en vista semana: clickeable para saltar a vista Día.
+       Mismo tratamiento de hover que .cal-dia (celda del calendario mensual,
+       también clickeable) para mantener consistencia visual. */
+    .cal-day-header-clickable { cursor: pointer; transition: var(--transition-fast); }
+    .cal-day-header-clickable:hover { background: var(--bg-4); }
+
     .cal-day-name {
       font-size: var(--text-xs); font-weight: 700;
       text-transform: uppercase; color: var(--text-3);
@@ -523,6 +529,12 @@
       align-items: center; justify-content: center; padding: 1rem;
     }
     .modal-fondo.abierto { display: flex; }
+    /* El modal de cancelar puede abrirse encima del modal de detalle
+       (cancelar desde el modal de detalle de turno). Como comparten la
+       misma clase .modal-fondo con igual z-index, sin esto el orden del
+       DOM (detalle viene después) lo tapa. Usamos el id para que gane
+       por especificidad sin tocar el z-index general de la clase. */
+    #modal-fondo { z-index: 210; }
     .modal-caja {
       background: var(--bg-3); border: 1px solid var(--border);
       border-radius: var(--radius-lg); padding: 24px;
@@ -1984,8 +1996,11 @@ function renderizarSemana(turnos, dias) {
       headerExtras = `<span class="cal-day-block-info">${infos}</span>`;
     }
 
+    // El encabezado navega a la vista Día de esa fecha — reusa
+    // irADiaDesdeCalendario(), la misma función que ya usa el calendario
+    // mensual para el mismo gesto (click en un día → ver el día completo).
     const headerHTML = `
-      <div class="cal-day-header">
+      <div class="cal-day-header cal-day-header-clickable" onclick="irADiaDesdeCalendario('${fecha}')" title="Ver día completo">
         <span class="cal-day-name">${nombreDia}</span>
         <span class="cal-day-num font-mono">${num}</span>
         ${headerExtras}
@@ -2026,18 +2041,17 @@ function renderizarSemana(turnos, dias) {
       // Color de card por serviceId; si no hay serviceId, fallback por estado del turno.
       // serviceId 2 = Licencia de Conducir (azul), serviceId 3 = Tribunal de Faltas (teal)
       const svcId = tc.service_id || tc.serviceId;
-      let cardColor, badgeCls, badgeLabel;
-      if      (svcId == 2) { cardColor = 'turno-blue'; badgeCls = 'svc-blue'; badgeLabel = 'LIC'; }
-      else if (svcId == 3) { cardColor = 'turno-teal'; badgeCls = 'svc-teal'; badgeLabel = 'TRI'; }
+      let cardColor, badgeLabel;
+      if      (svcId == 2) { cardColor = 'turno-blue'; badgeLabel = 'LIC'; }
+      else if (svcId == 3) { cardColor = 'turno-teal'; badgeLabel = 'TRI'; }
       else if (svcId) {
         cardColor  = 'turno-red';
-        badgeCls   = 'svc-red';
         badgeLabel = (tc.servicio_nombre || '???').substring(0, 3).toUpperCase();
       } else {
         // Sin serviceId: determinar por estado
-        if      (tc.estado === 'agendado') { cardColor = 'turno-blue'; badgeCls = 'svc-blue'; }
-        else if (tc.estado === 'presente') { cardColor = 'turno-teal'; badgeCls = 'svc-teal'; }
-        else                               { cardColor = 'turno-red';  badgeCls = 'svc-red';  }
+        if      (tc.estado === 'agendado') { cardColor = 'turno-blue'; }
+        else if (tc.estado === 'presente') { cardColor = 'turno-teal'; }
+        else                               { cardColor = 'turno-red';  }
         badgeLabel = (tc.servicio_nombre || '???').substring(0, 3).toUpperCase();
       }
 
@@ -2068,14 +2082,17 @@ function renderizarSemana(turnos, dias) {
       // Mejora futura: mostrar un contador "+N" agrupado en vez
       // de N cards individuales cuando N>=4.
 
+      // No-compacto: mismo criterio que renderizarTablaDia() — la hora ya
+      // la muestra la posición vertical en la grilla, así que se descarta
+      // y el espacio se usa para avatar + nombre (fila 1) y trámite
+      // completo (fila 2), sin badge abreviado.
       const contenidoHTML = compacto
         ? `<div class="turno-row-1">${avatarHTML}</div>`
         : `<div class="turno-row-1">
-             <span class="turno-hora font-mono">${esc(tc.hora_inicio.substring(0, 5))}</span>
              ${avatarHTML}
+             <span class="turno-nombre" style="flex:1">${esc(tc.vecino_nombre)}</span>
            </div>
-           <div class="turno-nombre">${esc(tc.vecino_nombre)}</div>
-           <span class="svc-badge ${badgeCls}">${badgeLabel}</span>`;
+           <div class="turno-tramite">${esc(tc.servicio_nombre || '')}</div>`;
 
       const tituloCompacto = compacto
         ? ` title="${esc(tc.hora_inicio.substring(0, 5))} — ${esc(tc.vecino_nombre)} (${esc(badgeLabel)})"`
