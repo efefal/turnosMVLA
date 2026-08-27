@@ -9,7 +9,7 @@
 //   --usuario  Nombre de usuario para el login (minúsculas, números, punto, guion bajo)
 //   --password Contraseña en texto plano (se encripta con bcrypt antes de guardar)
 //   --area     ID numérico del área a la que pertenece
-//   --rol      Rol en esa área: "operador" o "encargado"
+//   --rol      Rol en esa área: "operador", "encargado" o "sistemas"
 
 'use strict';
 
@@ -41,7 +41,7 @@ function mostrarUso() {
   console.error(`
 USO:
   node admin/crear-usuario.js --nombre "Nombre Apellido" --usuario nombre.apellido \\
-    --password contraseña --area ID_AREA --rol operador|encargado
+    --password contraseña --area ID_AREA --rol operador|encargado|sistemas
 
 EJEMPLO:
   node admin/crear-usuario.js --nombre "Ana García" --usuario ana.garcia \\
@@ -62,9 +62,10 @@ async function main() {
     process.exit(1);
   }
 
-  // Validar que el rol sea uno de los valores permitidos
-  if (!['operador', 'encargado'].includes(args.rol)) {
-    console.error(`❌ --rol debe ser "operador" o "encargado", recibido: "${args.rol}"`);
+  // Validar que el rol sea uno de los valores permitidos.
+  // "sistemas" = máximo privilegio, se usa para el bootstrap inicial del panel.
+  if (!['operador', 'encargado', 'sistemas'].includes(args.rol)) {
+    console.error(`❌ --rol debe ser "operador", "encargado" o "sistemas", recibido: "${args.rol}"`);
     mostrarUso();
     process.exit(1);
   }
