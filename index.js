@@ -932,6 +932,13 @@ async function enviarBotones(telefono, texto, botones) {
 
 cargarTramites();
 
+// Refresco periódico del catálogo de trámites (cada 10 minutos).
+// cargarTramites() solo se ejecutaba una vez al arrancar el proceso, así que
+// un servicio/área nueva cargada desde el panel quedaba invisible para el bot
+// hasta el próximo reinicio manual de PM2. Este setInterval no es una llamada
+// duplicada por error: evita que ese desfasaje pase desapercibido.
+setInterval(cargarTramites, 10 * 60 * 1000);
+
 // ---------------------------------------------------------------
 // 8. MEMORIA DE ESTADO DE LAS CONVERSACIONES
 // ---------------------------------------------------------------
