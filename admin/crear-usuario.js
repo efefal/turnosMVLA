@@ -105,8 +105,10 @@ async function main() {
   try {
     await conn.beginTransaction();
 
+    // debe_cambiar_clave = TRUE: la contraseña pasada por línea de comandos es
+    // temporal, igual que cuando se crea un usuario desde el panel (routes/panel.js).
     const [insertUsuario] = await conn.query(
-      'INSERT INTO usuarios (nombre, usuario, password_hash) VALUES (?, ?, ?)',
+      'INSERT INTO usuarios (nombre, usuario, password_hash, debe_cambiar_clave) VALUES (?, ?, ?, TRUE)',
       [args.nombre, args.usuario, passwordHash]
     );
     const usuarioId = insertUsuario.insertId;
