@@ -2002,10 +2002,54 @@ router.post('/usuarios', async (req, res) => {
           );
         }
       } else {
+        // Cuenta total de horarios insertados automáticamente en este alta,
+        // para la auditoría de más abajo (una sola entrada resume todo el alta,
+        // igual que el resto de la auditoría de esta ruta).
+        let horariosAutoInsertados = 0;
+
         for (const aId of areas) {
           await conn.query(
             'INSERT INTO usuario_areas (usuario_id, area_id, rol, atiende_turnos) VALUES (?, ?, ?, ?)',
             [nuevoId, aId, rol, atiendeT]
+          );
+
+          // Si el usuario atiende turnos en esta área, precargamos una plantilla
+          // de horarios (lunes a viernes, 07:00-14:00) para cada servicio activo
+          // del área — la misma plantilla que ya se usa como punto de partida en
+          // el modal de edición (usuarios.html, cargarHorarios()), pero ahora
+          // persistida desde el alta en vez de quedar solo como valor visual
+          // hasta que alguien entre a editar y guarde manualmente.
+          // Si el área todavía no tiene servicios activos, no hay nada que
+          // insertar — no es un error, el alta sigue su curso normal.
+          if (atiendeT === 1) {
+            const [serviciosArea] = await conn.query(
+              'SELECT id FROM servicios WHERE area_id = ? AND activo = TRUE',
+              [aId]
+            );
+            for (const srv of serviciosArea) {
+              for (const dia of [1, 2, 3, 4, 5]) { // 1=lunes … 5=viernes
+                await conn.query(
+                  `INSERT INTO horarios (usuario_id, servicio_id, dia_semana, hora_inicio, hora_fin, activo)
+                   VALUES (?, ?, ?, ?, ?, ?)`,
+                  [nuevoId, srv.id, dia, '07:00', '14:00', 1]
+                );
+                horariosAutoInsertados++;
+              }
+            }
+          }
+        }
+
+        if (horariosAutoInsertados > 0) {
+          await conn.query(
+            `INSERT INTO auditoria (usuario_id, entidad_tipo, entidad_id, accion, detalle, canal, ip)
+             VALUES (?, 'horario', ?, 'crear', ?, 'panel', ?)`,
+            [req.usuario.id, nuevoId,
+             JSON.stringify({
+               cantidad: horariosAutoInsertados,
+               motivo: 'plantilla automática al crear usuario operador',
+               creado_por: req.usuario.nombre,
+             }),
+             req.ip || null]
           );
         }
       }
